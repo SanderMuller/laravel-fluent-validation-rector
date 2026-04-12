@@ -2,6 +2,42 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 0.3.1 - 2026-04-12
+
+### Fixed
+
+#### Converter-pathway `FluentRule::` references now use the short name
+
+`ConvertsValidationRules::buildFluentRuleFactory()` (shared by `ValidationStringToFluentRuleRector` and `ValidationArrayToFluentRuleRector`) used to emit `new FullyQualified(FluentRule::class)` for the initial factory call. Pint's `fully_qualified_strict_types` fixer cleaned it up, but pre-Pint output was noisy. The helper now emits `new Name('FluentRule')` and auto-inserts `use SanderMuller\FluentValidation\FluentRule;` at the alphabetically-sorted position when the import isn't already present.
+
+Mirrors the 0.3.0 fix on `GroupWildcardRulesToEachRector`. Now every rector in this package emits consistent, Pint-free output:
+
+- String/array converters (this release)
+- Grouping rector's synthesized parent/field (0.3.0)
+- Trait rectors' inserted `use` import (0.3.0 via `ManagesNamespaceImports`)
+
+```php
+// Before (0.3.0 output, pre-Pint)
+'author_notes' => \SanderMuller\FluentValidation\FluentRule::string()->nullable()->max(65535),
+
+// After (0.3.1 output, pre-Pint)
+'author_notes' => FluentRule::string()->nullable()->max(65535),
+
+```
+Reported by hihaho (gap note during 0.3.0 re-verification) and collectiq (Nit A).
+
+### Changed
+
+#### `ValidationStringToFluentRuleRector` and `ValidationArrayToFluentRuleRector` now register `Namespace_` as their node type
+
+Previously they registered `[ClassLike, MethodCall, StaticCall]` — three separate entry points for `rules()` methods, `$request->validate([...])` calls, and `Validator::make([...])` calls. Now they register `[Namespace_]` and traverse the subtree internally, which lets them insert the `FluentRule` import once per namespace at the correct position.
+
+Test configs for both rectors no longer use `withImportNames()` — the rectors produce sorted output on their own.
+
+No behavior change for end users: the same three call patterns are detected and converted. Classes without a namespace (rare in Laravel projects) are now skipped; document as a known limitation.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/0.3.0...0.3.1
+
 ## 0.3.0 - 2026-04-12
 
 ### Added
@@ -20,6 +56,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 // After (0.3.0)
 'author_notes' => FluentRule::string()->nullable()->max(65535)
 
+
 ```
 #### Flat wildcard `'items.*'` entries fold into parent `->each(<scalar>)`
 
@@ -33,6 +70,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 ```
 #### Skip trait insertion when an ancestor already declares it
@@ -82,6 +120,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 'author_notes' => FluentRule::string()->nullable()->max(65535)
 
 
+
 ```
 Reported from a run against the hihaho codebase (20+ files).
 
@@ -97,6 +136,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 ```
