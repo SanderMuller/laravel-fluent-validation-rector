@@ -31,7 +31,6 @@ use RecursiveCallbackFilterIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use SanderMuller\FluentValidation\FluentRule;
-use SanderMuller\FluentValidation\FluentRules;
 use SplFileInfo;
 use UnexpectedValueException;
 
@@ -304,9 +303,15 @@ trait ConvertsValidationRules
      */
     private function hasFluentRulesAttribute(ClassMethod $method): bool
     {
+        // Referenced as a string (not ::class) so PHPStan doesn't require the
+        // class to exist at static-analysis time. FluentRules ships in newer
+        // laravel-fluent-validation releases but is absent from earlier
+        // versions that still satisfy our ^1.0 constraint.
+        $fluentRulesAttribute = 'SanderMuller\\FluentValidation\\FluentRules';
+
         foreach ($method->attrGroups as $attrGroup) {
             foreach ($attrGroup->attrs as $attr) {
-                if ($this->getName($attr->name) === FluentRules::class) {
+                if ($this->getName($attr->name) === $fluentRulesAttribute) {
                     return true;
                 }
             }

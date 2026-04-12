@@ -61,12 +61,6 @@ parameters:
 			path: src/Rector/ValidationArrayToFluentRuleRector.php
 
 		-
-			rawMessage: Class SanderMuller\FluentValidation\FluentRules not found.
-			identifier: class.notFound
-			count: 1
-			path: src/Rector/ValidationArrayToFluentRuleRector.php
-
-		-
 			rawMessage: 'Class cognitive complexity is 153, keep it under 80'
 			identifier: complexity.classLike
 			count: 1
@@ -99,12 +93,6 @@ parameters:
 		-
 			rawMessage: 'Argument of an invalid type mixed supplied for foreach, only iterables are supported.'
 			identifier: foreach.nonIterable
-			count: 1
-			path: src/Rector/ValidationStringToFluentRuleRector.php
-
-		-
-			rawMessage: Class SanderMuller\FluentValidation\FluentRules not found.
-			identifier: class.notFound
 			count: 1
 			path: src/Rector/ValidationStringToFluentRuleRector.php
 
