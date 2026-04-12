@@ -32,13 +32,13 @@ vendor/bin/pint                       # fix code style after
 
 ### Available sets
 
-| Set | Rules | Description |
-|-----|-------|-------------|
-| `FluentValidationSetList::ALL` | Convert + Group + Traits | Full migration pipeline (excludes Simplify) |
-| `FluentValidationSetList::CONVERT` | `ValidationStringToFluentRuleRector`, `ValidationArrayToFluentRuleRector` | Convert pipe-delimited and array-based rules to FluentRule chains |
-| `FluentValidationSetList::GROUP` | `GroupWildcardRulesToEachRector` | Group flat wildcard keys into nested `each()`/`children()` calls |
-| `FluentValidationSetList::TRAITS` | `AddHasFluentRulesTraitRector`, `AddHasFluentValidationTraitRector` | Add performance traits to FormRequest and Livewire classes |
-| `FluentValidationSetList::SIMPLIFY` | `SimplifyFluentRuleRector` | Post-migration cleanup: factory shortcuts, min/max→between, label→factory arg |
+| Set                                 | Rules                                                                     | Description                                                                   |
+|-------------------------------------|---------------------------------------------------------------------------|-------------------------------------------------------------------------------|
+| `FluentValidationSetList::ALL`      | Convert + Group + Traits                                                  | Full migration pipeline (excludes Simplify)                                   |
+| `FluentValidationSetList::CONVERT`  | `ValidationStringToFluentRuleRector`, `ValidationArrayToFluentRuleRector` | Convert pipe-delimited and array-based rules to FluentRule chains             |
+| `FluentValidationSetList::GROUP`    | `GroupWildcardRulesToEachRector`                                          | Group flat wildcard keys into nested `each()`/`children()` calls              |
+| `FluentValidationSetList::TRAITS`   | `AddHasFluentRulesTraitRector`, `AddHasFluentValidationTraitRector`       | Add performance traits to FormRequest and Livewire classes                    |
+| `FluentValidationSetList::SIMPLIFY` | `SimplifyFluentRuleRector`                                                | Post-migration cleanup: factory shortcuts, min/max→between, label→factory arg |
 
 ### Granular usage
 
@@ -71,14 +71,14 @@ return RectorConfig::configure()
 
 ## Rules reference
 
-| Rule | What it does |
-|------|-------------|
-| `ValidationStringToFluentRuleRector` | Pipe-delimited string rules (`'required\|string\|max:255'`) into fluent chains. Context-aware: works in FormRequest `rules()`, `$request->validate()`, and `Validator::make()`. |
-| `ValidationArrayToFluentRuleRector` | Array-based rules (`['required', 'string', Rule::unique(...)]`), including `Rule::` objects, `Password::min()` chains, conditional tuples, closures, and custom rule objects. |
-| `GroupWildcardRulesToEachRector` | Flat wildcard/dotted keys into nested `each()`/`children()` calls. Skips Livewire classes. Synthesizes `FluentRule::array()->nullable()` for parent keys without an explicit rule. |
-| `AddHasFluentRulesTraitRector` | Adds `use HasFluentRules;` to FormRequest classes that use FluentRule (enables optimized validation). |
-| `AddHasFluentValidationTraitRector` | Adds `use HasFluentValidation;` to Livewire components that use FluentRule. |
-| `SimplifyFluentRuleRector` | Simplifies FluentRule chains: factory shortcuts (`string()->url()` → `url()`), label as factory arg, min/max → between, redundant type removal. |
+| Rule                                 | What it does                                                                                                                                                                       |
+|--------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `ValidationStringToFluentRuleRector` | Pipe-delimited string rules (`'required\|string\|max:255'`) into fluent chains. Context-aware: works in FormRequest `rules()`, `$request->validate()`, and `Validator::make()`.    |
+| `ValidationArrayToFluentRuleRector`  | Array-based rules (`['required', 'string', Rule::unique(...)]`), including `Rule::` objects, `Password::min()` chains, conditional tuples, closures, and custom rule objects.      |
+| `GroupWildcardRulesToEachRector`     | Flat wildcard/dotted keys into nested `each()`/`children()` calls. Skips Livewire classes. Synthesizes `FluentRule::array()->nullable()` for parent keys without an explicit rule. |
+| `AddHasFluentRulesTraitRector`       | Adds `use HasFluentRules;` to FormRequest classes that use FluentRule (enables optimized validation).                                                                              |
+| `AddHasFluentValidationTraitRector`  | Adds `use HasFluentValidation;` to Livewire components that use FluentRule.                                                                                                        |
+| `SimplifyFluentRuleRector`           | Simplifies FluentRule chains: factory shortcuts (`string()->url()` → `url()`), label as factory arg, min/max → between, redundant type removal.                                    |
 
 ## Requirements
 
