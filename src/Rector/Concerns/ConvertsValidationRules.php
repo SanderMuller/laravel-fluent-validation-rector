@@ -31,7 +31,6 @@ use RecursiveCallbackFilterIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use SanderMuller\FluentValidation\FluentRule;
-use SanderMuller\FluentValidation\FluentRules;
 use SplFileInfo;
 use UnexpectedValueException;
 
@@ -308,7 +307,7 @@ trait ConvertsValidationRules
         // class to exist at static-analysis time. FluentRules ships in newer
         // laravel-fluent-validation releases but is absent from earlier
         // versions that still satisfy our ^1.0 constraint.
-        $fluentRulesAttribute = FluentRules::class;
+        $fluentRulesAttribute = 'SanderMuller\\FluentValidation\\FluentRules';
 
         foreach ($method->attrGroups as $attrGroup) {
             foreach ($attrGroup->attrs as $attr) {
@@ -859,6 +858,72 @@ trait ConvertsValidationRules
         }
 
         return null;
+    }
+
+    /**
+     * Convert a pipe-delimited rule string (`'required|string|max:255'`) to a
+     * FluentRule chain expression. Returns null for empty input.
+     *
+     * Shared between ValidationStringToFluentRuleRector (which converts
+     * `'name' => 'required|string|max:255'` entries) and the
+     * ConvertLivewireRuleAttributeRector (which converts the rule-string arg
+     * of `#[Rule('required|string|max:255')]` attributes).
+     */
+    private function convertStringToFluentRule(string $ruleString): ?Expr
+    {
+        $parts = explode('|', $ruleString);
+
+        if ($parts === ['']) {
+            return null;
+        }
+
+        $type = null;
+        $modifiers = [];
+
+        foreach ($parts as $part) {
+            $parsed = $this->parseRulePart($part);
+            $normalized = $this->normalizeRuleName($parsed['name']);
+
+            if ($type === null && isset(self::TYPE_MAP[$normalized])) {
+                $type = self::TYPE_MAP[$normalized];
+
+                continue;
+            }
+
+            $modifiers[] = ['name' => $normalized, 'args' => $parsed['args']];
+        }
+
+        $resolvedType = $type ?? 'field';
+        $expr = $this->buildFluentRuleFactory($resolvedType);
+
+        foreach ($modifiers as $modifier) {
+            if (! $this->isModifierValidForType($resolvedType, $modifier['name'])) {
+                $expr = $this->wrapInRuleEscapeHatch($expr, $modifier['name'], $modifier['args']);
+
+                continue;
+            }
+
+            $methodCall = $this->buildModifierCall($expr, $modifier['name'], $modifier['args']);
+
+            if (! $methodCall instanceof MethodCall) {
+                $expr = $this->wrapInRuleEscapeHatch($expr, $modifier['name'], $modifier['args']);
+
+                continue;
+            }
+
+            $expr = $methodCall;
+        }
+
+        return $expr;
+    }
+
+    private function wrapInRuleEscapeHatch(Expr $expr, string $name, ?string $args): MethodCall
+    {
+        $ruleString = $args !== null ? $name . ':' . $args : $name;
+
+        return new MethodCall($expr, new Identifier('rule'), [
+            new Arg(new String_($ruleString)),
+        ]);
     }
 
     /**

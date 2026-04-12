@@ -3,13 +3,11 @@
 namespace SanderMuller\FluentValidationRector\Rector;
 
 use PhpParser\Node;
-use PhpParser\Node\Arg;
 use PhpParser\Node\ArrayItem;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
-use PhpParser\Node\Identifier;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\ClassLike;
 use Rector\PostRector\Collector\UseNodesToAddCollector;
@@ -157,65 +155,5 @@ CODE_SAMPLE
         }
 
         return $changed;
-    }
-
-    private function convertStringToFluentRule(string $ruleString): ?Expr
-    {
-        $parts = explode('|', $ruleString);
-
-        if ($parts === ['']) {
-            return null;
-        }
-
-        $type = null;
-        $modifiers = [];
-
-        foreach ($parts as $part) {
-            $parsed = $this->parseRulePart($part);
-            $normalized = $this->normalizeRuleName($parsed['name']);
-
-            if ($type === null && isset(self::TYPE_MAP[$normalized])) {
-                $type = self::TYPE_MAP[$normalized];
-
-                continue;
-            }
-
-            $modifiers[] = ['name' => $normalized, 'args' => $parsed['args']];
-        }
-
-        $resolvedType = $type ?? 'field';
-        $expr = $this->buildFluentRuleFactory($resolvedType);
-
-        foreach ($modifiers as $modifier) {
-            if (! $this->isModifierValidForType($resolvedType, $modifier['name'])) {
-                // Use ->rule('name:args') escape hatch for modifiers not available on this type
-                $ruleString = $modifier['args'] !== null
-                    ? $modifier['name'] . ':' . $modifier['args']
-                    : $modifier['name'];
-                $expr = new MethodCall($expr, new Identifier('rule'), [
-                    new Arg(new String_($ruleString)),
-                ]);
-
-                continue;
-            }
-
-            $methodCall = $this->buildModifierCall($expr, $modifier['name'], $modifier['args']);
-
-            if (! $methodCall instanceof MethodCall) {
-                // Unknown modifier → escape hatch
-                $ruleString = $modifier['args'] !== null
-                    ? $modifier['name'] . ':' . $modifier['args']
-                    : $modifier['name'];
-                $expr = new MethodCall($expr, new Identifier('rule'), [
-                    new Arg(new String_($ruleString)),
-                ]);
-
-                continue;
-            }
-
-            $expr = $methodCall;
-        }
-
-        return $expr;
     }
 }

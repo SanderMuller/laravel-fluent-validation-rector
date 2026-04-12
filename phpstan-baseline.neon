@@ -101,3 +101,21 @@ parameters:
 			identifier: complexity.functionLike
 			count: 1
 			path: src/Rector/ValidationStringToFluentRuleRector.php
+
+		-
+			rawMessage: Access to an undefined property PhpParser\Node\Stmt::$stmts.
+			identifier: property.notFound
+			count: 1
+			path: src/Rector/ConvertLivewireRuleAttributeRector.php
+
+		-
+			rawMessage: 'Argument of an invalid type mixed supplied for foreach, only iterables are supported.'
+			identifier: foreach.nonIterable
+			count: 1
+			path: src/Rector/ConvertLivewireRuleAttributeRector.php
+
+		-
+			rawMessage: 'Cognitive complexity for "SanderMuller\FluentValidationRector\Rector\ConvertLivewireRuleAttributeRector::buildModifierCall()" is 25, keep it under 20'
+			identifier: complexity.functionLike
+			count: 1
+			path: src/Rector/ConvertLivewireRuleAttributeRector.php
