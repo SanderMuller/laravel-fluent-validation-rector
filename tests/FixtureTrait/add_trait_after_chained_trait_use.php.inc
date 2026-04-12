@@ -26,12 +26,12 @@ class ChainedTraitsRequest extends FormRequest
 
 namespace SanderMuller\FluentValidationRector\Tests\FixtureTrait;
 
-use SanderMuller\FluentValidation\HasFluentRules;
 use App\Concerns\HasAuditLog;
 use App\Concerns\HasRateLimit;
 use App\Concerns\Sanitizes;
 use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\FluentRule;
+use SanderMuller\FluentValidation\HasFluentRules;
 
 class ChainedTraitsRequest extends FormRequest
 {

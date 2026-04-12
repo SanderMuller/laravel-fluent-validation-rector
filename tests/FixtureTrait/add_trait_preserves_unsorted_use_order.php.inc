@@ -2,16 +2,11 @@
 
 namespace SanderMuller\FluentValidationRector\Tests\FixtureTrait;
 
-use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\FluentRule;
+use Illuminate\Foundation\Http\FormRequest;
 
-class DocblockedFirstMemberRequest extends FormRequest
+class UnsortedUsesRequest extends FormRequest
 {
-    /**
-     * @var list<string>
-     */
-    public array $allowed = [];
-
     public function rules(): array
     {
         return [
@@ -26,18 +21,13 @@ class DocblockedFirstMemberRequest extends FormRequest
 
 namespace SanderMuller\FluentValidationRector\Tests\FixtureTrait;
 
-use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\FluentRule;
+use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\HasFluentRules;
 
-class DocblockedFirstMemberRequest extends FormRequest
+class UnsortedUsesRequest extends FormRequest
 {
     use HasFluentRules;
-
-    /**
-     * @var list<string>
-     */
-    public array $allowed = [];
 
     public function rules(): array
     {

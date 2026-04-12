@@ -31,9 +31,9 @@ class AnvaAvantiAdminCredentials extends Component
 
 namespace SanderMuller\FluentValidationRector\Tests\FixtureLivewire;
 
-use SanderMuller\FluentValidation\HasFluentValidation;
 use Livewire\Component;
 use SanderMuller\FluentValidation\FluentRule;
+use SanderMuller\FluentValidation\HasFluentValidation;
 
 class AnvaAvantiAdminCredentials extends Component
 {

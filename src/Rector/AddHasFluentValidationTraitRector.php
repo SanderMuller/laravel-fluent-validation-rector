@@ -6,16 +6,13 @@ use PhpParser\Node;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Name;
 use PhpParser\Node\Stmt\Class_;
-use PhpParser\Node\Stmt\ClassLike;
-use PhpParser\Node\Stmt\Nop;
-use PhpParser\Node\Stmt\TraitUse;
+use PhpParser\Node\Stmt\Namespace_;
 use PhpParser\NodeVisitor;
-use Rector\PostRector\Collector\UseNodesToAddCollector;
 use Rector\Rector\AbstractRector;
-use Rector\StaticTypeMapper\ValueObject\Type\FullyQualifiedObjectType;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidation\HasFluentValidation;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesTraitInsertion;
 use SanderMuller\FluentValidationRector\Tests\AddHasFluentValidationTraitRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
@@ -30,8 +27,7 @@ use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
 final class AddHasFluentValidationTraitRector extends AbstractRector implements DocumentedRuleInterface
 {
     use LogsSkipReasons;
-
-    public function __construct(private readonly UseNodesToAddCollector $useNodesToAddCollector) {}
+    use ManagesTraitInsertion;
 
     public function getRuleDefinition(): RuleDefinition
     {
@@ -78,50 +74,75 @@ CODE_SAMPLE
 
     public function getNodeTypes(): array
     {
-        return [ClassLike::class];
+        return [Namespace_::class];
     }
 
     public function refactor(Node $node): ?Node
     {
-        if (! $node instanceof Class_) {
+        if (! $node instanceof Namespace_) {
             return null;
         }
 
-        if ($node->isAbstract()) {
-            $this->logSkip($node, 'abstract class');
+        $hasChanged = false;
 
+        foreach ($node->stmts as $stmt) {
+            if (! $stmt instanceof Class_) {
+                continue;
+            }
+
+            if ($this->shouldAddTraitToClass($stmt)) {
+                $this->addTraitToClass($stmt);
+                $hasChanged = true;
+            }
+        }
+
+        if (! $hasChanged) {
             return null;
+        }
+
+        // Insert the `use SanderMuller\FluentValidation\HasFluentValidation;` at
+        // the alphabetically-sorted position. See AddHasFluentRulesTraitRector
+        // for the rationale.
+        $this->ensureUseImportInNamespace($node, HasFluentValidation::class);
+
+        return $node;
+    }
+
+    private function shouldAddTraitToClass(Class_ $class): bool
+    {
+        if ($class->isAbstract()) {
+            $this->logSkip($class, 'abstract class');
+
+            return false;
         }
 
         // Target Livewire components and forms — check direct parent OR
         // fall back to heuristic (presence of render() method indicates Livewire)
-        if (! $this->isLivewireClass($node)) {
-            $this->logSkip($node, 'not detected as a Livewire component (no Livewire parent or render() method)');
+        if (! $this->isLivewireClass($class)) {
+            $this->logSkip($class, 'not detected as a Livewire component (no Livewire parent or render() method)');
 
-            return null;
+            return false;
         }
 
-        if ($this->alreadyHasTrait($node)) {
-            $this->logSkip($node, 'already has HasFluentValidation trait');
+        if ($this->alreadyHasTrait($class)) {
+            $this->logSkip($class, 'already has HasFluentValidation trait');
 
-            return null;
+            return false;
         }
 
-        if ($this->hasValidateMethodConflict($node)) {
-            $this->logSkip($node, 'validate() or validateOnly() method conflict (e.g. Filament InteractsWithForms)');
+        if ($this->hasValidateMethodConflict($class)) {
+            $this->logSkip($class, 'validate() or validateOnly() method conflict (e.g. Filament InteractsWithForms)');
 
-            return null;
+            return false;
         }
 
-        if (! $this->usesFluentRule($node)) {
-            $this->logSkip($node, 'no FluentRule usage in rules() method');
+        if (! $this->usesFluentRule($class)) {
+            $this->logSkip($class, 'no FluentRule usage in rules() method');
 
-            return null;
+            return false;
         }
 
-        $this->addTraitToClass($node);
-
-        return $node;
+        return true;
     }
 
     private function alreadyHasTrait(Class_ $class): bool
@@ -212,58 +233,6 @@ CODE_SAMPLE
 
     private function addTraitToClass(Class_ $class): void
     {
-        // Queue a top-of-file `use SanderMuller\FluentValidation\HasFluentValidation;`
-        // import and emit the short name inside the class, matching the behavior of
-        // AddHasFluentRulesTraitRector so out-of-the-box output is polished without
-        // relying on `withImportNames()` or Pint.
-        $this->useNodesToAddCollector->addUseImport(new FullyQualifiedObjectType(HasFluentValidation::class));
-
-        $traitUse = new TraitUse([new Name('HasFluentValidation')]);
-
-        // Insert after existing trait uses, or at the beginning of the class body
-        $insertPosition = 0;
-
-        foreach ($class->stmts as $i => $stmt) {
-            if ($stmt instanceof TraitUse) {
-                $insertPosition = $i + 1;
-            }
-        }
-
-        // Emit a blank line (Nop) so the trait doesn't sit flush against the next
-        // member — especially important for Livewire components whose first member
-        // is often a docblocked property. Pint's `class_attributes_separation` has
-        // a `trait_import` key but it's opt-in, so handle the spacing ourselves.
-        // Skip the Nop when the original stmts already have a blank-line gap — the
-        // format-preserving printer keeps that gap, so adding a Nop would double it.
-        $toInsert = $this->needsBlankLineAfterTrait($class, $insertPosition)
-            ? [$traitUse, new Nop()]
-            : [$traitUse];
-
-        array_splice($class->stmts, $insertPosition, 0, $toInsert);
-    }
-
-    private function needsBlankLineAfterTrait(Class_ $class, int $insertPosition): bool
-    {
-        $nextStmt = $class->stmts[$insertPosition] ?? null;
-
-        if ($nextStmt === null) {
-            return false;
-        }
-
-        if ($nextStmt instanceof TraitUse || $nextStmt instanceof Nop) {
-            return false;
-        }
-
-        $prevStmt = $insertPosition > 0 ? $class->stmts[$insertPosition - 1] : null;
-
-        if ($prevStmt === null) {
-            return true;
-        }
-
-        $prevEnd = $prevStmt->getEndLine();
-        $comments = $nextStmt->getComments();
-        $nextStart = $comments === [] ? $nextStmt->getStartLine() : $comments[0]->getStartLine();
-
-        return $nextStart - $prevEnd < 2;
+        $this->insertTraitUseInClass($class, 'HasFluentValidation');
     }
 }
