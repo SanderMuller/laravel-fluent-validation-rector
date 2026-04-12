@@ -2,6 +2,55 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 0.2.0 - 2026-04-12
+
+### Added
+
+#### Array-tuple rules lower directly to fluent method calls
+
+Previously `['max', 65535]`, `['between', 3, 100]`, `['min', 4]` were wrapped in `->rule([...])` escape-hatch form even when the rule name mapped cleanly to a fluent modifier. Laravel treats the colon form (`'max:65535'`) and the tuple form (`['max', 65535]`) as equivalent, but the rector only lowered the colon form. `ValidationArrayToFluentRuleRector` now dispatches tuples through a new `buildModifierCallFromTupleExprArgs()` helper that reuses the existing rule-name-to-fluent-method mapping.
+
+Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one-arg rules like `regex`, `format`, `startsWith`. Falls back to `->rule([...])` when the rule name isn't in the dispatch table, preserving prior behavior. Per-element lowering is preserved: mixed tuples + closure keep the closure as `->rule(fn)`.
+
+```php
+// Before
+'author_notes' => ['nullable', 'string', ['max', 65535]]
+// After (0.1.x)
+'author_notes' => FluentRule::string()->nullable()->rule(['max', 65535])
+// After (0.2.0)
+'author_notes' => FluentRule::string()->nullable()->max(65535)
+
+```
+Reported from a run against the hihaho codebase (20+ files).
+
+#### Flat wildcard `'items.*'` entries fold into parent `->each(<scalar>)`
+
+`GroupWildcardRulesToEachRector` previously only collapsed dot-notation groups with nested wildcard children (`items.*.field`) or fixed children (`items.field`). A standalone `'items.*' => ...` entry stayed separate, even when the idiomatic form is `FluentRule::array()->each(FluentRule::field()->...)`. The rule now folds the flat wildcard's FluentRule chain into the parent as `->each(<scalar>)` rather than `->each([key => val, …])`.
+
+Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. Handles const-concat wildcard keys (`self::VIDEO_IDS . '.*'`) via the existing constant-resolution pathway. Parent type is still validated: `each()` only attaches to `FluentRule::array()`.
+
+```php
+// Before
+'interactions' => FluentRule::array(),
+'interactions.*' => FluentRule::field()->filled(),
+// After
+'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
+```
+Reported from a run against the hihaho codebase (15+ files).
+
+### Fixed
+
+#### Trait `use` imports insert alphabetically instead of prepending
+
+0.1.1 routed the top-of-file trait import through Rector's `UseNodesToAddCollector`, whose `UseAddingPostRector` always prepends new imports regardless of alphabetical order. Pre-Pint output was worse than 0.1.0's (which inserted adjacent to existing `SanderMuller\…` imports). Both trait rectors now insert the `use` statement manually at the alphabetically-sorted position, falling back to "append after the last use" when the existing imports aren't already sorted (preserving intentional user ordering). The shared AST manipulation logic moves to a new `Concerns\ManagesTraitInsertion` trait consumed by both rectors.
+
+Reported from runs against the mijntp and hihaho codebases.
+
+#### PHPStan no longer fails on the `#[FluentRules]` attribute reference
+
+The rector references `SanderMuller\FluentValidation\FluentRules` as a forward-compatible attribute class — it ships in newer `laravel-fluent-validation` releases but isn't present in every version satisfying the `^1.0` constraint. Switched from `FluentRules::class` to a string literal so static analysis doesn't trip on the optional reference. CI-only regression; no runtime behavior change.
+
 ## 0.1.1 - 2026-04-12
 
 ### Fixed
@@ -25,5 +74,6 @@ Initial release.
   - `SimplifyFluentRuleRector` — collapses redundant or verbose fluent chains.
   - `GroupWildcardRulesToEachRector` — groups wildcard (`items.*`) rules into `FluentRule::each()` blocks.
   - `AddHasFluentRulesTraitRector` and `AddHasFluentValidationTraitRector` — adds the required traits to FormRequests, Livewire components, and custom validators.
+  
 - Set lists in `FluentValidationSetList` for applying rules individually or as a full migration pipeline.
 - Covers `Validator::make()`, FormRequest `rules()`, Livewire `$rules` properties, and inline validator calls.
