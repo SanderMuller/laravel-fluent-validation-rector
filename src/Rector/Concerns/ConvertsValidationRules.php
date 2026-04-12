@@ -791,6 +791,58 @@ trait ConvertsValidationRules
     }
 
     /**
+     * Tuple-form analogue of buildModifierCall().
+     *
+     * Lowers array-form rule tuples like ['max', 65535] and ['between', 3, 100]
+     * directly to fluent method calls (->max(65535), ->between(3, 100)) using
+     * the tuple's already-parsed Expr arguments, instead of routing through
+     * string reparsing. Returns null when the tuple's rule name or arity doesn't
+     * match a known fluent method — caller is expected to fall back to the
+     * ->rule(['name', ...]) escape hatch.
+     *
+     * @param  list<Expr>  $argExprs  tuple arguments in source order, without the rule name
+     */
+    private function buildModifierCallFromTupleExprArgs(Expr $expr, string $name, array $argExprs): ?MethodCall
+    {
+        $argCount = count($argExprs);
+
+        if (in_array($name, self::SIMPLE_MODIFIERS, true)) {
+            return $argCount === 0
+                ? new MethodCall($expr, new Identifier($name))
+                : null;
+        }
+
+        if (in_array($name, self::NUMERIC_ARG_RULES, true)) {
+            return $argCount === 1
+                ? new MethodCall($expr, new Identifier($name), [new Arg($argExprs[0])])
+                : null;
+        }
+
+        if (in_array($name, self::TWO_NUMERIC_ARG_RULES, true)) {
+            return $argCount === 2
+                ? new MethodCall($expr, new Identifier($name), [
+                    new Arg($argExprs[0]),
+                    new Arg($argExprs[1]),
+                ])
+                : null;
+        }
+
+        if (in_array($name, self::STRING_ARG_RULES, true)) {
+            return $argCount === 1
+                ? new MethodCall($expr, new Identifier($name), [new Arg($argExprs[0])])
+                : null;
+        }
+
+        if (in_array($name, ['startsWith', 'endsWith', 'doesntStartWith', 'doesntEndWith', 'regex', 'notRegex', 'format'], true)) {
+            return $argCount === 1
+                ? new MethodCall($expr, new Identifier($name), [new Arg($argExprs[0])])
+                : null;
+        }
+
+        return null;
+    }
+
+    /**
      * Build ->in(['val1', 'val2']) or ->notIn(['val1', 'val2'])
      */
     private function buildArrayArgCall(Expr $expr, string $method, string $args): MethodCall

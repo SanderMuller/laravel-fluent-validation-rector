@@ -430,6 +430,26 @@ CODE_SAMPLE
             return null;
         }
 
+        // Try to lower the tuple directly to a fluent method call
+        // (['max', 65535] → ->max(65535), ['between', 3, 100] → ->between(3, 100)).
+        // Only proceed when the rule is valid for the factory type; otherwise
+        // the tuple falls through to the ->rule() escape hatch below.
+        if ($this->isModifierValidForType($type, $ruleName)) {
+            $argExprs = [];
+
+            for ($i = 1, $count = count($tuple->items); $i < $count; ++$i) {
+                /** @var ArrayItem $item */
+                $item = $tuple->items[$i];
+                $argExprs[] = $item->value;
+            }
+
+            $fluentCall = $this->buildModifierCallFromTupleExprArgs($expr, $ruleName, $argExprs);
+
+            if ($fluentCall instanceof MethodCall) {
+                return $fluentCall;
+            }
+        }
+
         return $this->wrapInRuleCall($expr, $tuple);
     }
 
