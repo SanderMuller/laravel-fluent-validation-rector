@@ -15,17 +15,22 @@ Three fixes from real-world runs:
 
 Plus CI fix (`fileinfo` extension for Windows), CHANGELOG seed, stale phpstan-baseline cleanup (FluentRules string literal lookup).
 
-## In progress — 0.2.0
+### 0.2.0 — broken tag (immutable), superseded by 0.3.0
 
-Theme: **broader coverage of existing rule input forms.** Extends existing rectors to recognize more shapes of the same concept.
+The `0.2.0` Packagist tag points at `ebd1204` (a pre-feature commit), so `^0.2.0` ships none of the features its CHANGELOG describes. Since tags are immutable, 0.3.0 ships the full 0.2.0 scope plus the 0.2.x polish items that landed during re-verification.
 
-| # | Gap | Source rector | Frequency | Status |
-|---|---|---|---|---|
-| 1 | `['max', 65535]` tuple → `->max(65535)` | `ValidationArrayToFluentRuleRector` | 20+ files (hihaho) | **Done** (commit `7f4671c`) |
-| 2 | Flat `'items.*' => [...]` → parent `->each(<scalar>)` | `GroupWildcardRulesToEachRector` | 15+ files (hihaho) | Pending |
-| 4 | `Rule::unique()->withoutTrashed()` → `->unique(Model, null, fn)` | New `UnwrapRuleMethodChainRector` | Lower | Pending |
-| — | `FluentRule::` FQN in synthesized nodes → short `Name` via `UseNodesToAddCollector` | Multiple rectors | Touch-up | Pending (deferred from 0.1.2) |
-| — | Trait `use` import inserted alphabetically instead of prepended | Trait rectors | mijntp finding A + collectiq nit B | **Done** |
+## Released — 0.3.0
+
+Theme: **broader coverage of existing rule input forms + polish on trait-insertion output + ancestor-aware trait detection.**
+
+| # | Item | Source | Status |
+|---|---|---|---|
+| 1 | `['max', 65535]` tuple → `->max(65535)` | `ValidationArrayToFluentRuleRector` | **Done** |
+| 2 | Flat `'items.*' => [...]` → parent `->each(<scalar>)` | `GroupWildcardRulesToEachRector` | **Done** |
+| 4 | `Rule::unique()->withoutTrashed()` → `->unique(Model, null, fn)` | `ValidationArrayToFluentRuleRector::convertChainedDatabaseRule` | **Done** (pre-existing; regression fixture added) |
+| — | Trait `use` import inserted alphabetically | Trait rectors | **Done** |
+| — | Synthesized `FluentRule::` uses short name | `GroupWildcardRulesToEachRector` | **Done** |
+| — | Skip trait insertion when ancestor already uses it | Trait rectors via `DetectsInheritedTraits` | **Done** |
 
 Docs bundle:
 - README "Known limitations" section (non-`rules()` conventions, `Collection::put()` in Actions, rules from traits/helpers)
@@ -66,7 +71,8 @@ Ran 0.1.0 on 23 files. 900 tests pass, PHPStan clean.
 - **Issue 3 — trait ordering alphabetical vs after-last-trait** → Pint's `ordered_traits` absorbs it. Cosmetic.
 
 Re-verification of 0.1.1 surfaced three nits (all cleanly absorbed by Pint, none blocking):
-- **Finding A — import ordering regression** — 0.1.0 inserted `use` alphabetically adjacent; 0.1.1 prepends to top of use block. Same root cause as collectiq Nit B. **Folded into 0.2.0.**
+- **Finding A — import ordering regression** — 0.1.0 inserted `use` alphabetically adjacent; 0.1.1 prepends to top of use block. Same root cause as collectiq Nit B. **Folded into 0.3.0.**
+- **Finding B — redundant trait on inheriting subclasses** — parent class carrying the trait caused subclasses to still get it re-added. **Folded into 0.3.0** via `DetectsInheritedTraits` reflection walk.
 - **Finding B — redundant trait on inheriting subclasses** — 6 Livewire subclasses get `use HasFluentValidation;` re-added even though their parent already has it. Pre-existing from 0.1.0. Would need reflection / parent-chain walk. 0.2.x nice-to-have.
 - **Finding C — trait member ordering** — `Pint ordered_traits` fixes it. Cosmetic.
 

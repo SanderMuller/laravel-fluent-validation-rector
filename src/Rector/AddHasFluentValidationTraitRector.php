@@ -11,6 +11,7 @@ use PhpParser\NodeVisitor;
 use Rector\Rector\AbstractRector;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidation\HasFluentValidation;
+use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesTraitInsertion;
 use SanderMuller\FluentValidationRector\Tests\AddHasFluentValidationTraitRectorTest;
@@ -26,6 +27,7 @@ use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
  */
 final class AddHasFluentValidationTraitRector extends AbstractRector implements DocumentedRuleInterface
 {
+    use DetectsInheritedTraits;
     use LogsSkipReasons;
     use ManagesTraitInsertion;
 
@@ -126,6 +128,16 @@ CODE_SAMPLE
 
         if ($this->alreadyHasTrait($class)) {
             $this->logSkip($class, 'already has HasFluentValidation trait');
+
+            return false;
+        }
+
+        // Auto-detect inherited trait so subclasses of a shared Livewire base
+        // class that already declares HasFluentValidation don't get the trait
+        // re-added redundantly. Complements the existing alreadyHasTrait() check
+        // (which only catches direct declaration on this class).
+        if ($this->anyAncestorUsesTrait($class, HasFluentValidation::class)) {
+            $this->logSkip($class, 'parent class already uses HasFluentValidation (trait inherited)');
 
             return false;
         }

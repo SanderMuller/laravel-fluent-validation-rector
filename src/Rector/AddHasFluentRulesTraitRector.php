@@ -14,6 +14,7 @@ use Rector\Rector\AbstractRector;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidation\HasFluentRules;
 use SanderMuller\FluentValidation\HasFluentValidation;
+use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesTraitInsertion;
 use SanderMuller\FluentValidationRector\Tests\AddHasFluentRulesTraitRectorTest;
@@ -29,6 +30,7 @@ use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
  */
 final class AddHasFluentRulesTraitRector extends AbstractRector implements ConfigurableRectorInterface, DocumentedRuleInterface
 {
+    use DetectsInheritedTraits;
     use LogsSkipReasons;
     use ManagesTraitInsertion;
 
@@ -163,6 +165,16 @@ CODE_SAMPLE
         // Children of configured base classes inherit the trait — skip to avoid duplication
         if ($class->extends instanceof Name && in_array($this->getName($class->extends), $this->baseClasses, true)) {
             $this->logSkip($class, 'extends a configured base class (trait inherited from parent)');
+
+            return false;
+        }
+
+        // Auto-detect inherited trait via the ancestor chain so the rector
+        // doesn't re-add HasFluentRules to every subclass of a parent that
+        // already declares it. Complements the explicit base_classes config
+        // for codebases that don't want to enumerate every shared base.
+        if ($this->anyAncestorUsesTrait($class, HasFluentRules::class)) {
+            $this->logSkip($class, 'parent class already uses HasFluentRules (trait inherited)');
 
             return false;
         }

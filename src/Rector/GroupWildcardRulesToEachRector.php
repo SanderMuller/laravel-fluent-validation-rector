@@ -13,16 +13,16 @@ use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
-use PhpParser\Node\Name\FullyQualified;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\Class_;
-use PhpParser\Node\Stmt\ClassLike;
+use PhpParser\Node\Stmt\Namespace_;
 use PhpParser\Node\Stmt\Return_;
 use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\Rector\AbstractRector;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidation\HasFluentValidation;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesNamespaceImports;
 use SanderMuller\FluentValidationRector\Tests\GroupWildcardRulesToEachRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
@@ -41,6 +41,7 @@ use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
 final class GroupWildcardRulesToEachRector extends AbstractRector implements DocumentedRuleInterface
 {
     use LogsSkipReasons;
+    use ManagesNamespaceImports;
 
     private const int MAX_NESTING_DEPTH = 4;
 
@@ -97,7 +98,7 @@ CODE_SAMPLE
 
     public function getNodeTypes(): array
     {
-        return [ClassLike::class];
+        return [Namespace_::class];
     }
 
     /**
@@ -108,24 +109,59 @@ CODE_SAMPLE
      */
     private array $localConstants = [];
 
+    /**
+     * Set to true when any class in the current namespace synthesized a
+     * FluentRule factory call (FluentRule::array() / FluentRule::field()).
+     * Triggers insertion of `use SanderMuller\FluentValidation\FluentRule;`
+     * so the emitted short `FluentRule::` references resolve correctly.
+     */
+    private bool $needsFluentRuleImport = false;
+
     public function refactor(Node $node): ?Node
     {
-        if (! $node instanceof Class_) {
+        if (! $node instanceof Namespace_) {
             return null;
         }
 
-        if ($this->isLivewireClass($node)) {
-            $this->logSkip($node, 'detected as Livewire (nested each() breaks Livewire wildcard handling; trait added separately)');
+        $this->needsFluentRuleImport = false;
+        $hasChanged = false;
 
+        foreach ($node->stmts as $stmt) {
+            if (! $stmt instanceof Class_) {
+                continue;
+            }
+
+            if ($this->refactorClass($stmt)) {
+                $hasChanged = true;
+            }
+        }
+
+        if (! $hasChanged) {
             return null;
+        }
+
+        if ($this->needsFluentRuleImport) {
+            $this->ensureUseImportInNamespace($node, FluentRule::class);
+        }
+
+        return $node;
+    }
+
+    /** @phpstan-impure */
+    private function refactorClass(Class_ $class): bool
+    {
+        if ($this->isLivewireClass($class)) {
+            $this->logSkip($class, 'detected as Livewire (nested each() breaks Livewire wildcard handling; trait added separately)');
+
+            return false;
         }
 
         // Build map of local string constants for resolving self::X keys
-        $this->localConstants = $this->collectLocalStringConstants($node);
+        $this->localConstants = $this->collectLocalStringConstants($class);
 
         $hasChanged = false;
 
-        foreach ($node->getMethods() as $method) {
+        foreach ($class->getMethods() as $method) {
             if (! $this->isName($method, 'rules')) {
                 continue;
             }
@@ -145,7 +181,7 @@ CODE_SAMPLE
             });
         }
 
-        return $hasChanged ? $node : null;
+        return $hasChanged;
     }
 
     /**
@@ -490,7 +526,10 @@ CODE_SAMPLE
                 continue; // Skip this group entirely
             }
 
-            if ($wildcardKeys !== [] || $fixedKeys !== []) {
+            // Emit a group when there are nested children OR a flat wildcard
+            // parent (items.*) alone — the flat case collapses into the parent's
+            // ->each(<scalar>) via the gap-2 branch in applyGroups().
+            if ($wildcardKeys !== [] || $fixedKeys !== [] || $wildcardParentKey !== null) {
                 $groups[] = [
                     'parent' => $prefix,
                     'wildcardKeys' => $wildcardKeys,
@@ -567,10 +606,7 @@ CODE_SAMPLE
                 }
 
                 if ($childValue === null) {
-                    $childValue = new StaticCall(
-                        new FullyQualified(FluentRule::class),
-                        new Identifier('field'),
-                    );
+                    $childValue = $this->buildFluentRuleFactoryCall('field');
                 }
 
                 // Absorb wildcard parent
@@ -662,12 +698,33 @@ CODE_SAMPLE
                 );
             }
 
-            if ($eachItems === [] && $childrenItems === []) {
+            // Gap 2: flat-wildcard shorthand. When only a single `items.*`
+            // entry exists (no nested `items.*.field` siblings, no explicit
+            // `items.*` fixed children), fold the wildcard entry's own
+            // FluentRule chain into the parent as `->each(<that chain>)`.
+            // Example: `'items.*' => FluentRule::field()->filled()` →
+            // parent gets `->each(FluentRule::field()->filled())`.
+            $eachScalar = null;
+
+            if (
+                $eachItems === []
+                && $childrenItems === []
+                && $group['wildcardParentKey'] !== null
+                && isset($entries[$group['wildcardParentKey']])
+                && $this->isFluentRuleChain($entries[$group['wildcardParentKey']]['value'])
+            ) {
+                $eachScalar = $entries[$group['wildcardParentKey']]['value'];
+                $groupConsumed[] = $entries[$group['wildcardParentKey']]['index'];
+            }
+
+            if ($eachItems === [] && $childrenItems === [] && $eachScalar === null) {
                 continue;
             }
 
-            // Check wildcard parent (items.*) — only absorb if redundant
-            if ($group['wildcardParentKey'] !== null && isset($entries[$group['wildcardParentKey']])) {
+            // Check wildcard parent (items.*) — only absorb if redundant.
+            // Skip this branch when $eachScalar is set: we've already consumed
+            // the wildcard parent as the scalar argument to each().
+            if ($eachScalar === null && $group['wildcardParentKey'] !== null && isset($entries[$group['wildcardParentKey']])) {
                 if ($eachItems !== [] && ! $this->isRedundantWildcardParent($entries[$group['wildcardParentKey']]['value'])) {
                     continue; // Non-redundant → bail on this group
                 }
@@ -690,7 +747,7 @@ CODE_SAMPLE
             if ($parentValue !== null) {
                 $factory = $this->getFluentRuleFactory($parentValue);
 
-                if ($eachItems !== [] && $factory !== 'array') {
+                if (($eachItems !== [] || $eachScalar !== null) && $factory !== 'array') {
                     continue; // each() requires ArrayRule
                 }
 
@@ -706,10 +763,7 @@ CODE_SAMPLE
                 // children would silently never fire. Leaving the synthesized parent
                 // bare preserves the original dot-notation semantics: nested
                 // `required` children still trigger when the parent is absent.
-                $parentValue = new StaticCall(
-                    new FullyQualified(FluentRule::class),
-                    new Identifier('array'),
-                );
+                $parentValue = $this->buildFluentRuleFactoryCall('array');
             }
 
             if ($eachItems !== []) {
@@ -717,6 +771,12 @@ CODE_SAMPLE
                     $parentValue,
                     new Identifier('each'),
                     [new Arg($this->multilineArray($eachItems))],
+                );
+            } elseif ($eachScalar !== null) {
+                $parentValue = new MethodCall(
+                    $parentValue,
+                    new Identifier('each'),
+                    [new Arg($eachScalar)],
                 );
             }
 
@@ -903,6 +963,22 @@ CODE_SAMPLE
 
         // The root should be a FluentRule::field() or FluentRule::array() call
         return $current instanceof StaticCall;
+    }
+
+    /**
+     * Build a `FluentRule::<factory>()` static call using the short `FluentRule`
+     * name. Marks the enclosing namespace as needing a `use SanderMuller\
+     * FluentValidation\FluentRule;` import so the short reference resolves
+     * correctly when the namespace doesn't already import it.
+     */
+    private function buildFluentRuleFactoryCall(string $factory): StaticCall
+    {
+        $this->needsFluentRuleImport = true;
+
+        return new StaticCall(
+            new Name('FluentRule'),
+            new Identifier($factory),
+        );
     }
 
     /**

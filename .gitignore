@@ -23,3 +23,5 @@ testbench.yaml
 /coverage
 composer.lock
 .phpunit.result.cache
+
+RELEASE_NOTES*.md
