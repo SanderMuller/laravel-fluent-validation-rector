@@ -35,7 +35,16 @@ class MultiLevelRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'columns' => FluentRule::array()->required()->each(['data' => FluentRule::field()->nullable()->children(['_' => FluentRule::string()->nullable(), 'sort' => FluentRule::string()->nullable()]), 'search' => FluentRule::field()->nullable()->children(['value' => FluentRule::string()->nullable(), 'regex' => FluentRule::boolean()->nullable()])]),
+            'columns' => FluentRule::array()->required()->each([
+                'data' => FluentRule::field()->nullable()->children([
+                    '_' => FluentRule::string()->nullable(),
+                    'sort' => FluentRule::string()->nullable(),
+                ]),
+                'search' => FluentRule::field()->nullable()->children([
+                    'value' => FluentRule::string()->nullable(),
+                    'regex' => FluentRule::boolean()->nullable(),
+                ]),
+            ]),
         ];
     }
 }

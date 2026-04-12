@@ -18,6 +18,7 @@ use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassLike;
 use PhpParser\Node\Stmt\Return_;
+use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\Rector\AbstractRector;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidation\HasFluentValidation;
@@ -583,7 +584,7 @@ CODE_SAMPLE
 
                     if ($eachItems !== []) {
                         $childValue = new MethodCall($childValue, new Identifier('each'), [
-                            new Arg(new Array_($eachItems)),
+                            new Arg($this->multilineArray($eachItems)),
                         ]);
                     }
                 }
@@ -594,7 +595,7 @@ CODE_SAMPLE
 
                     if ($childrenItems !== []) {
                         $childValue = new MethodCall($childValue, new Identifier('children'), [
-                            new Arg(new Array_($childrenItems)),
+                            new Arg($this->multilineArray($childrenItems)),
                         ]);
                     }
                 }
@@ -699,18 +700,15 @@ CODE_SAMPLE
             }
 
             if ($parentValue === null) {
-                // Synthesize a nullable array parent to match Laravel's flat-rule
-                // behavior: `items.*.x => required` without an `items` rule passes
-                // when `items` is null or missing. Scalar inputs still fail with
-                // `validation.array`, which is an intentional improvement — a
-                // scalar parent means zero wildcard iterations, which is almost
-                // always a latent bug in the caller.
-                $parentValue = new MethodCall(
-                    new StaticCall(
-                        new FullyQualified(FluentRule::class),
-                        new Identifier('array'),
-                    ),
-                    new Identifier('nullable'),
+                // Synthesize a bare FluentRule::array() parent without a presence
+                // modifier. Adding ->nullable() here short-circuits Laravel's
+                // validation when the parent key is missing, so nested ->required()
+                // children would silently never fire. Leaving the synthesized parent
+                // bare preserves the original dot-notation semantics: nested
+                // `required` children still trigger when the parent is absent.
+                $parentValue = new StaticCall(
+                    new FullyQualified(FluentRule::class),
+                    new Identifier('array'),
                 );
             }
 
@@ -718,7 +716,7 @@ CODE_SAMPLE
                 $parentValue = new MethodCall(
                     $parentValue,
                     new Identifier('each'),
-                    [new Arg(new Array_($eachItems))],
+                    [new Arg($this->multilineArray($eachItems))],
                 );
             }
 
@@ -726,7 +724,7 @@ CODE_SAMPLE
                 $parentValue = new MethodCall(
                     $parentValue,
                     new Identifier('children'),
-                    [new Arg(new Array_($childrenItems))],
+                    [new Arg($this->multilineArray($childrenItems))],
                 );
             }
 
@@ -905,6 +903,25 @@ CODE_SAMPLE
 
         // The root should be a FluentRule::field() or FluentRule::array() call
         return $current instanceof StaticCall;
+    }
+
+    /**
+     * Build an Array_ node flagged for multi-line printing.
+     *
+     * Rector's BetterStandardPrinter honours NEWLINED_ARRAY_PRINT to force one
+     * item per line. Without it, synthesized children()/each() arrays collapse
+     * onto a single line because nikic/php-parser only breaks arrays whose
+     * items carry comments, which Pint can't undo when nested expressions
+     * (e.g. ->in([...])) keep the outer line short enough to survive wrapping.
+     *
+     * @param  list<ArrayItem>  $items
+     */
+    private function multilineArray(array $items): Array_
+    {
+        $array = new Array_($items);
+        $array->setAttribute(AttributeKey::NEWLINED_ARRAY_PRINT, true);
+
+        return $array;
     }
 
     /**

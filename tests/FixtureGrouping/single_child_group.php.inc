@@ -32,8 +32,12 @@ class SingleChildRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'wrapper' => FluentRule::array()->required()->each(['value' => FluentRule::string()->required()]),
-            'config' => FluentRule::field()->nullable()->children(['enabled' => FluentRule::boolean()->required()]),
+            'wrapper' => FluentRule::array()->required()->each([
+                'value' => FluentRule::string()->required(),
+            ]),
+            'config' => FluentRule::field()->nullable()->children([
+                'enabled' => FluentRule::boolean()->required(),
+            ]),
         ];
     }
 }

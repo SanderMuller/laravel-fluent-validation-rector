@@ -32,7 +32,11 @@ class SimpleChildrenRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'address' => FluentRule::field()->required()->children(['street' => FluentRule::string()->required(), 'city' => FluentRule::string()->required(), 'zip' => FluentRule::string()->required()->max(10)]),
+            'address' => FluentRule::field()->required()->children([
+                'street' => FluentRule::string()->required(),
+                'city' => FluentRule::string()->required(),
+                'zip' => FluentRule::string()->required()->max(10),
+            ]),
         ];
     }
 }

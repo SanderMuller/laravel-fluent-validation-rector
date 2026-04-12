@@ -32,7 +32,12 @@ class MixedEachChildrenRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'data' => FluentRule::array()->required()->each(['name' => FluentRule::string()->required(), 'email' => FluentRule::email()->required()])->children(['meta' => FluentRule::string()->nullable()]),
+            'data' => FluentRule::array()->required()->each([
+                'name' => FluentRule::string()->required(),
+                'email' => FluentRule::email()->required(),
+            ])->children([
+                'meta' => FluentRule::string()->nullable(),
+            ]),
         ];
     }
 }

@@ -38,7 +38,19 @@ class ComplexRealWorldRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'interactions' => FluentRule::array()->required()->min(1)->each(['type' => FluentRule::string()->required(), 'name' => FluentRule::string()->required(), 'start' => FluentRule::numeric()->required()->integer(), 'style' => FluentRule::field()->nullable()->children(['top' => FluentRule::string()->nullable(), 'left' => FluentRule::string()->nullable()]), 'action' => FluentRule::field()->nullable()->children(['type' => FluentRule::string()->nullable(), 'value' => FluentRule::string()->nullable()])]),
+            'interactions' => FluentRule::array()->required()->min(1)->each([
+                'type' => FluentRule::string()->required(),
+                'name' => FluentRule::string()->required(),
+                'start' => FluentRule::numeric()->required()->integer(),
+                'style' => FluentRule::field()->nullable()->children([
+                    'top' => FluentRule::string()->nullable(),
+                    'left' => FluentRule::string()->nullable(),
+                ]),
+                'action' => FluentRule::field()->nullable()->children([
+                    'type' => FluentRule::string()->nullable(),
+                    'value' => FluentRule::string()->nullable(),
+                ]),
+            ]),
         ];
     }
 }

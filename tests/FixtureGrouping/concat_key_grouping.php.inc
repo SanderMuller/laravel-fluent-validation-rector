@@ -35,7 +35,10 @@ class ConcatKeyRequest extends FormRequest
     public function rules(): array
     {
         return [
-            self::ITEMS => FluentRule::array()->required()->each(['name' => FluentRule::string()->required(), 'email' => FluentRule::email()->required()]),
+            self::ITEMS => FluentRule::array()->required()->each([
+                'name' => FluentRule::string()->required(),
+                'email' => FluentRule::email()->required(),
+            ]),
         ];
     }
 }

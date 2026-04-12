@@ -31,7 +31,10 @@ class ConditionalWithNestingRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'interactions' => FluentRule::array()->required()->each(['type' => FluentRule::string()->required(), 'end_time' => FluentRule::numeric()->requiredUnless('interactions.*.type', 'pause')]),
+            'interactions' => FluentRule::array()->required()->each([
+                'type' => FluentRule::string()->required(),
+                'end_time' => FluentRule::numeric()->requiredUnless('interactions.*.type', 'pause'),
+            ]),
         ];
     }
 }
