@@ -25,10 +25,9 @@ class RuleObjectFormRequest extends FormRequest
 
 namespace SanderMuller\FluentValidationRector\Tests\FixtureArray;
 
-use SanderMuller\FluentValidation\FluentRule;
-use App\Enums\Status;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use SanderMuller\FluentValidation\FluentRule;
 
 class RuleObjectFormRequest extends FormRequest
 {
@@ -39,7 +38,7 @@ class RuleObjectFormRequest extends FormRequest
             'role' => FluentRule::field()->required()->in(['admin', 'editor', 'viewer']),
             'team_id' => FluentRule::integer()->required()->exists('teams', 'id'),
             'category' => FluentRule::string()->nullable()->notIn(['banned', 'restricted']),
-            'status' => FluentRule::field()->required()->enum(Status::class),
+            'status' => FluentRule::field()->required()->enum(\App\Enums\Status::class),
         ];
     }
 }

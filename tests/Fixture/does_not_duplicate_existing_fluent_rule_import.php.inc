@@ -3,14 +3,15 @@
 namespace SanderMuller\FluentValidationRector\Tests\Fixture;
 
 use Illuminate\Foundation\Http\FormRequest;
+use SanderMuller\FluentValidation\FluentRule;
 
-class PasswordStringFormRequest extends FormRequest
+class PreImportedFluentRuleRequest extends FormRequest
 {
     public function rules(): array
     {
         return [
-            'password' => 'required|password|min:8|confirmed',
-            'pin' => 'required|password',
+            'manual' => FluentRule::string()->required(),
+            'auto' => 'required|string|max:100',
         ];
     }
 }
@@ -24,13 +25,13 @@ namespace SanderMuller\FluentValidationRector\Tests\Fixture;
 use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\FluentRule;
 
-class PasswordStringFormRequest extends FormRequest
+class PreImportedFluentRuleRequest extends FormRequest
 {
     public function rules(): array
     {
         return [
-            'password' => FluentRule::password()->required()->min(8)->confirmed(),
-            'pin' => FluentRule::password()->required(),
+            'manual' => FluentRule::string()->required(),
+            'auto' => FluentRule::string()->required()->max(100),
         ];
     }
 }

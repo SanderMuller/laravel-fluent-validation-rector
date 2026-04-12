@@ -31,9 +31,9 @@ class TupleMixedWithClosureRequest extends FormRequest
 
 namespace SanderMuller\FluentValidationRector\Tests\FixtureArray;
 
-use SanderMuller\FluentValidation\FluentRule;
 use Closure;
 use Illuminate\Foundation\Http\FormRequest;
+use SanderMuller\FluentValidation\FluentRule;
 
 class TupleMixedWithClosureRequest extends FormRequest
 {

@@ -23,9 +23,9 @@ class ConditionalRuleObjectFormRequest extends FormRequest
 
 namespace SanderMuller\FluentValidationRector\Tests\FixtureArray;
 
-use SanderMuller\FluentValidation\FluentRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use SanderMuller\FluentValidation\FluentRule;
 
 class ConditionalRuleObjectFormRequest extends FormRequest
 {

@@ -2,15 +2,16 @@
 
 namespace SanderMuller\FluentValidationRector\Tests\Fixture;
 
+use App\Support\SomeHelper;
 use Illuminate\Foundation\Http\FormRequest;
+use Symfony\Component\HttpFoundation\Response;
 
-class PasswordStringFormRequest extends FormRequest
+class SortedImportInsertionRequest extends FormRequest
 {
     public function rules(): array
     {
         return [
-            'password' => 'required|password|min:8|confirmed',
-            'pin' => 'required|password',
+            'email' => 'required|email',
         ];
     }
 }
@@ -21,16 +22,17 @@ class PasswordStringFormRequest extends FormRequest
 
 namespace SanderMuller\FluentValidationRector\Tests\Fixture;
 
+use App\Support\SomeHelper;
 use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\FluentRule;
+use Symfony\Component\HttpFoundation\Response;
 
-class PasswordStringFormRequest extends FormRequest
+class SortedImportInsertionRequest extends FormRequest
 {
     public function rules(): array
     {
         return [
-            'password' => FluentRule::password()->required()->min(8)->confirmed(),
-            'pin' => FluentRule::password()->required(),
+            'email' => FluentRule::email()->required(),
         ];
     }
 }

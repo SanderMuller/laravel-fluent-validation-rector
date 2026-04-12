@@ -17,8 +17,8 @@ $validator = Validator::make($data, [
 
 namespace SanderMuller\FluentValidationRector\Tests\Fixture;
 
-use SanderMuller\FluentValidation\FluentRule;
 use Illuminate\Support\Facades\Validator;
+use SanderMuller\FluentValidation\FluentRule;
 
 $validator = Validator::make($data, [
     'name' => FluentRule::string()->required()->max(255),

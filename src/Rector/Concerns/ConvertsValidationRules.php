@@ -703,14 +703,32 @@ trait ConvertsValidationRules
     }
 
     /**
+     * Set by buildFluentRuleFactory() whenever the rector emits a
+     * `FluentRule::…()` factory call. Consuming rectors read this after
+     * refactor() finishes and insert the matching `use SanderMuller\
+     * FluentValidation\FluentRule;` import when needed. Reset per-file by
+     * the caller before dispatching into this trait's logic.
+     */
+    private bool $needsFluentRuleImport = false;
+
+    /**
      * Build a FluentRule::type() static call as the chain root.
      *
+     * Emits the short `FluentRule` name and marks the enclosing file as
+     * needing a `use SanderMuller\FluentValidation\FluentRule;` import so
+     * the short reference resolves at runtime. The import itself is added
+     * by the consuming rector via ManagesNamespaceImports.
+     *
      * @param  list<Arg>  $args
+     *
+     * @phpstan-impure
      */
     private function buildFluentRuleFactory(string $type, array $args = []): StaticCall
     {
+        $this->needsFluentRuleImport = true;
+
         return new StaticCall(
-            new FullyQualified(FluentRule::class),
+            new Name('FluentRule'),
             new Identifier($type),
             $args,
         );

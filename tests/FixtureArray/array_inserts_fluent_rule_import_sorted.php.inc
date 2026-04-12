@@ -2,16 +2,15 @@
 
 namespace SanderMuller\FluentValidationRector\Tests\FixtureArray;
 
-use App\Models\User;
+use App\Rules\SomeCustomRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
-class UniqueWithoutTrashedRequest extends FormRequest
+class ArraySortedImportInsertionRequest extends FormRequest
 {
     public function rules(): array
     {
         return [
-            'email' => ['required', 'string', Rule::unique(User::class)->withoutTrashed()],
+            'email' => ['required', 'email'],
         ];
     }
 }
@@ -22,17 +21,16 @@ class UniqueWithoutTrashedRequest extends FormRequest
 
 namespace SanderMuller\FluentValidationRector\Tests\FixtureArray;
 
-use App\Models\User;
+use App\Rules\SomeCustomRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 use SanderMuller\FluentValidation\FluentRule;
 
-class UniqueWithoutTrashedRequest extends FormRequest
+class ArraySortedImportInsertionRequest extends FormRequest
 {
     public function rules(): array
     {
         return [
-            'email' => FluentRule::string()->required()->unique(User::class, null, fn($rule) => $rule->withoutTrashed()),
+            'email' => FluentRule::email()->required(),
         ];
     }
 }

@@ -26,8 +26,8 @@ class SimpleArrayFormRequest extends FormRequest
 
 namespace SanderMuller\FluentValidationRector\Tests\FixtureArray;
 
-use SanderMuller\FluentValidation\FluentRule;
 use Illuminate\Foundation\Http\FormRequest;
+use SanderMuller\FluentValidation\FluentRule;
 
 class SimpleArrayFormRequest extends FormRequest
 {

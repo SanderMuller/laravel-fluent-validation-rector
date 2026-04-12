@@ -18,8 +18,8 @@ function handleRequest(Request $request) {
 
 namespace SanderMuller\FluentValidationRector\Tests\Fixture;
 
-use SanderMuller\FluentValidation\FluentRule;
 use Illuminate\Http\Request;
+use SanderMuller\FluentValidation\FluentRule;
 
 function handleRequest(Request $request) {
     $validated = $request->validate([

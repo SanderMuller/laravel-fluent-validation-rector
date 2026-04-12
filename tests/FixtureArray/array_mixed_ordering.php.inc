@@ -21,17 +21,16 @@ class MixedOrderingFormRequest extends FormRequest
 
 namespace SanderMuller\FluentValidationRector\Tests\FixtureArray;
 
-use SanderMuller\FluentValidation\FluentRule;
-use App\Rules\CustomRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use SanderMuller\FluentValidation\FluentRule;
 
 class MixedOrderingFormRequest extends FormRequest
 {
     public function rules(): array
     {
         return [
-            'field' => FluentRule::string()->bail()->required()->rule(new CustomRule())->rule(Rule::requiredIf(fn () => true))->max(255),
+            'field' => FluentRule::string()->bail()->required()->rule(new \App\Rules\CustomRule())->rule(Rule::requiredIf(fn () => true))->max(255),
         ];
     }
 }

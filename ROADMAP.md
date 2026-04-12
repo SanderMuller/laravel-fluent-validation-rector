@@ -19,6 +19,14 @@ Plus CI fix (`fileinfo` extension for Windows), CHANGELOG seed, stale phpstan-ba
 
 The `0.2.0` Packagist tag points at `ebd1204` (a pre-feature commit), so `^0.2.0` ships none of the features its CHANGELOG describes. Since tags are immutable, 0.3.0 ships the full 0.2.0 scope plus the 0.2.x polish items that landed during re-verification.
 
+## Released — 0.3.1
+
+Finishes the pre-Pint output polish from 0.3.0 by sweeping the converter-pathway `FluentRule::` FQN. After this release, Pint is a no-op on rector's output across all rule types.
+
+- **Converter `FluentRule::` uses short name** — `ConvertsValidationRules::buildFluentRuleFactory()` now emits `new Name('FluentRule')` and auto-inserts the import via `ManagesNamespaceImports`.
+- Both string/array converters registered `Namespace_` as their single node type.
+- 5 new fixtures covering import-insertion, dedup, and sorted-position.
+
 ## Released — 0.3.0
 
 Theme: **broader coverage of existing rule input forms + polish on trait-insertion output + ancestor-aware trait detection.**

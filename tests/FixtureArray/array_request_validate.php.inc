@@ -19,8 +19,8 @@ function handleArrayRequest(Request $request) {
 
 namespace SanderMuller\FluentValidationRector\Tests\FixtureArray;
 
-use SanderMuller\FluentValidation\FluentRule;
 use Illuminate\Http\Request;
+use SanderMuller\FluentValidation\FluentRule;
 
 function handleArrayRequest(Request $request) {
     $validated = $request->validate([

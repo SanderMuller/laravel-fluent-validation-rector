@@ -24,9 +24,9 @@ class PasswordFormRequest extends FormRequest
 
 namespace SanderMuller\FluentValidationRector\Tests\FixtureArray;
 
-use SanderMuller\FluentValidation\FluentRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Password;
+use SanderMuller\FluentValidation\FluentRule;
 
 class PasswordFormRequest extends FormRequest
 {

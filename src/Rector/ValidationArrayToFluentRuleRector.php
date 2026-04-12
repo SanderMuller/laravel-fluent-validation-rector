@@ -28,8 +28,11 @@ use PhpParser\Node\Scalar\Float_;
 use PhpParser\Node\Scalar\Int_;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\ClassLike;
+use PhpParser\Node\Stmt\Namespace_;
 use Rector\Rector\AbstractRector;
+use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ConvertsValidationRules;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesNamespaceImports;
 use SanderMuller\FluentValidationRector\Tests\ValidationArrayToFluentRuleRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
@@ -48,6 +51,7 @@ use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
 final class ValidationArrayToFluentRuleRector extends AbstractRector implements DocumentedRuleInterface
 {
     use ConvertsValidationRules;
+    use ManagesNamespaceImports;
 
     /** @var list<string> */
     private const array RULE_PASSTHROUGH_METHODS = [
@@ -159,24 +163,62 @@ CODE_SAMPLE
 
     public function getNodeTypes(): array
     {
-        return [ClassLike::class, MethodCall::class, StaticCall::class];
+        return [Namespace_::class];
     }
 
     public function refactor(Node $node): ?Node
     {
-        if ($node instanceof ClassLike) {
-            return $this->refactorFormRequest($node);
+        if (! $node instanceof Namespace_) {
+            return null;
         }
 
-        if ($node instanceof MethodCall && $this->isName($node->name, 'validate')) {
-            return $this->refactorValidateCall($node);
+        $this->needsFluentRuleImport = false;
+        $hasChanged = false;
+
+        $this->traverseNodesWithCallable($node, function (Node $inner) use (&$hasChanged): ?Node {
+            if ($inner instanceof ClassLike) {
+                $result = $this->refactorFormRequest($inner);
+
+                if ($result instanceof Node) {
+                    $hasChanged = true;
+
+                    return $result;
+                }
+            }
+
+            if ($inner instanceof MethodCall && $this->isName($inner->name, 'validate')) {
+                $result = $this->refactorValidateCall($inner);
+
+                if ($result instanceof Node) {
+                    $hasChanged = true;
+
+                    return $result;
+                }
+            }
+
+            if (($inner instanceof StaticCall || $inner instanceof MethodCall) && $this->isName($inner->name, 'make')) {
+                $result = $this->refactorValidatorMake($inner);
+
+                if ($result instanceof Node) {
+                    $hasChanged = true;
+
+                    return $result;
+                }
+            }
+
+            return null;
+        });
+
+        if (! $hasChanged) {
+            return null;
         }
 
-        if (($node instanceof StaticCall || $node instanceof MethodCall) && $this->isName($node->name, 'make')) {
-            return $this->refactorValidatorMake($node);
-        }
+        // Any conversion path that flips $hasChanged routes through
+        // buildFluentRuleFactory() and emits a short `FluentRule::` reference,
+        // so the `use` import is always required here.
+        $this->ensureUseImportInNamespace($node, FluentRule::class);
 
-        return null;
+        return $node;
     }
 
     private function processValidationRules(Array_ $array): bool
