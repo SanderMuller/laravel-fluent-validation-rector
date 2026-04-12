@@ -41,4 +41,6 @@ parameters:
         -
             identifier: trait.unused
             reportUnmatched: false
-        - identifier: ternary.condNotBoolean
+        -
+            identifier: ternary.condNotBoolean
+            reportUnmatched: false

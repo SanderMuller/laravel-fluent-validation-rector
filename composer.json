@@ -16,9 +16,13 @@
         "nikic/php-parser": "^5.4",
         "orchestra/testbench": "^9.0||^10.11",
         "pestphp/pest": "^3.0||^4.4",
+        "phpstan/extension-installer": "^1.4",
         "phpstan/phpstan": "^2.0",
+        "phpstan/phpstan-strict-rules": "^2.0",
         "rector/type-perfect": "^2.0",
         "sandermuller/package-boost": "^0.2",
+        "spaze/phpstan-disallowed-calls": "^4.10",
+        "symplify/phpstan-extensions": "^12.0",
         "tomasvotruba/cognitive-complexity": "^1.0",
         "tomasvotruba/type-coverage": "^2.0"
     },
@@ -46,11 +50,17 @@
         "sort-packages": true
     },
     "scripts": {
+        "format": "vendor/bin/pint",
         "pint": "vendor/bin/pint --format agent",
         "phpstan": "vendor/bin/phpstan analyse --memory-limit=2G",
+        "phpstan-simplified": "vendor/bin/phpstan analyse --memory-limit=2G --error-format symplify",
+        "phpstan-clear-cache": "vendor/bin/phpstan clear-result-cache",
+        "rector": "vendor/bin/rector process",
         "test": "vendor/bin/pest",
+        "test-coverage": "vendor/bin/pest --coverage",
         "qa": [
-            "@pint",
+            "@format",
+            "@rector",
             "@phpstan",
             "@test"
         ]
