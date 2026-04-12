@@ -4,7 +4,6 @@ use Rector\Config\RectorConfig;
 use SanderMuller\FluentValidationRector\Rector\AddHasFluentRulesTraitRector;
 
 return RectorConfig::configure()
-    ->withImportNames()
     ->withRules([
         AddHasFluentRulesTraitRector::class,
     ]);

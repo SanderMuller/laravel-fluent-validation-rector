@@ -5,20 +5,23 @@ namespace SanderMuller\FluentValidationRector\Tests\FixtureLivewire;
 use Livewire\Component;
 use SanderMuller\FluentValidation\FluentRule;
 
-class EditUser extends Component
+class AnvaAvantiAdminCredentials extends Component
 {
-    public string $name = '';
+    /**
+     * @var array<string, string>
+     */
+    public array $credentials = [];
 
     public function rules(): array
     {
         return [
-            'name' => FluentRule::string()->required()->max(255),
+            'credentials.username' => FluentRule::string()->required(),
         ];
     }
 
     public function render()
     {
-        return view('livewire.edit-user');
+        return view('livewire.anva-avanti-admin-credentials');
     }
 }
 
@@ -32,22 +35,25 @@ use SanderMuller\FluentValidation\HasFluentValidation;
 use Livewire\Component;
 use SanderMuller\FluentValidation\FluentRule;
 
-class EditUser extends Component
+class AnvaAvantiAdminCredentials extends Component
 {
     use HasFluentValidation;
 
-    public string $name = '';
+    /**
+     * @var array<string, string>
+     */
+    public array $credentials = [];
 
     public function rules(): array
     {
         return [
-            'name' => FluentRule::string()->required()->max(255),
+            'credentials.username' => FluentRule::string()->required(),
         ];
     }
 
     public function render()
     {
-        return view('livewire.edit-user');
+        return view('livewire.anva-avanti-admin-credentials');
     }
 }
 

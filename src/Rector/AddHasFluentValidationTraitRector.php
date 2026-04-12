@@ -5,12 +5,14 @@ namespace SanderMuller\FluentValidationRector\Rector;
 use PhpParser\Node;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Name;
-use PhpParser\Node\Name\FullyQualified;
 use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassLike;
+use PhpParser\Node\Stmt\Nop;
 use PhpParser\Node\Stmt\TraitUse;
 use PhpParser\NodeVisitor;
+use Rector\PostRector\Collector\UseNodesToAddCollector;
 use Rector\Rector\AbstractRector;
+use Rector\StaticTypeMapper\ValueObject\Type\FullyQualifiedObjectType;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidation\HasFluentValidation;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
@@ -28,6 +30,8 @@ use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
 final class AddHasFluentValidationTraitRector extends AbstractRector implements DocumentedRuleInterface
 {
     use LogsSkipReasons;
+
+    public function __construct(private readonly UseNodesToAddCollector $useNodesToAddCollector) {}
 
     public function getRuleDefinition(): RuleDefinition
     {
@@ -208,7 +212,13 @@ CODE_SAMPLE
 
     private function addTraitToClass(Class_ $class): void
     {
-        $traitUse = new TraitUse([new FullyQualified(HasFluentValidation::class)]);
+        // Queue a top-of-file `use SanderMuller\FluentValidation\HasFluentValidation;`
+        // import and emit the short name inside the class, matching the behavior of
+        // AddHasFluentRulesTraitRector so out-of-the-box output is polished without
+        // relying on `withImportNames()` or Pint.
+        $this->useNodesToAddCollector->addUseImport(new FullyQualifiedObjectType(HasFluentValidation::class));
+
+        $traitUse = new TraitUse([new Name('HasFluentValidation')]);
 
         // Insert after existing trait uses, or at the beginning of the class body
         $insertPosition = 0;
@@ -219,6 +229,15 @@ CODE_SAMPLE
             }
         }
 
-        array_splice($class->stmts, $insertPosition, 0, [$traitUse]);
+        // Emit a blank line (Nop) so the trait doesn't sit flush against the next
+        // member — especially important for Livewire components whose first member
+        // is often a docblocked property. Pint's `class_attributes_separation` has
+        // a `trait_import` key but it's opt-in, so handle the spacing ourselves.
+        $nextStmt = $class->stmts[$insertPosition] ?? null;
+        $needsBlankLine = $nextStmt !== null && ! $nextStmt instanceof TraitUse && ! $nextStmt instanceof Nop;
+
+        $toInsert = $needsBlankLine ? [$traitUse, new Nop()] : [$traitUse];
+
+        array_splice($class->stmts, $insertPosition, 0, $toInsert);
     }
 }

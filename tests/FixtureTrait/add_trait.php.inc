@@ -29,6 +29,7 @@ use SanderMuller\FluentValidation\FluentRule;
 class StorePostRequest extends FormRequest
 {
     use HasFluentRules;
+
     public function rules(): array
     {
         return [

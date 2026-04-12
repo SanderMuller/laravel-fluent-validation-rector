@@ -6,13 +6,15 @@ use Illuminate\Foundation\Http\FormRequest;
 use PhpParser\Node;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Name;
-use PhpParser\Node\Name\FullyQualified;
 use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassLike;
+use PhpParser\Node\Stmt\Nop;
 use PhpParser\Node\Stmt\TraitUse;
 use PhpParser\NodeVisitor;
 use Rector\Contract\Rector\ConfigurableRectorInterface;
+use Rector\PostRector\Collector\UseNodesToAddCollector;
 use Rector\Rector\AbstractRector;
+use Rector\StaticTypeMapper\ValueObject\Type\FullyQualifiedObjectType;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidation\HasFluentRules;
 use SanderMuller\FluentValidation\HasFluentValidation;
@@ -44,6 +46,8 @@ final class AddHasFluentRulesTraitRector extends AbstractRector implements Confi
      * @var list<string>
      */
     private array $baseClasses = [];
+
+    public function __construct(private readonly UseNodesToAddCollector $useNodesToAddCollector) {}
 
     /** @param  array<string, list<string>>|list<string>  $configuration */
     public function configure(array $configuration): void
@@ -230,7 +234,14 @@ CODE_SAMPLE
 
     private function addTraitToClass(Class_ $class): void
     {
-        $traitUse = new TraitUse([new FullyQualified(HasFluentRules::class)]);
+        // Queue a top-of-file `use SanderMuller\FluentValidation\HasFluentRules;`
+        // import and emit the short name inside the class. Relying on consumers to
+        // enable `withImportNames()` (or Pint) to clean up an FQN-inline trait use
+        // leaves the rector's out-of-the-box output unpolished, so the rector now
+        // handles the import itself via Rector's post-rector pipeline.
+        $this->useNodesToAddCollector->addUseImport(new FullyQualifiedObjectType(HasFluentRules::class));
+
+        $traitUse = new TraitUse([new Name('HasFluentRules')]);
 
         // Insert after existing trait uses, or at the beginning of the class body
         $insertPosition = 0;
@@ -241,6 +252,15 @@ CODE_SAMPLE
             }
         }
 
-        array_splice($class->stmts, $insertPosition, 0, [$traitUse]);
+        // Emit a blank line (Nop) between the trait and the next member when the
+        // inserted trait would otherwise sit flush against the next statement.
+        // Pint's `class_attributes_separation` has a `trait_import` key but it's
+        // opt-in, so the rector produces properly spaced output on its own.
+        $nextStmt = $class->stmts[$insertPosition] ?? null;
+        $needsBlankLine = $nextStmt !== null && ! $nextStmt instanceof TraitUse && ! $nextStmt instanceof Nop;
+
+        $toInsert = $needsBlankLine ? [$traitUse, new Nop()] : [$traitUse];
+
+        array_splice($class->stmts, $insertPosition, 0, $toInsert);
     }
 }
