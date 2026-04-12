@@ -22,9 +22,9 @@ class SortedImportInsertionRequest extends FormRequest
 
 namespace SanderMuller\FluentValidationRector\Tests\Fixture;
 
+use SanderMuller\FluentValidation\FluentRule;
 use App\Support\SomeHelper;
 use Illuminate\Foundation\Http\FormRequest;
-use SanderMuller\FluentValidation\FluentRule;
 use Symfony\Component\HttpFoundation\Response;
 
 class SortedImportInsertionRequest extends FormRequest

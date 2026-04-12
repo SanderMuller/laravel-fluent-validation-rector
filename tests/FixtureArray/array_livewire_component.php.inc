@@ -21,8 +21,8 @@ class InviteForm extends Component
 
 namespace SanderMuller\FluentValidationRector\Tests\FixtureArray;
 
-use Livewire\Component;
 use SanderMuller\FluentValidation\FluentRule;
+use Livewire\Component;
 
 class InviteForm extends Component
 {

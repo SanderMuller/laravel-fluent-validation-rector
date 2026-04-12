@@ -21,8 +21,8 @@ class NoTypeFormRequest extends FormRequest
 
 namespace SanderMuller\FluentValidationRector\Tests\Fixture;
 
-use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\FluentRule;
+use Illuminate\Foundation\Http\FormRequest;
 
 class NoTypeFormRequest extends FormRequest
 {

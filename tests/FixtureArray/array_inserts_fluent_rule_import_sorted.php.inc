@@ -21,9 +21,9 @@ class ArraySortedImportInsertionRequest extends FormRequest
 
 namespace SanderMuller\FluentValidationRector\Tests\FixtureArray;
 
+use SanderMuller\FluentValidation\FluentRule;
 use App\Rules\SomeCustomRule;
 use Illuminate\Foundation\Http\FormRequest;
-use SanderMuller\FluentValidation\FluentRule;
 
 class ArraySortedImportInsertionRequest extends FormRequest
 {

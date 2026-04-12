@@ -251,11 +251,17 @@ CODE_SAMPLE
             }
 
             $this->traverseNodesWithCallable($method, function (Node $node) use (&$found): ?int {
-                if ($node instanceof StaticCall
-                    && $this->getName($node->class) === FluentRule::class) {
-                    $found = true;
+                if ($node instanceof StaticCall) {
+                    $className = $this->getName($node->class);
 
-                    return NodeVisitor::STOP_TRAVERSAL;
+                    // Accept both the fully-qualified name and the short `FluentRule`
+                    // form emitted by sibling converter rectors before their queued
+                    // `use` import is materialized by the post-rector pipeline.
+                    if ($className === FluentRule::class || $className === 'FluentRule') {
+                        $found = true;
+
+                        return NodeVisitor::STOP_TRAVERSAL;
+                    }
                 }
 
                 return null;

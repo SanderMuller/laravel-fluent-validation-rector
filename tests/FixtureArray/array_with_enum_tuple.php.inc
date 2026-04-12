@@ -30,8 +30,10 @@ class EnumTupleFormRequest extends FormRequest
 
 namespace SanderMuller\FluentValidationRector\Tests\FixtureArray;
 
-use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\FluentRule;
+use App\Enums\InteractionType;
+use App\Enums\Status;
+use Illuminate\Foundation\Http\FormRequest;
 
 class EnumTupleFormRequest extends FormRequest
 {
@@ -40,8 +42,8 @@ class EnumTupleFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => FluentRule::string()->requiredIf(self::FIELD, \App\Enums\InteractionType::PAUSE->value, \App\Enums\InteractionType::FRAME->value),
-            'status' => FluentRule::string()->excludeUnless('type', \App\Enums\Status::ACTIVE->value)->nullable(),
+            'name' => FluentRule::string()->requiredIf(self::FIELD, InteractionType::PAUSE->value, InteractionType::FRAME->value),
+            'status' => FluentRule::string()->excludeUnless('type', Status::ACTIVE->value)->nullable(),
         ];
     }
 }

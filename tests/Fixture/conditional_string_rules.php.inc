@@ -25,8 +25,8 @@ class ConditionalFormRequest extends FormRequest
 
 namespace SanderMuller\FluentValidationRector\Tests\Fixture;
 
-use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\FluentRule;
+use Illuminate\Foundation\Http\FormRequest;
 
 class ConditionalFormRequest extends FormRequest
 {

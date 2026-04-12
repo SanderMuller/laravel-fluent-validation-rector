@@ -21,8 +21,8 @@ class EditProfile extends Component
 
 namespace SanderMuller\FluentValidationRector\Tests\Fixture;
 
-use Livewire\Component;
 use SanderMuller\FluentValidation\FluentRule;
+use Livewire\Component;
 
 class EditProfile extends Component
 {

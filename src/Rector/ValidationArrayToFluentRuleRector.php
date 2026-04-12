@@ -28,11 +28,11 @@ use PhpParser\Node\Scalar\Float_;
 use PhpParser\Node\Scalar\Int_;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\ClassLike;
-use PhpParser\Node\Stmt\Namespace_;
+use Rector\PostRector\Collector\UseNodesToAddCollector;
 use Rector\Rector\AbstractRector;
+use Rector\StaticTypeMapper\ValueObject\Type\FullyQualifiedObjectType;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ConvertsValidationRules;
-use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesNamespaceImports;
 use SanderMuller\FluentValidationRector\Tests\ValidationArrayToFluentRuleRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
@@ -51,7 +51,8 @@ use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
 final class ValidationArrayToFluentRuleRector extends AbstractRector implements DocumentedRuleInterface
 {
     use ConvertsValidationRules;
-    use ManagesNamespaceImports;
+
+    public function __construct(private readonly UseNodesToAddCollector $useNodesToAddCollector) {}
 
     /** @var list<string> */
     private const array RULE_PASSTHROUGH_METHODS = [
@@ -163,62 +164,52 @@ CODE_SAMPLE
 
     public function getNodeTypes(): array
     {
-        return [Namespace_::class];
+        return [ClassLike::class, MethodCall::class, StaticCall::class];
     }
 
     public function refactor(Node $node): ?Node
     {
-        if (! $node instanceof Namespace_) {
-            return null;
+        if ($node instanceof ClassLike) {
+            $result = $this->refactorFormRequest($node);
+
+            if ($result instanceof Node) {
+                $this->queueFluentRuleImport();
+            }
+
+            return $result;
         }
 
+        if ($node instanceof MethodCall && $this->isName($node->name, 'validate')) {
+            $result = $this->refactorValidateCall($node);
+
+            if ($result instanceof Node) {
+                $this->queueFluentRuleImport();
+            }
+
+            return $result;
+        }
+
+        if (($node instanceof StaticCall || $node instanceof MethodCall) && $this->isName($node->name, 'make')) {
+            $result = $this->refactorValidatorMake($node);
+
+            if ($result instanceof Node) {
+                $this->queueFluentRuleImport();
+            }
+
+            return $result;
+        }
+
+        return null;
+    }
+
+    private function queueFluentRuleImport(): void
+    {
+        if (! $this->needsFluentRuleImport) {
+            return;
+        }
+
+        $this->useNodesToAddCollector->addUseImport(new FullyQualifiedObjectType(FluentRule::class));
         $this->needsFluentRuleImport = false;
-        $hasChanged = false;
-
-        $this->traverseNodesWithCallable($node, function (Node $inner) use (&$hasChanged): ?Node {
-            if ($inner instanceof ClassLike) {
-                $result = $this->refactorFormRequest($inner);
-
-                if ($result instanceof Node) {
-                    $hasChanged = true;
-
-                    return $result;
-                }
-            }
-
-            if ($inner instanceof MethodCall && $this->isName($inner->name, 'validate')) {
-                $result = $this->refactorValidateCall($inner);
-
-                if ($result instanceof Node) {
-                    $hasChanged = true;
-
-                    return $result;
-                }
-            }
-
-            if (($inner instanceof StaticCall || $inner instanceof MethodCall) && $this->isName($inner->name, 'make')) {
-                $result = $this->refactorValidatorMake($inner);
-
-                if ($result instanceof Node) {
-                    $hasChanged = true;
-
-                    return $result;
-                }
-            }
-
-            return null;
-        });
-
-        if (! $hasChanged) {
-            return null;
-        }
-
-        // Any conversion path that flips $hasChanged routes through
-        // buildFluentRuleFactory() and emits a short `FluentRule::` reference,
-        // so the `use` import is always required here.
-        $this->ensureUseImportInNamespace($node, FluentRule::class);
-
-        return $node;
     }
 
     private function processValidationRules(Array_ $array): bool

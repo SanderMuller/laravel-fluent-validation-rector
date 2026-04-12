@@ -26,8 +26,8 @@ class SimpleFormRequest extends FormRequest
 
 namespace SanderMuller\FluentValidationRector\Tests\Fixture;
 
-use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\FluentRule;
+use Illuminate\Foundation\Http\FormRequest;
 
 class SimpleFormRequest extends FormRequest
 {

@@ -21,15 +21,16 @@ class SpreadOperatorFormRequest extends FormRequest
 
 namespace SanderMuller\FluentValidationRector\Tests\FixtureArray;
 
-use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\FluentRule;
+use App\Rules\SubtitleDelayRules;
+use Illuminate\Foundation\Http\FormRequest;
 
 class SpreadOperatorFormRequest extends FormRequest
 {
     public function rules(): array
     {
         return [
-            'delay' => ['nullable', ...new \App\Rules\SubtitleDelayRules()],
+            'delay' => ['nullable', ...new SubtitleDelayRules()],
             'name' => FluentRule::string()->required()->max(255),
         ];
     }

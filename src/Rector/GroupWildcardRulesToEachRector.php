@@ -884,6 +884,14 @@ CODE_SAMPLE
     /**
      * Get the factory method name at the root of a FluentRule chain.
      * Returns 'array', 'field', 'string', etc. or null if not a FluentRule chain.
+     *
+     * Matches both the fully-qualified class name and the short `FluentRule`
+     * name. Sibling rectors (ValidationStringToFluentRuleRector,
+     * ValidationArrayToFluentRuleRector) emit the short form when running
+     * inside the same set-list pass because their `use` import is queued via
+     * the post-rector pipeline and isn't yet present in the tree when this
+     * check runs. The short form is authoritative by the time the post-rector
+     * pipeline finishes, so matching on either name is safe.
      */
     private function getFluentRuleFactory(Expr $expr): ?string
     {
@@ -897,7 +905,9 @@ CODE_SAMPLE
             return null;
         }
 
-        if ($this->getName($current->class) !== FluentRule::class) {
+        $className = $this->getName($current->class);
+
+        if ($className !== FluentRule::class && $className !== 'FluentRule') {
             return null;
         }
 

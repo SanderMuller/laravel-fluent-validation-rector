@@ -22,10 +22,10 @@ class UniqueWithoutTrashedRequest extends FormRequest
 
 namespace SanderMuller\FluentValidationRector\Tests\FixtureArray;
 
+use SanderMuller\FluentValidation\FluentRule;
 use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
-use SanderMuller\FluentValidation\FluentRule;
 
 class UniqueWithoutTrashedRequest extends FormRequest
 {
