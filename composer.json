@@ -1,0 +1,60 @@
+{
+    "name": "sandermuller/laravel-fluent-validation-rector",
+    "description": "Rector rules for migrating Laravel validation to sandermuller/laravel-fluent-validation",
+    "homepage": "https://github.com/sandermuller/laravel-fluent-validation-rector",
+    "type": "rector-extension",
+    "license": "MIT",
+    "keywords": ["laravel", "validation", "fluent", "rector", "migration"],
+    "require": {
+        "php": "^8.2",
+        "rector/rector": "^2.4.1",
+        "sandermuller/laravel-fluent-validation": "^1.0",
+        "symplify/rule-doc-generator-contracts": "^11.2"
+    },
+    "require-dev": {
+        "laravel/pint": "^1.29",
+        "nikic/php-parser": "^5.4",
+        "orchestra/testbench": "^9.0||^10.11",
+        "pestphp/pest": "^3.0||^4.4",
+        "phpstan/phpstan": "^2.0",
+        "rector/type-perfect": "^2.0",
+        "sandermuller/package-boost": "^0.2",
+        "tomasvotruba/cognitive-complexity": "^1.0",
+        "tomasvotruba/type-coverage": "^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "SanderMuller\\FluentValidationRector\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "SanderMuller\\FluentValidationRector\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "rector": {
+            "includes": ["config/config.php"]
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "phpstan/extension-installer": true,
+            "rector/extension-installer": true
+        },
+        "sort-packages": true
+    },
+    "scripts": {
+        "pint": "vendor/bin/pint --format agent",
+        "phpstan": "vendor/bin/phpstan analyse --memory-limit=2G",
+        "test": "vendor/bin/pest",
+        "qa": [
+            "@pint",
+            "@phpstan",
+            "@test"
+        ]
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
