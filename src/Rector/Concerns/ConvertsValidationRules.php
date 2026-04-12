@@ -308,7 +308,7 @@ trait ConvertsValidationRules
         // class to exist at static-analysis time. FluentRules ships in newer
         // laravel-fluent-validation releases but is absent from earlier
         // versions that still satisfy our ^1.0 constraint.
-        $fluentRulesAttribute = 'SanderMuller\\FluentValidation\\FluentRules';
+        $fluentRulesAttribute = FluentRules::class;
 
         foreach ($method->attrGroups as $attrGroup) {
             foreach ($attrGroup->attrs as $attr) {
