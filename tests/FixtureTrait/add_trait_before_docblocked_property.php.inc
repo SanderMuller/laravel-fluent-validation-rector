@@ -5,9 +5,12 @@ namespace SanderMuller\FluentValidationRector\Tests\FixtureTrait;
 use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\FluentRule;
 
-class RequestWithExistingTrait extends FormRequest
+class DocblockedFirstMemberRequest extends FormRequest
 {
-    use \App\Concerns\HasAuditLog;
+    /**
+     * @var list<string>
+     */
+    public array $allowed = [];
 
     public function rules(): array
     {
@@ -27,10 +30,14 @@ use SanderMuller\FluentValidation\HasFluentRules;
 use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\FluentRule;
 
-class RequestWithExistingTrait extends FormRequest
+class DocblockedFirstMemberRequest extends FormRequest
 {
-    use \App\Concerns\HasAuditLog;
     use HasFluentRules;
+
+    /**
+     * @var list<string>
+     */
+    public array $allowed = [];
 
     public function rules(): array
     {

@@ -253,14 +253,44 @@ CODE_SAMPLE
         }
 
         // Emit a blank line (Nop) between the trait and the next member when the
-        // inserted trait would otherwise sit flush against the next statement.
+        // inserted trait would otherwise sit flush against a non-trait statement.
         // Pint's `class_attributes_separation` has a `trait_import` key but it's
         // opt-in, so the rector produces properly spaced output on its own.
-        $nextStmt = $class->stmts[$insertPosition] ?? null;
-        $needsBlankLine = $nextStmt !== null && ! $nextStmt instanceof TraitUse && ! $nextStmt instanceof Nop;
-
-        $toInsert = $needsBlankLine ? [$traitUse, new Nop()] : [$traitUse];
+        // Skip the Nop when the original stmts already have a blank-line gap —
+        // the format-preserving printer keeps that gap, so adding a Nop would
+        // double it.
+        $toInsert = $this->needsBlankLineAfterTrait($class, $insertPosition)
+            ? [$traitUse, new Nop()]
+            : [$traitUse];
 
         array_splice($class->stmts, $insertPosition, 0, $toInsert);
+    }
+
+    private function needsBlankLineAfterTrait(Class_ $class, int $insertPosition): bool
+    {
+        $nextStmt = $class->stmts[$insertPosition] ?? null;
+
+        if ($nextStmt === null) {
+            return false;
+        }
+
+        if ($nextStmt instanceof TraitUse || $nextStmt instanceof Nop) {
+            return false;
+        }
+
+        // If the previous statement (another trait) is flush against the next
+        // statement, insert a Nop. Otherwise the original gap is preserved by
+        // the format-preserving printer and a Nop would stack on top of it.
+        $prevStmt = $insertPosition > 0 ? $class->stmts[$insertPosition - 1] : null;
+
+        if ($prevStmt === null) {
+            return true;
+        }
+
+        $prevEnd = $prevStmt->getEndLine();
+        $comments = $nextStmt->getComments();
+        $nextStart = $comments === [] ? $nextStmt->getStartLine() : $comments[0]->getStartLine();
+
+        return $nextStart - $prevEnd < 2;
     }
 }

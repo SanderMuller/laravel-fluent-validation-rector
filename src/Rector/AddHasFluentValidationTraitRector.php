@@ -233,11 +233,37 @@ CODE_SAMPLE
         // member — especially important for Livewire components whose first member
         // is often a docblocked property. Pint's `class_attributes_separation` has
         // a `trait_import` key but it's opt-in, so handle the spacing ourselves.
-        $nextStmt = $class->stmts[$insertPosition] ?? null;
-        $needsBlankLine = $nextStmt !== null && ! $nextStmt instanceof TraitUse && ! $nextStmt instanceof Nop;
-
-        $toInsert = $needsBlankLine ? [$traitUse, new Nop()] : [$traitUse];
+        // Skip the Nop when the original stmts already have a blank-line gap — the
+        // format-preserving printer keeps that gap, so adding a Nop would double it.
+        $toInsert = $this->needsBlankLineAfterTrait($class, $insertPosition)
+            ? [$traitUse, new Nop()]
+            : [$traitUse];
 
         array_splice($class->stmts, $insertPosition, 0, $toInsert);
+    }
+
+    private function needsBlankLineAfterTrait(Class_ $class, int $insertPosition): bool
+    {
+        $nextStmt = $class->stmts[$insertPosition] ?? null;
+
+        if ($nextStmt === null) {
+            return false;
+        }
+
+        if ($nextStmt instanceof TraitUse || $nextStmt instanceof Nop) {
+            return false;
+        }
+
+        $prevStmt = $insertPosition > 0 ? $class->stmts[$insertPosition - 1] : null;
+
+        if ($prevStmt === null) {
+            return true;
+        }
+
+        $prevEnd = $prevStmt->getEndLine();
+        $comments = $nextStmt->getComments();
+        $nextStart = $comments === [] ? $nextStmt->getStartLine() : $comments[0]->getStartLine();
+
+        return $nextStart - $prevEnd < 2;
     }
 }

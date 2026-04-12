@@ -2,12 +2,13 @@
 
 namespace SanderMuller\FluentValidationRector\Tests\FixtureTrait;
 
+use App\Concerns\HasAuditLog;
 use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\FluentRule;
 
-class RequestWithExistingTrait extends FormRequest
+class SingleExistingTraitRequest extends FormRequest
 {
-    use \App\Concerns\HasAuditLog;
+    use HasAuditLog;
 
     public function rules(): array
     {
@@ -24,12 +25,13 @@ class RequestWithExistingTrait extends FormRequest
 namespace SanderMuller\FluentValidationRector\Tests\FixtureTrait;
 
 use SanderMuller\FluentValidation\HasFluentRules;
+use App\Concerns\HasAuditLog;
 use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\FluentRule;
 
-class RequestWithExistingTrait extends FormRequest
+class SingleExistingTraitRequest extends FormRequest
 {
-    use \App\Concerns\HasAuditLog;
+    use HasAuditLog;
     use HasFluentRules;
 
     public function rules(): array
