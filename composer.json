@@ -4,6 +4,13 @@
     "homepage": "https://github.com/sandermuller/laravel-fluent-validation-rector",
     "type": "rector-extension",
     "license": "MIT",
+    "authors": [
+        {
+            "name": "Sander Muller",
+            "email": "github@scode.nl",
+            "role": "Developer"
+        }
+    ],
     "keywords": ["laravel", "validation", "fluent", "rector", "migration"],
     "require": {
         "php": "^8.2",
