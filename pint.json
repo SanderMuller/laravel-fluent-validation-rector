@@ -31,6 +31,9 @@
             "allow_single_line_anonymous_functions": false
         },
         "declare_strict_types": true,
+        "fully_qualified_strict_types": {
+            "phpdoc_tags": []
+        },
         "function_typehint_space": false,
         "increment_style": false,
         "linebreak_after_opening_tag": false,
@@ -40,6 +43,7 @@
         },
         "nullable_type_declaration": false,
         "nullable_type_declaration_for_default_null_value": false,
+        "php_unit_method_casing": false,
         "phpdoc_separation": false,
         "phpdoc_align": false,
         "single_class_element_per_statement": {
