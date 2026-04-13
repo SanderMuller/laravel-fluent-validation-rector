@@ -14,6 +14,7 @@ use SanderMuller\FluentValidation\HasFluentValidation;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesTraitInsertion;
+use SanderMuller\FluentValidationRector\RunSummary;
 use SanderMuller\FluentValidationRector\Tests\AddHasFluentValidationTraitRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
@@ -30,6 +31,11 @@ final class AddHasFluentValidationTraitRector extends AbstractRector implements 
     use DetectsInheritedTraits;
     use LogsSkipReasons;
     use ManagesTraitInsertion;
+
+    public function __construct()
+    {
+        RunSummary::registerShutdownHandler();
+    }
 
     public function getRuleDefinition(): RuleDefinition
     {

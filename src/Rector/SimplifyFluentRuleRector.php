@@ -13,6 +13,7 @@ use PhpParser\Node\Scalar\String_;
 use PHPStan\Type\ObjectType;
 use Rector\Rector\AbstractRector;
 use SanderMuller\FluentValidation\FluentRule;
+use SanderMuller\FluentValidationRector\RunSummary;
 use SanderMuller\FluentValidationRector\Tests\SimplifyFluentRuleRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
@@ -48,6 +49,7 @@ final class SimplifyFluentRuleRector extends AbstractRector implements Documente
     public function __construct()
     {
         $this->processedChains = new WeakMap();
+        RunSummary::registerShutdownHandler();
     }
 
     public function getRuleDefinition(): RuleDefinition

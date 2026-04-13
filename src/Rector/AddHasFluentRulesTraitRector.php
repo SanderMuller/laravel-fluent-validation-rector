@@ -17,6 +17,7 @@ use SanderMuller\FluentValidation\HasFluentValidation;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesTraitInsertion;
+use SanderMuller\FluentValidationRector\RunSummary;
 use SanderMuller\FluentValidationRector\Tests\AddHasFluentRulesTraitRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
@@ -46,6 +47,11 @@ final class AddHasFluentRulesTraitRector extends AbstractRector implements Confi
      * @var list<string>
      */
     private array $baseClasses = [];
+
+    public function __construct()
+    {
+        RunSummary::registerShutdownHandler();
+    }
 
     /** @param  array<string, list<string>>|list<string>  $configuration */
     public function configure(array $configuration): void

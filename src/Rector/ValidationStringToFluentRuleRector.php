@@ -15,6 +15,7 @@ use Rector\Rector\AbstractRector;
 use Rector\StaticTypeMapper\ValueObject\Type\FullyQualifiedObjectType;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ConvertsValidationRuleStrings;
+use SanderMuller\FluentValidationRector\RunSummary;
 use SanderMuller\FluentValidationRector\Tests\ValidationStringToFluentRuleRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
@@ -32,7 +33,10 @@ final class ValidationStringToFluentRuleRector extends AbstractRector implements
 {
     use ConvertsValidationRuleStrings;
 
-    public function __construct(private readonly UseNodesToAddCollector $useNodesToAddCollector) {}
+    public function __construct(private readonly UseNodesToAddCollector $useNodesToAddCollector)
+    {
+        RunSummary::registerShutdownHandler();
+    }
 
     public function getRuleDefinition(): RuleDefinition
     {

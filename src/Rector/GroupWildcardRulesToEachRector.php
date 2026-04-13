@@ -23,6 +23,7 @@ use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidation\HasFluentValidation;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesNamespaceImports;
+use SanderMuller\FluentValidationRector\RunSummary;
 use SanderMuller\FluentValidationRector\Tests\GroupWildcardRulesToEachRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
@@ -50,6 +51,11 @@ final class GroupWildcardRulesToEachRector extends AbstractRector implements Doc
         'Livewire\Component',
         'Livewire\Form',
     ];
+
+    public function __construct()
+    {
+        RunSummary::registerShutdownHandler();
+    }
 
     public function getRuleDefinition(): RuleDefinition
     {

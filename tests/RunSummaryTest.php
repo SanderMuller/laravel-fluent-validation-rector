@@ -83,4 +83,33 @@ final class RunSummaryTest extends TestCase
         $this->assertStringContainsString('3 skip entries', $line);
         $this->assertStringContainsString('.rector-fluent-validation-skips.log', $line);
     }
+
+    public function testShouldRegisterRectorParentInvocation(): void
+    {
+        $this->assertTrue(RunSummary::shouldRegister(['/path/to/vendor/bin/rector', 'process']));
+        $this->assertTrue(RunSummary::shouldRegister(['rector', 'process', '--dry-run']));
+        $this->assertTrue(RunSummary::shouldRegister(['rector.phar', 'process']));
+    }
+
+    public function testShouldNotRegisterRectorWorkerInvocation(): void
+    {
+        // Workers get `--identifier <uuid>` appended by Rector's parallel executor.
+        $this->assertFalse(RunSummary::shouldRegister(['/path/to/vendor/bin/rector', 'worker', '--identifier', 'abc123']));
+    }
+
+    public function testShouldNotRegisterNonRectorInvocation(): void
+    {
+        // Rule constructors fire in consumer test suites too; we don't want the
+        // summary line leaking into pest/phpunit/phpstan/composer output.
+        $this->assertFalse(RunSummary::shouldRegister(['/path/to/vendor/bin/pest']));
+        $this->assertFalse(RunSummary::shouldRegister(['phpunit', '--testsuite', 'Unit']));
+        $this->assertFalse(RunSummary::shouldRegister(['phpstan', 'analyse']));
+        $this->assertFalse(RunSummary::shouldRegister(['composer', 'install']));
+        $this->assertFalse(RunSummary::shouldRegister(['php', 'some-script.php']));
+    }
+
+    public function testShouldNotRegisterEmptyArgv(): void
+    {
+        $this->assertFalse(RunSummary::shouldRegister([]));
+    }
 }

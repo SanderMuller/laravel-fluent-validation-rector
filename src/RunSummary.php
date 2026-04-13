@@ -34,6 +34,15 @@ final class RunSummary
 
         self::$registered = true;
 
+        if (! self::isRectorInvocation()) {
+            // Rule constructors fire whenever the class is instantiated —
+            // including inside consumer test suites that happen to spin up
+            // our rector classes for their own reasons. We only want the
+            // summary to emit during actual `vendor/bin/rector process`
+            // runs, not during arbitrary PHP processes that touched us.
+            return;
+        }
+
         if (self::isWorkerProcess()) {
             return;
         }
@@ -93,6 +102,20 @@ final class RunSummary
     }
 
     /**
+     * Returns true when the current process should register the shutdown
+     * emit — i.e. this is the parent process of an actual `vendor/bin/rector`
+     * invocation, not a worker, not a test suite, not a composer script.
+     * Exposed publicly for unit testing against stubbed argv.
+     *
+     * @param  list<string>  $argv
+     */
+    public static function shouldRegister(array $argv): bool
+    {
+        return self::isRectorInvocationFromArgv($argv)
+            && ! self::isWorkerProcessFromArgv($argv);
+    }
+
+    /**
      * Workers are spawned by Rector's parallel executor with `--identifier <uuid>`
      * appended to their CLI args. The parent process doesn't have this flag.
      * Gate the shutdown emit on parent-ness so each worker doesn't independently
@@ -107,6 +130,53 @@ final class RunSummary
             return false;
         }
 
+        return self::isWorkerProcessFromArgv($argv);
+    }
+
+    /**
+     * @param  list<string>  $argv
+     */
+    private static function isWorkerProcessFromArgv(array $argv): bool
+    {
         return in_array('--identifier', $argv, true);
+    }
+
+    /**
+     * Detects whether the current PHP process is a `vendor/bin/rector`
+     * invocation (parent or worker). When rule constructors call
+     * `registerShutdownHandler()`, they may fire in consumer test suites,
+     * composer post-install scripts, IDE inspection runs — anywhere the
+     * rule class happens to be autoloaded and instantiated. Emitting the
+     * summary in those contexts would be noise; we only want it during
+     * actual Rector runs.
+     *
+     * Heuristic: `$_SERVER['argv'][0]` basename contains `rector`. Matches
+     * `rector`, `rector.phar`, `vendor/bin/rector`, the rebuilt-binary name
+     * various CI setups use, and the `rector` substring in worker argv[0]
+     * when Rector re-invokes itself. Doesn't match `pest`, `phpunit`,
+     * `phpstan`, `php`, `composer`, etc.
+     */
+    private static function isRectorInvocation(): bool
+    {
+        /** @var list<string>|null $argv */
+        $argv = $_SERVER['argv'] ?? null;
+
+        if (! is_array($argv)) {
+            return false;
+        }
+
+        return self::isRectorInvocationFromArgv($argv);
+    }
+
+    /**
+     * @param  list<string>  $argv
+     */
+    private static function isRectorInvocationFromArgv(array $argv): bool
+    {
+        if (! isset($argv[0])) {
+            return false;
+        }
+
+        return str_contains(basename($argv[0]), 'rector');
     }
 }

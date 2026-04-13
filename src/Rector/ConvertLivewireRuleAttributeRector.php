@@ -28,6 +28,7 @@ use Rector\StaticTypeMapper\ValueObject\Type\FullyQualifiedObjectType;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ConvertsValidationRuleArrays;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
+use SanderMuller\FluentValidationRector\RunSummary;
 use SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttributeRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
@@ -74,7 +75,10 @@ final class ConvertLivewireRuleAttributeRector extends AbstractRector implements
     use ConvertsValidationRuleArrays;
     use LogsSkipReasons;
 
-    public function __construct(private readonly UseNodesToAddCollector $useNodesToAddCollector) {}
+    public function __construct(private readonly UseNodesToAddCollector $useNodesToAddCollector)
+    {
+        RunSummary::registerShutdownHandler();
+    }
 
     public function getRuleDefinition(): RuleDefinition
     {
