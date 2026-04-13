@@ -2,6 +2,34 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 0.4.7 - 2026-04-13
+
+### Fixed
+
+#### Skip-log noise from trivial non-candidates
+
+0.4.3 introduced the skip log as a diagnostic surface for "why wasn't my component converted" investigations. On codebases with lots of classes that *happen* to have a `rules()` method but aren't actually FormRequests or Livewire components — Actions, `Console\Kernel`, Collections, PHPUnit helpers — the trait rectors would evaluate each class, find it non-convertible, and log that decision. Those log entries are diagnostic noise: the user has no action to take; the class was never a realistic candidate.
+
+Caught by hihaho's 0.4.5 regression-insurance verification: 2988 skip-log entries / 777KB on their 108-file corpus, dominated by two repeat messages:
+
+- 1316 × `"no FluentRule usage in rules() method"` (from `AddHasFluentRulesTraitRector`, firing on every class with a `rules()` method that didn't use FluentRule — mostly non-FormRequest classes in hihaho's naming-convention style).
+- 1255 × `"not detected as a Livewire component (no Livewire parent or render() method)"` (from `AddHasFluentValidationTraitRector`, firing on every class that wasn't Livewire — which is most of the codebase).
+
+The remaining ~417 entries were the actually-interesting categories: abstract classes, inherited traits, hybrid `validate()` / `validateOnly()` conflicts, unsafe parent detection, FormRequest/Livewire trait mismatches.
+
+0.4.7 silences the two noisy messages. Both rectors now treat "class doesn't look like our target" as a silent no-op:
+
+- `AddHasFluentValidationTraitRector` now gates on `isLivewireClass()` *first* (before the abstract / already-has-trait / ancestor / validate-conflict / FluentRule-usage checks). Non-Livewire classes are silent no-ops; the other checks fire only on actual Livewire components.
+- `AddHasFluentRulesTraitRector` keeps its existing check order but silences the "no FluentRule usage" bail. Classes with a `rules()` method that lacks FluentRule are silent no-ops instead of log entries.
+
+Interesting categories stay logged: abstract classes, `alreadyHasTrait`, `anyAncestorUsesTrait`, `hasValidateMethodConflict`, `extends a configured base class`, `isLivewireClass (uses HasFluentValidation instead)` (on the FormRequest rector), `unsafe parent`, and all attribute-converter skips are untouched.
+
+#### Tradeoff
+
+The "not detected as a Livewire component" log used to help debug an edge case: a user's Livewire class that the rector's heuristic (Livewire parent OR `render()` method OR `HasFluentValidation` trait) fails to detect. In 0.4.7 that misdetection becomes silent. If a user reports "my Livewire class wasn't converted and there's no log," we'd add candidacy-gated logging in a follow-up — but hihaho's three-codebase data argued this is a rare case against 2571 actually-noisy entries, so the simpler filter wins for now.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/0.4.6...0.4.7
+
 ## 0.4.6 - 2026-04-13
 
 ### Added
@@ -33,6 +61,7 @@ protected function rules(): array
         'email' => FluentRule::email()->nullable(),
     ];
 }
+
 
 ```
 `as:` label mapping continues to work (`#[Rule([...], as: 'x')]` → `->label('x')`). Empty arrays (`#[Rule([])]`) now emit a specific skip-log entry and leave the attribute in place, instead of silently converting to `FluentRule::field()`.
@@ -178,6 +207,7 @@ protected function rules(): array
 
 
 
+
 ```
 The union accurately describes what the generated array contains:
 
@@ -235,6 +265,7 @@ public string $description = '';
 #[Validate('min:1')]
 public int $count = 0;
 // → 'count' => FluentRule::integer()->min(1)
+
 
 
 
@@ -307,6 +338,7 @@ public int $count = 0;
 
 
 
+
 ```
 Maps:
 
@@ -358,6 +390,7 @@ final class Settings extends Component
         ];
     }
 }
+
 
 
 
@@ -453,6 +486,7 @@ Mirrors the 0.3.0 fix on `GroupWildcardRulesToEachRector`. Now every rector in t
 
 
 
+
 ```
 Reported by hihaho (gap note during 0.3.0 re-verification) and collectiq (Nit A).
 
@@ -495,6 +529,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 #### Flat wildcard `'items.*'` entries fold into parent `->each(<scalar>)`
 
@@ -508,6 +543,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
@@ -575,6 +611,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 Reported from a run against the hihaho codebase (20+ files).
 
@@ -590,6 +627,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
