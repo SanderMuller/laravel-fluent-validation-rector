@@ -396,8 +396,13 @@ CODE_SAMPLE
         // into an existing rules() array), or nested arrays for Livewire dotted
         // rules — this annotation is the tightest accurate union without reaching
         // into each entry's concrete type.
+        //
+        // The short name `FluentRule` is already guaranteed in-scope by the
+        // queueFluentRuleImport() call in refactor(); emitting the short alias
+        // here keeps the pre-Pint output clean (avoids Pint's
+        // fully_qualified_strict_types fixer firing on every converted file).
         $method->setDocComment(new Doc(
-            "/**\n * @return array<string, \\SanderMuller\\FluentValidation\\FluentRule|string|array<string, mixed>>\n */",
+            "/**\n * @return array<string, FluentRule|string|array<string, mixed>>\n */",
         ));
 
         // Emit a blank line (Nop) before the appended rules() method so it

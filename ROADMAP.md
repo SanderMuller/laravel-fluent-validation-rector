@@ -44,6 +44,13 @@ Urgent fix for a 0.3.1 pipeline regression caught by hihaho re-verification: the
 
 Tag landed on the pre-fix commit (`ab4a7a5`) before the three 0.4.1 fixes were merged. Immutable, so re-tagged as 0.4.2. Both collectiq and mijntp caught the zero-delta on re-verification (ghost-tag SHA mismatch). Users on `^0.4.1` should upgrade to `^0.4.2`.
 
+### 0.4.4 — 2026-04-13
+
+Fast point-release. One data-loss fix to 0.4.3's skip-log sentinel, one cosmetic nit.
+
+- **Skip-log `fflush` before sentinel unlock** — caught by mijntp during 0.4.3 verification. `flock(LOCK_UN)` is POSIX advisory-only and does not flush PHP's userland stream buffer; the implicit `fclose` flush runs in `finally` (after the unlock). So the next worker to acquire the sentinel lock could read through an empty/stale sentinel, decide the session was fresh, and re-truncate the log — wiping entries an earlier worker had already appended. 100% repro on macOS/APFS under `withParallel()` for small file counts (2-file bail-only runs produced zero log output across 3 consecutive runs). Fix: `fflush($handle)` immediately before `flock($handle, LOCK_UN)` in `ensureLogSessionFreshness()`.
+- **`@return` docblock short-name emit** — caught by collectiq during 0.4.3 verification. `setDocComment` wrote `\SanderMuller\FluentValidation\FluentRule` in the `@return` annotation even though `queueFluentRuleImport()` already guarantees the short alias is in scope. Pint's `fully_qualified_strict_types` cleaned it up, but the pre-Pint output was chattier than necessary — same class of nit as the 0.3.0 "synthesized `FluentRule::` uses short name" fix. Emitting `FluentRule` short name directly.
+
 ### 0.4.3 — 2026-04-13
 
 Four polish items:
@@ -73,7 +80,7 @@ Three polish items surfaced by collectiq's 7-file `#[Rule]` verification (origin
 - **0.4.0 verification** — 7 `#[Rule]`-attribute files. Caught `message:` singular silently dropped (pre-tag fix), 5-of-7 hybrid classes (pre-tag fix via `hasExplicitValidateCall`). 26/26 feature tests green.
 - **0.4.1 ghost-tag catch** — on re-verification detected byte-identical vendor source vs 0.4.0, then a clean SHA check (`git rev-parse 0.4.1` → `ab4a7a5` vs expected `db64e56`) diagnosed the ghost-tag within minutes. Drove the 0.4.2 re-tag.
 - **0.4.2 re-verification** — full acceptance scorecard across all 3 items: file-sink log created (72 lines under `withParallel(300, 15, 15)`), `FluentRule::string()->max(2000)` inference working on typed properties, blank line before `rules()` present and `class_attributes_separation` Pint fixer no longer firing. 26/26 tests, 52 assertions.
-- **0.4.3 planned verification** — dirty-log preseed, run-twice, `--debug` (single-process) vs parallel for skip-log race fix.
+- **0.4.3 verification** — confirmed tighter `@return` docblock lands (post-Pint: short `FluentRule` alias; pre-Pint: FQN — flagged the nit for 0.4.4). 1-of-1 `message:` drop entry on 15-worker run (PPID sentinel de-dup holding on collectiq's scale). 26/26 tests green.
 
 ### hihaho — `y0vob4dg`
 
@@ -99,6 +106,7 @@ Three polish items surfaced by collectiq's 7-file `#[Rule]` verification (origin
 - **0.3.2 verification** — batched with 0.4.0 per peer preference.
 - **0.4.1 ghost-tag co-catch** — independently confirmed byte-for-byte no-op vs 0.4.0 on the 3 Settings files, pinpointed `installRulesMethod()` L361 as still-flat at that SHA. Second signal that turned the ghost-tag into an unambiguous tag issue rather than a subtle regression.
 - **0.4.2 verification + skip-log race finding** — confirmed all 3 fixes landed on `00b6589`; deterministically reproduced a per-worker truncation race in `LogsSkipReasons.php` under `withParallel()` (Run A: 0 array-form entries; Run B `--debug`: all entries; Run C parallel-only: file missing). Drove the 0.4.3 PPID-sentinel fix. Pinned dirty-log-preseed + run-twice as the regression scenarios.
+- **0.4.3 verification + fflush finding** — scenarios 2 (dirty-log preseed) and 3 (run-twice) passed; scenario 1 (baseline) and 4 (debug vs parallel) failed with bail-only entries disappearing entirely under parallel. Diagnosed the missing `fflush` before `flock(LOCK_UN)` — the sentinel write was buffered past unlock, letting the next worker truncate through stale content. Drove the 0.4.4 fix. Reproduced 100% of runs on macOS/APFS.
 
 ## Deferred
 

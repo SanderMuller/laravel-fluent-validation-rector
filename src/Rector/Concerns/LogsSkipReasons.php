@@ -162,6 +162,20 @@ trait LogsSkipReasons
             // while this rector run is still producing log entries.
             @touch($sentinelPath);
 
+            // Flush PHP's userland stream buffer to the OS BEFORE releasing
+            // the advisory lock. Without this, another worker can acquire
+            // the lock, fopen/read the sentinel, and see empty/stale content
+            // (the sentinel write is still buffered on our side), decide the
+            // session is "stale", and re-truncate the log — wiping entries
+            // the first worker already appended. `flock(LOCK_UN)` is POSIX
+            // advisory-only and does NOT imply a buffer flush; `fclose`
+            // implicitly flushes but runs in finally, i.e. AFTER unlock.
+            // Caught by mijntp: under `withParallel()` on macOS/APFS the
+            // unflushed window was wide enough to fire 100% of the time on
+            // small file counts (2-file bail-only runs produced zero log
+            // output across 3 consecutive runs).
+            fflush($handle);
+
             flock($handle, LOCK_UN);
         } finally {
             fclose($handle);
