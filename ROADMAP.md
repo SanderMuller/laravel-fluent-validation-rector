@@ -2,27 +2,10 @@
 
 What's coming up. Release history lives in CHANGELOG.md; detailed designs live in `SPEC_*.md` files at the repo root.
 
-## 0.4.9 — deferred from 0.4.8
-
-### Run-summary stdout line
-
-Originally planned as 0.4.8 item #2. Both collectiq and mijntp surfaced this as the highest-ROI DX change in their 0.4.7 retrospectives. Deferred because Rector's parallel architecture makes parent-process emit non-trivial: our rectors instantiate in the parent process (DI container construction) but don't *execute* there — they run in forked workers. `register_shutdown_function` from worker code doesn't reach the parent. A proper implementation needs a spike on Rector's event system or output-formatter extension points.
-
-Target shape:
-
-```
-[fluent-validation] X converted, Y skipped — see .rector-fluent-validation-skips.log
-```
-
-Emitted once per Rector invocation from the parent process. Parent-process emit sidesteps the `withParallel()` STDERR swallow that motivated the file sink in 0.4.2.
-
-Plan: spike Rector 2.x for `ConsoleOutput` interceptor or a `TerminateEvent` hook; if neither exists cleanly, consider emitting the summary as a trailing line in the skip log itself that users `tail -1` for.
-
 ## Pre-1.0
 
 Not scoped for 0.4.x; queued for when a 1.0 commitment is on the table.
 
-- **Auto-tag CI workflow.** Two ghost-tags in this cycle (0.4.1, 0.4.4) cost real peer time. A GitHub Actions workflow that tags on CHANGELOG-merge eliminates the class of error. Manual tagging has been OK for peer-iteration velocity; for a 1.0 public contract it's the right discipline. (collectiq)
 - **Methodology writeup.** The peer-iterated release loop (three-vantage-peer model: output polish + scale + architecture, pre-cut spec + post-cut verification, firing-counts-as-invariant regression guard) is portable across rector packages. hihaho and collectiq both nudged preservation. Could live as a gist, a section in the README, or a short `METHODOLOGY.md`.
 
 ## Parked

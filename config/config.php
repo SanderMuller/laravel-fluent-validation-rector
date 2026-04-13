@@ -1,4 +1,9 @@
 <?php declare(strict_types=1);
 
 // Entry point for rector/extension-installer auto-registration.
-// Global services or configuration can be registered here.
+//
+// Registers a shutdown function in the parent Rector process that emits
+// a single STDOUT line pointing at `.rector-fluent-validation-skips.log`
+// when it contains entries. See `RunSummary` for details.
+
+SanderMuller\FluentValidationRector\RunSummary::registerShutdownHandler();
