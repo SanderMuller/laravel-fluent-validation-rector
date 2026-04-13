@@ -2,6 +2,68 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 0.4.1 - 2026-04-13
+
+### Fixed
+
+#### File-sink skip log — visible under `withParallel()`
+
+`LogsSkipReasons` (used by every rector to explain why it skipped a class) used to emit only to STDERR, gated on `FLUENT_VALIDATION_RECTOR_VERBOSE=1`. That worked for single-process Rector runs, but Rector's parallel executor (the default in projects scaffolded by `rector init`) doesn't forward worker STDERR to the parent's STDERR. Effectively, ~100% of production usage saw zero skip-log output regardless of the env var.
+
+The trait now writes each skip line to `.rector-fluent-validation-skips.log` in the consumer's current working directory using `FILE_APPEND | LOCK_EX`, which works correctly across worker processes. STDERR mirroring is preserved when `FLUENT_VALIDATION_RECTOR_VERBOSE=1` is set, for single-process invocations.
+
+The log is truncated at the first write per Rector run so stale entries from previous runs don't leak in. After a Rector run finishes, `cat .rector-fluent-validation-skips.log` shows everything the rector skipped and why. `.gitignore` entry added.
+
+Reported by collectiq's 7-file scan after observing zero skip-log output despite multiple unsupported-args cases in the file set.
+
+#### Blank line before generated `rules(): array`
+
+`ConvertLivewireRuleAttributeRector` used to append the synthesized `rules(): array` method directly after the last class member, leaving them flush. Pint's `class_attributes_separation` fixer would always fire on converted files. The rector now inserts a `Nop` statement between the previous member and the appended method (skipping the Nop when the previous statement is already a Nop).
+
+Same pattern used by the trait rectors in 0.1.1 — applied here to the new attribute rector.
+
+#### Property-type-aware type inference for untyped rule strings
+
+When a `#[Rule]` / `#[Validate]` attribute's rule string has no type token (e.g. `#[Validate('max:2000')]`, `#[Validate('required')]`), 0.4.0 fell back to `FluentRule::field()` and emitted untyped modifiers via the `->rule('...')` escape hatch — because `FieldRule` doesn't have `max()`, `min()`, etc. methods.
+
+0.4.1 reads the PHP property's type declaration and uses it as the factory base when the rule string doesn't specify one:
+
+```php
+// Before (0.4.0)
+#[Validate('max:2000')]
+public string $description = '';
+// → 'description' => FluentRule::field()->rule('max:2000')
+
+#[Validate('min:1')]
+public int $count = 0;
+// → 'count' => FluentRule::field()->rule('min:1')
+
+// After (0.4.1)
+#[Validate('max:2000')]
+public string $description = '';
+// → 'description' => FluentRule::string()->max(2000)
+
+#[Validate('min:1')]
+public int $count = 0;
+// → 'count' => FluentRule::integer()->min(1)
+
+```
+Maps:
+
+- `string` → `FluentRule::string()`
+- `int` / `integer` → `FluentRule::integer()`
+- `bool` / `boolean` → `FluentRule::boolean()`
+- `float` → `FluentRule::numeric()`
+- `array` → `FluentRule::array()`
+
+Nullable types unwrap (`public ?string $x` → uses `string`). Union types, intersection types, object types, and missing type declarations fall through to the prior `FluentRule::field()` + `->rule(...)` behavior — safe default when the property type doesn't map cleanly.
+
+Inference only applies when the rule string has **no** type token. Explicit `#[Validate('string|max:50')]` continues to use the rule-string token, even on a non-`string` property — the rule string wins for clarity.
+
+Reference fixture pinned from collectiq's `ReportContentButton`.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/0.4.0...0.4.1
+
 ## 0.4.0 - 2026-04-13
 
 ### Added
@@ -36,6 +98,7 @@ final class Settings extends Component
         ];
     }
 }
+
 
 ```
 `use HasFluentValidation;` is added separately by `AddHasFluentValidationTraitRector` (the set list runs this rector before the trait rector).
@@ -119,6 +182,7 @@ Mirrors the 0.3.0 fix on `GroupWildcardRulesToEachRector`. Now every rector in t
 
 
 
+
 ```
 Reported by hihaho (gap note during 0.3.0 re-verification) and collectiq (Nit A).
 
@@ -155,6 +219,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 #### Flat wildcard `'items.*'` entries fold into parent `->each(<scalar>)`
 
@@ -168,6 +233,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
@@ -223,6 +289,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 Reported from a run against the hihaho codebase (20+ files).
 
@@ -238,6 +305,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
