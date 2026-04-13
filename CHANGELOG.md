@@ -2,6 +2,75 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 0.4.3 - 2026-04-13
+
+### Fixed
+
+#### Skip-log truncation race under `withParallel()`
+
+0.4.2 introduced the file-sink skip log (`.rector-fluent-validation-skips.log`) to survive Rector's parallel worker STDERR being swallowed. The truncation logic used a per-process `static $logFileTruncated` flag: first write per process truncated, subsequent writes appended. That flag is scoped per-worker, so under `withParallel()` every one of the 15 workers independently decided it was "first" and truncated the file — wiping any entries written by earlier workers.
+
+Caught by mijntp with a deterministic repro:
+
+- Run A (5 files, 3 convert + 2 array-form bail, parallel): log had 7 entries, zero from the 2 bailed files. The last-writing workers' entries survived.
+- Run B (same 2 bailed files alone, with `--debug` which disables parallel): log had both bail entries.
+- Run C (same 2 bailed files alone, default parallel): log file didn't exist at all.
+
+0.4.3 replaces the per-process flag with a PPID-keyed session sentinel (`.rector-fluent-validation-skips.log.session`) coordinated via `flock(LOCK_EX)`:
+
+- First worker in a Rector run sees a missing sentinel (or one with a stale PPID) → truncates the log, writes the new session marker.
+- All subsequent workers in the same run see their PPID matches → skip truncation, append only.
+- Next Rector invocation has a new PPID → first worker truncates again → fresh log per run.
+
+Under `withParallel()` all workers share the same PPID (the main Rector process), so the check is authoritative. Each worker runs the sentinel check once per process; subsequent writes skip straight to `FILE_APPEND | LOCK_EX`.
+
+Non-POSIX / Windows (`posix_getppid()` unavailable) falls through to an mtime-based staleness heuristic with a 300-second threshold. Workers `touch()` the sentinel on every session verification, so long-running Rector invocations keep their sentinel mtime fresh. Back-to-back runs within 300s on non-POSIX may share a log (acceptable degradation), but per-worker data loss is eliminated regardless of platform.
+
+`.gitignore` updated to include the `.session` sentinel.
+
+#### `validateOnly()` bypass now triggers hybrid bail
+
+`ConvertLivewireRuleAttributeRector::hasExplicitValidateCall()` previously only matched `$this->validate([...])`. Livewire also exposes `$this->validateOnly($field, $rules = null, ...)` — when called with a second-arg rules array, that call bypasses any generated `rules(): array` method and converting the attributes produces dead code.
+
+0.4.3 extends the check:
+
+- `validate` → rules at arg 0 (unchanged)
+- `validateOnly` → rules at arg 1 (new)
+
+`validateOnly($field)` without a rules override keeps converting — it uses `rules()` / attribute rules, so no dead-code risk. Explicit `validateOnly($field, ['x' => '…'])` triggers the bail.
+
+Two new fixtures:
+
+- `bail_on_hybrid_validateOnly_with_rules.php.inc` — attribute + `validateOnly('name', [...])` → bail, attributes preserved.
+- `converts_with_plain_validateOnly.php.inc` — attribute + `validateOnly('name')` → converts to `rules()`.
+
+Theoretical today — no peer codebase has exercised the pattern — but the bail is one-line-cheap and prevents silent dead code if it ever hits.
+
+#### Tighter `@return` annotation on generated `rules(): array`
+
+0.4.2's appended `rules()` method had no docblock. Running rector-preset's `DocblockReturnArrayFromDirectArrayInstanceRector` (enabled by `typeDeclarationDocblocks: true` in most Rector configs) would infer and add a loose `@return array<string, mixed>` annotation.
+
+0.4.3 pre-emptively attaches the tighter:
+
+```php
+/**
+ * @return array<string, FluentRule|string|array<string, mixed>>
+ */
+protected function rules(): array
+
+```
+The union accurately describes what the generated array contains:
+
+- `FluentRule` — method-chain builders (the common case)
+- `string` — raw rule strings when merged into an existing `rules()` method that used them
+- `array<string, mixed>` — Livewire dotted / nested rules
+
+The annotation uses the short name `FluentRule` since the rector already queues the `use` import via `UseNodesToAddCollector`.
+
+Updated 6 existing fixtures to include the new docblock.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/0.4.2...0.4.3
+
 ## 0.4.2 - 2026-04-13
 
 ### Fixed
@@ -46,6 +115,7 @@ public string $description = '';
 #[Validate('min:1')]
 public int $count = 0;
 // → 'count' => FluentRule::integer()->min(1)
+
 
 ```
 Maps:
@@ -110,6 +180,7 @@ public int $count = 0;
 // → 'count' => FluentRule::integer()->min(1)
 
 
+
 ```
 Maps:
 
@@ -161,6 +232,7 @@ final class Settings extends Component
         ];
     }
 }
+
 
 
 
@@ -248,6 +320,7 @@ Mirrors the 0.3.0 fix on `GroupWildcardRulesToEachRector`. Now every rector in t
 
 
 
+
 ```
 Reported by hihaho (gap note during 0.3.0 re-verification) and collectiq (Nit A).
 
@@ -286,6 +359,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 #### Flat wildcard `'items.*'` entries fold into parent `->each(<scalar>)`
 
@@ -299,6 +373,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
@@ -358,6 +433,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 Reported from a run against the hihaho codebase (20+ files).
 
@@ -373,6 +449,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
