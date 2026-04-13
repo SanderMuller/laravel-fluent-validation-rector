@@ -31,7 +31,10 @@ final class Settings extends Component
     public ?string $notification_business_email = '';
     protected function rules(): array
     {
-        return ['notification_email' => FluentRule::email()->nullable()->label('notificatie e-mailadres'), 'notification_business_email' => FluentRule::email()->nullable()->label('zakelijke notificatie e-mailadres')];
+        return [
+            'notification_email' => FluentRule::email()->nullable()->label('notificatie e-mailadres'),
+            'notification_business_email' => FluentRule::email()->nullable()->label('zakelijke notificatie e-mailadres'),
+        ];
     }
 }
 

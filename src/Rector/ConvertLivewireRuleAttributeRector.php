@@ -2,8 +2,8 @@
 
 namespace SanderMuller\FluentValidationRector\Rector;
 
-use PhpParser\Comment;
 use PhpParser\Node;
+use PhpParser\NodeVisitor;
 use PhpParser\Node\Arg;
 use PhpParser\Node\ArrayItem;
 use PhpParser\Node\Attribute;
@@ -18,6 +18,7 @@ use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Stmt\Property;
 use PhpParser\Node\Stmt\Return_;
 use PhpParser\PrettyPrinter\Standard;
+use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\PostRector\Collector\UseNodesToAddCollector;
 use Rector\Rector\AbstractRector;
 use Rector\StaticTypeMapper\ValueObject\Type\FullyQualifiedObjectType;
@@ -118,6 +119,18 @@ CODE_SAMPLE
     public function refactor(Node $node): ?Node
     {
         if (! $node instanceof Class_) {
+            return null;
+        }
+
+        // Hybrid classes — those that declare #[Rule]/#[Validate] attributes AND
+        // call $this->validate([...]) with an explicit array arg — already rely on
+        // the explicit validate() args as the source of truth. Converting the
+        // attributes to a rules() method in such classes produces dead code
+        // (Livewire would still use the explicit array), which creates noisy
+        // diffs. Bail instead; let users consolidate manually if they want.
+        if ($this->hasExplicitValidateCall($node)) {
+            $this->logSkip($node, 'class calls $this->validate([...]) with explicit args — attribute conversion skipped to avoid generating dead-code rules()');
+
             return null;
         }
 
@@ -260,12 +273,14 @@ CODE_SAMPLE
         $unsupportedSummary = $this->describeUnsupportedAttributeArgs($attr);
 
         if ($unsupportedSummary !== null) {
-            $fluent->setAttribute('comments', [new Comment(
-                '// TODO: migrate dropped #[Rule] args (' . $unsupportedSummary . ') to messages()/hooks manually',
-            )]);
-
+            // The unsupported payload is logged via logSkip() so users running with
+            // FLUENT_VALIDATION_RECTOR_VERBOSE=1 see exactly what got dropped. An
+            // in-source `// TODO:` comment would be friendlier but PhpParser's
+            // pretty-printer doesn't reliably emit comments attached to sub-expressions
+            // inside array items; a proper implementation needs a post-rector pass to
+            // inject a Nop+Comment node before the return, which is scoped out of 0.4.0.
             $this->logSkip($class, sprintf(
-                '#[Rule] attribute on property $%s dropped unsupported args: %s',
+                '#[Rule] attribute on property $%s dropped unsupported args (%s); migrate to messages() / hooks manually',
                 $this->firstPropertyName($property),
                 $unsupportedSummary,
             ));
@@ -301,7 +316,12 @@ CODE_SAMPLE
 
             $name = $arg->name->toString();
 
-            if (in_array($name, ['messages', 'onUpdate'], true)) {
+            // Livewire's attribute arg list: `as` (→ ->label()), `message` (singular,
+            // per-property message override), `messages` (plural, for attribute chains
+            // on a single property — rare but documented), `onUpdate` (lifecycle hook).
+            // Only `as` has a direct FluentRule equivalent; the rest get a TODO
+            // comment listing the dropped payload so manual migration is obvious.
+            if (in_array($name, ['message', 'messages', 'onUpdate'], true)) {
                 $dropped[] = $name . ': ' . $this->print($arg->value);
             }
         }
@@ -334,13 +354,30 @@ CODE_SAMPLE
             [
                 'flags' => Class_::MODIFIER_PROTECTED,
                 'returnType' => new Identifier('array'),
-                'stmts' => [new Return_(new Array_($items))],
+                'stmts' => [new Return_($this->multilineArray($items))],
             ],
         );
 
         $class->stmts[] = $method;
 
         return true;
+    }
+
+    /**
+     * Build an Array_ flagged for one-item-per-line emission. Rector's
+     * BetterStandardPrinter honors NEWLINED_ARRAY_PRINT to force multi-line
+     * output regardless of item count; without the attribute the synthesized
+     * return array collapses onto a single line and quickly blows past
+     * reasonable line widths when consumers have 3+ properties.
+     *
+     * @param  list<ArrayItem>  $items
+     */
+    private function multilineArray(array $items): Array_
+    {
+        $array = new Array_($items);
+        $array->setAttribute(AttributeKey::NEWLINED_ARRAY_PRINT, true);
+
+        return $array;
     }
 
     /**
@@ -361,6 +398,52 @@ CODE_SAMPLE
         }
 
         return true;
+    }
+
+    /**
+     * Detect whether any method in the class calls `$this->validate([...])`
+     * with a non-empty array argument. That signals the class uses explicit
+     * per-call rule arrays rather than the attribute-based rules, so the
+     * attribute conversion would produce dead code.
+     *
+     * Conservatively matches any method-call chain with name `validate` and
+     * a first-arg Array_ literal, regardless of receiver — in practice this
+     * is almost always `$this->validate([...])` inside a Livewire component.
+     */
+    private function hasExplicitValidateCall(Class_ $class): bool
+    {
+        $found = false;
+
+        $this->traverseNodesWithCallable($class, function (Node $inner) use (&$found): ?int {
+            if ($found) {
+                return NodeVisitor::STOP_TRAVERSAL;
+            }
+
+            if (! $inner instanceof MethodCall) {
+                return null;
+            }
+
+            if (! $this->isName($inner->name, 'validate')) {
+                return null;
+            }
+
+            $firstArg = $inner->args[0] ?? null;
+
+            if (! $firstArg instanceof Arg) {
+                return null;
+            }
+
+            // Accept both direct Array_ args (validate(['x' => ...])) and
+            // wrapped calls like validate(RuleSet::compileToArrays([...]))
+            // that pass an Array_ or Expr to a helper. The common signal is
+            // "user is providing rules at call time" — any non-null arg
+            // meets that bar for the hybrid-bail heuristic.
+            $found = true;
+
+            return NodeVisitor::STOP_TRAVERSAL;
+        });
+
+        return $found;
     }
 
     private function findRulesMethod(Class_ $class): ?ClassMethod

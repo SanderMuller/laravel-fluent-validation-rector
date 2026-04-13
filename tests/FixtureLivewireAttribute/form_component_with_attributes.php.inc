@@ -26,7 +26,9 @@ final class UserForm extends Form
     public string $name = '';
     protected function rules(): array
     {
-        return ['name' => FluentRule::string()->required()->max(255)->label('user name')];
+        return [
+            'name' => FluentRule::string()->required()->max(255)->label('user name'),
+        ];
     }
 }
 
