@@ -1,8 +1,31 @@
 # Laravel Fluent Validation Rector
 
-Rector rules for migrating Laravel validation to [sandermuller/laravel-fluent-validation](https://github.com/sandermuller/laravel-fluent-validation).
+Rector rules for migrating Laravel validation to [sandermuller/laravel-fluent-validation](https://github.com/sandermuller/laravel-fluent-validation). Pipe-delimited strings, array-based rules, `Rule::` objects, and Livewire `#[Rule]` attributes all convert to FluentRule method chains.
 
-Automates the bulk of a migration from native Laravel validation (pipe-delimited strings, array-based rules, `Rule::` objects) to FluentRule method chains. In real-world testing against a production Laravel codebase, the rules converted **448 files across 3469 tests with zero regressions**.
+```php
+// Before
+public function rules(): array
+{
+    return [
+        'email' => 'required|email|max:255',
+        'tags'  => ['nullable', 'array'],
+        'tags.*' => 'string|max:50',
+    ];
+}
+
+// After
+public function rules(): array
+{
+    return [
+        'email' => FluentRule::email()->required()->max(255),
+        'tags'  => FluentRule::array()->nullable()->each(
+            FluentRule::string()->max(50),
+        ),
+    ];
+}
+```
+
+Tested on a production codebase: 448 files converted, 3469 tests still passing.
 
 ## Installation
 
@@ -10,9 +33,7 @@ Automates the bulk of a migration from native Laravel validation (pipe-delimited
 composer require --dev sandermuller/laravel-fluent-validation-rector
 ```
 
-## Usage
-
-### Quick start — run all rules
+## Quick start
 
 ```php
 // rector.php
@@ -25,34 +46,34 @@ return RectorConfig::configure()
 ```
 
 ```bash
-vendor/bin/rector process --dry-run   # preview changes
-vendor/bin/rector process             # apply them
-vendor/bin/pint                       # fix code style after
+vendor/bin/rector process --dry-run   # preview
+vendor/bin/rector process             # apply
+vendor/bin/pint                       # format
 ```
 
-### Available sets
+## Usage
 
-| Set                                 | Rules                                                                                                                                 | Description                                                                   |
-|-------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------|
-| `FluentValidationSetList::ALL`      | Convert + Group + Traits                                                                                                              | Full migration pipeline (excludes Simplify)                                   |
-| `FluentValidationSetList::CONVERT`  | `ValidationStringToFluentRuleRector`, `ValidationArrayToFluentRuleRector`, `ConvertLivewireRuleAttributeRector`                       | Convert pipe-delimited, array-based, and `#[Rule]`-attribute rules to FluentRule chains |
-| `FluentValidationSetList::GROUP`    | `GroupWildcardRulesToEachRector`                                                                                                      | Group flat wildcard keys into nested `each()`/`children()` calls              |
-| `FluentValidationSetList::TRAITS`   | `AddHasFluentRulesTraitRector`, `AddHasFluentValidationTraitRector`                                                                   | Add performance traits to FormRequest and Livewire classes                    |
-| `FluentValidationSetList::SIMPLIFY` | `SimplifyFluentRuleRector`                                                                                                            | Post-migration cleanup: factory shortcuts, min/max→between, label→factory arg |
+### Sets
 
-### Granular usage
+| Set        | Includes                                           |
+|------------|----------------------------------------------------|
+| `ALL`      | Convert + Group + Traits (full migration pipeline) |
+| `CONVERT`  | String, array, and `#[Rule]` attribute converters  |
+| `GROUP`    | Wildcard/dotted-key grouping into `each()`         |
+| `TRAITS`   | Performance trait insertion for FormRequest and Livewire |
+| `SIMPLIFY` | Post-migration chain cleanup                       |
 
 ```php
-// Just conversion, no grouping or traits:
+// Just conversion, no grouping or traits
 ->withSets([FluentValidationSetList::CONVERT])
 
-// Conversion + traits, skip grouping:
+// Conversion + traits, skip grouping
 ->withSets([
     FluentValidationSetList::CONVERT,
     FluentValidationSetList::TRAITS,
 ])
 
-// Post-migration simplification (run separately after verifying conversion):
+// Post-migration cleanup (run separately after verifying)
 ->withSets([FluentValidationSetList::SIMPLIFY])
 ```
 
@@ -69,38 +90,44 @@ return RectorConfig::configure()
     ]);
 ```
 
-## Rules reference
+## Rules
 
-| Rule                                 | What it does                                                                                                                                                                       |
-|--------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `ValidationStringToFluentRuleRector` | Pipe-delimited string rules (`'required\|string\|max:255'`) into fluent chains. Context-aware: works in FormRequest `rules()`, `$request->validate()`, and `Validator::make()`.    |
-| `ValidationArrayToFluentRuleRector`  | Array-based rules (`['required', 'string', Rule::unique(...)]`), including `Rule::` objects, `Password::min()` chains, conditional tuples, closures, and custom rule objects.      |
-| `ConvertLivewireRuleAttributeRector` | Livewire `#[Rule('...')]` / `#[Validate('...')]` property attributes into a generated `rules(): array` method. Strips the attribute, preserves the property, maps `as:` to `->label()`. Bails on non-trivial existing `rules()` methods. |
-| `GroupWildcardRulesToEachRector`     | Flat wildcard/dotted keys into nested `each()`/`children()` calls. Skips Livewire classes. Synthesizes a bare `FluentRule::array()` parent for dot-notation keys without an explicit parent rule, so nested `required` children still fire when the parent is missing. |
-| `AddHasFluentRulesTraitRector`       | Adds `use HasFluentRules;` to FormRequest classes that use FluentRule (enables optimized validation).                                                                              |
-| `AddHasFluentValidationTraitRector`  | Adds `use HasFluentValidation;` to Livewire components that use FluentRule.                                                                                                        |
-| `SimplifyFluentRuleRector`           | Simplifies FluentRule chains: factory shortcuts (`string()->url()` → `url()`), label as factory arg, min/max → between, redundant type removal.                                    |
+- **`ValidationStringToFluentRuleRector`** converts pipe-delimited rule strings (`'required|string|max:255'`) to fluent chains. Works in FormRequest `rules()`, `$request->validate()`, and `Validator::make()`.
+- **`ValidationArrayToFluentRuleRector`** converts array-based rules (`['required', 'string', Rule::unique(...)]`), including `Rule::` objects, `Password::min()` chains, conditional tuples, closures, and custom rule objects.
+- **`ConvertLivewireRuleAttributeRector`** strips Livewire `#[Rule('...')]` / `#[Validate('...')]` property attributes and generates a `rules(): array` method. Preserves the property, maps `as:` to `->label()`, and bails on non-trivial existing `rules()` methods.
+- **`GroupWildcardRulesToEachRector`** folds flat wildcard and dotted keys into nested `each()` / `children()` calls. Skips Livewire classes. When a dot-notation key has no explicit parent rule, the rector synthesizes a bare `FluentRule::array()` parent so nested `required` children still fire.
+- **`AddHasFluentRulesTraitRector`** adds `use HasFluentRules;` to FormRequests that use FluentRule.
+- **`AddHasFluentValidationTraitRector`** adds `use HasFluentValidation;` to Livewire components that use FluentRule.
+- **`SimplifyFluentRuleRector`** cleans up FluentRule chains after migration: factory shortcuts (`string()->url()` → `url()`), `->label()` folded into the factory arg, `min()` + `max()` → `between()`, redundant type removal.
+
+## Diagnostics
+
+If a file you expected to convert wasn't touched, check `.rector-fluent-validation-skips.log` in your project root. Every bail-capable rule writes a one-line reason there: unsupported attribute args, a hybrid `$this->validate([...])` call, a trait already present on an ancestor class, and so on.
+
+### Pass `--clear-cache` when investigating skips
+
+Rector caches per-file results. Files that hit a bail produce no transformation, so the skip entry is written once and the rule is not re-invoked on cached runs. To force every file to be revisited and every bail to be re-logged, run `vendor/bin/rector process --clear-cache` (or delete `.cache/rector*`).
+
+### Spot-check `#[Rule]` conversions without feature tests
+
+`ConvertLivewireRuleAttributeRector` verifies the generated `rules(): array` is syntactically correct. It cannot prove the converted rule is behaviorally equivalent to the source attribute, and PHPStan and the test suite validate structure, not runtime validation outcomes. If a converted Livewire component has no feature test covering validation, review the diff by hand and watch for dropped `message:` / `messages:` / `onUpdate:` args (logged to the skip file) that you need to migrate to Livewire's `messages(): array` hook manually.
 
 ## Tips
 
 ### Hoist the trait to a shared base class
 
-If your codebase has a shared FormRequest / Livewire base (e.g. `app/Http/Requests/FormRequest.php` extending `Illuminate\Foundation\Http\FormRequest`), declaring `use HasFluentRules;` on that base once lets every subclass inherit it. The rector's ancestor-chain detection (via `ReflectionClass`) will skip re-adding the trait to subclasses automatically — no `base_classes` configuration needed. This was the idiomatic outcome on the codebases where it was tested: one place to declare, quiet subclass runs.
-
-### Manually spot-check `#[Rule]` attribute conversions without component tests
-
-`ConvertLivewireRuleAttributeRector` verifies the generated `rules(): array` is syntactically correct, but it can't prove the converted rule is behaviorally equivalent to the source `#[Rule]` attribute — PHPStan and the test suite validate structure, not runtime validation outcomes. If a converted Livewire component doesn't have a feature test that exercises its validation paths, spot-check the diff by hand: confirm each property's chain matches the original pipe-delimited rule, and watch for unsupported attribute args (e.g. `message:`, `messages:`, `onUpdate:`) that are logged to `.rector-fluent-validation-skips.log` and need manual migration to Livewire's `messages(): array` hook.
+If your codebase has a shared FormRequest or Livewire base, declare `use HasFluentRules;` (or `HasFluentValidation`) on the base once and every subclass inherits it. The trait rectors walk the ancestor chain via `ReflectionClass` and won't re-add the trait on subclasses, so no `base_classes` configuration is needed.
 
 ### Long fluent chains on one line
 
-The rector doesn't insert line breaks between method calls — `FluentRule::string()->required()->max(255)` is valid PHP on a single line and keeps diffs minimal. If you prefer multi-line chains, Pint's [`method_chaining_indentation`](https://mlocati.github.io/php-cs-fixer-configurator/#version:3.0|fixer:method_chaining_indentation) fixer (or php-cs-fixer's equivalent) reflows them after Rector runs.
+The rector does not insert line breaks between method calls. `FluentRule::string()->required()->max(255)` is valid PHP on a single line and keeps diffs minimal. If you prefer multi-line chains, Pint's [`method_chaining_indentation`](https://mlocati.github.io/php-cs-fixer-configurator/#version:3.0|fixer:method_chaining_indentation) fixer reflows them after Rector runs.
 
 ## Known limitations
 
-- **Namespace-less files** — classes declared at the file root (no `namespace`) are silently skipped by `GroupWildcardRulesToEachRector` and the two trait rectors. Laravel projects always use namespaces, so this is not a real-world concern.
-- **Rules built outside `rules(): array`** — the rector looks for `rules(): array` methods, `$request->validate([...])` calls, and `Validator::make([...])` calls. Rules built inside `withValidator()` callbacks, Action classes using `Collection::put()->merge()`, or abstract base classes with custom `rulesWithoutPrefix()` conventions are left alone; migrate those manually.
-- **Ternary rule strings** — `['nullable', $flag ? 'email' : 'url']` is left alone. The `->when(cond, thenFn, elseFn)` conversion is tractable but not yet implemented.
-- **`#[Rule(..., messages: [...])]` / `#[Rule(..., onUpdate: ...)]`** — the `messages:` and `onUpdate:` attribute args have no FluentRule builder equivalents. The rector migrates the rule string + `as:` label and emits a `// TODO:` comment beside the converted chain listing the dropped args verbatim, so you can migrate them manually to Livewire's `messages(): array` hook.
+- **Namespace-less files.** Classes at the file root without a `namespace` are silently skipped by the grouping and trait rectors. Laravel projects always use namespaces, so this rarely comes up in practice.
+- **Rules built outside `rules(): array`.** The rector looks for `rules(): array`, `$request->validate([...])`, and `Validator::make([...])`. Rules built inside `withValidator()` callbacks, custom `rulesWithoutPrefix()` conventions, or Action-class `Collection::put()->merge()` chains are left alone.
+- **Ternary rule strings.** `['nullable', $flag ? 'email' : 'url']` is left alone. A `->when(cond, thenFn, elseFn)` conversion is possible but not implemented yet.
+- **`#[Rule(..., messages: [...])]` / `onUpdate:`.** These attribute args have no FluentRule builder equivalent. The rule string and `as:` label are migrated; the dropped args are written to the skip log so you can migrate them to Livewire's `messages(): array` hook manually.
 
 ## Requirements
 

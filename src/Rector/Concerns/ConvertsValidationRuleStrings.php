@@ -80,7 +80,7 @@ use UnexpectedValueException;
  * current file is actually a conversion candidate. In practice the scan
  * completes in sub-second time for typical Laravel apps.
  */
-trait ConvertsValidationRules
+trait ConvertsValidationRuleStrings
 {
     use LogsSkipReasons;
 

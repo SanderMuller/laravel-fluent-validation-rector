@@ -25,6 +25,8 @@ composer.lock
 .phpunit.result.cache
 
 RELEASE_NOTES*.md
+SPEC_*.md
+PEER_FEEDBACK.md
 
 # Rector skip log — written by parallel workers, inspectable post-run.
 # The .session sentinel is a PPID-keyed marker used to coordinate

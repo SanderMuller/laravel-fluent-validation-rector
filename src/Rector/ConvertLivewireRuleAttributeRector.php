@@ -26,7 +26,7 @@ use Rector\PostRector\Collector\UseNodesToAddCollector;
 use Rector\Rector\AbstractRector;
 use Rector\StaticTypeMapper\ValueObject\Type\FullyQualifiedObjectType;
 use SanderMuller\FluentValidation\FluentRule;
-use SanderMuller\FluentValidationRector\Rector\Concerns\ConvertsValidationRules;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ConvertsValidationRuleArrays;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttributeRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
@@ -71,7 +71,7 @@ use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
  */
 final class ConvertLivewireRuleAttributeRector extends AbstractRector implements DocumentedRuleInterface
 {
-    use ConvertsValidationRules;
+    use ConvertsValidationRuleArrays;
     use LogsSkipReasons;
 
     public function __construct(private readonly UseNodesToAddCollector $useNodesToAddCollector) {}
@@ -244,22 +244,17 @@ CODE_SAMPLE
 
         $ruleArg = $attr->args[0] ?? null;
 
-        if (! $ruleArg instanceof Arg || ! $ruleArg->value instanceof String_) {
-            // Array-form attribute args (`#[Rule(['nullable', 'email'])]`) are not
-            // converted in this release — scheduled for a later release once the
-            // array-converter's helpers are shareable. Leave the attribute alone
-            // so users can migrate manually.
-            if ($ruleArg instanceof Arg && $ruleArg->value instanceof Array_) {
-                $this->logSkip($class, sprintf(
-                    '#[Rule] attribute on property $%s uses array-form rules; manual migration required',
-                    $this->firstPropertyName($property),
-                ));
-            }
-
+        if (! $ruleArg instanceof Arg) {
             return null;
         }
 
-        $fluent = $this->convertStringToFluentRule($ruleArg->value->value, $this->resolvePropertyTypeHint($property));
+        if ($ruleArg->value instanceof String_) {
+            $fluent = $this->convertStringToFluentRule($ruleArg->value->value, $this->resolvePropertyTypeHint($property));
+        } elseif ($ruleArg->value instanceof Array_) {
+            $fluent = $this->convertArrayAttributeArg($ruleArg->value, $property, $class);
+        } else {
+            return null;
+        }
 
         if (! $fluent instanceof Expr) {
             return null;
@@ -287,6 +282,38 @@ CODE_SAMPLE
                 $this->firstPropertyName($property),
                 $unsupportedSummary,
             ));
+        }
+
+        return $fluent;
+    }
+
+    /**
+     * Convert an array-form attribute arg (`#[Rule(['required', 'email'])]`)
+     * into a FluentRule chain via the shared `convertArrayToFluentRule()`
+     * entry point on `ConvertsValidationRuleArrays`. Emits specific skip-log
+     * entries for the two failure modes so users can distinguish "empty
+     * rules array" from "array contains elements the converter can't handle."
+     */
+    private function convertArrayAttributeArg(Array_ $rulesArray, Property $property, Class_ $class): ?Expr
+    {
+        if ($rulesArray->items === []) {
+            $this->logSkip($class, sprintf(
+                '#[Rule] attribute on property $%s has an empty rules array — attribute conversion skipped',
+                $this->firstPropertyName($property),
+            ));
+
+            return null;
+        }
+
+        $fluent = $this->convertArrayToFluentRule($rulesArray);
+
+        if (! $fluent instanceof Expr) {
+            $this->logSkip($class, sprintf(
+                '#[Rule] attribute on property $%s contains unsupported array elements (closures, variable args, or custom rule objects) — converter bailed',
+                $this->firstPropertyName($property),
+            ));
+
+            return null;
         }
 
         return $fluent;
@@ -577,7 +604,8 @@ CODE_SAMPLE
     }
 
     /**
-     * Required by the ConvertsValidationRules trait contract. This rector
+     * Required by the ConvertsValidationRuleStrings trait contract (inherited
+     * via ConvertsValidationRuleArrays). This rector
      * operates at the attribute level, not on array-of-rules maps, so the
      * implementation is a no-op; rule-string conversion lives in the
      * trait's shared convertStringToFluentRule() helper, called directly

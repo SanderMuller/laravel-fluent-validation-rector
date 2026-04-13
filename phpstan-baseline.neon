@@ -61,26 +61,8 @@ parameters:
 			path: src/Rector/ValidationArrayToFluentRuleRector.php
 
 		-
-			rawMessage: 'Class cognitive complexity is 164, keep it under 80'
-			identifier: complexity.classLike
-			count: 1
-			path: src/Rector/ValidationArrayToFluentRuleRector.php
-
-		-
 			rawMessage: 'Cognitive complexity for "SanderMuller\FluentValidationRector\Rector\ValidationArrayToFluentRuleRector::buildModifierCall()" is 25, keep it under 20'
 			identifier: complexity.functionLike
-			count: 1
-			path: src/Rector/ValidationArrayToFluentRuleRector.php
-
-		-
-			rawMessage: 'Cognitive complexity for "SanderMuller\FluentValidationRector\Rector\ValidationArrayToFluentRuleRector::detectRuleFactoryType()" is 22, keep it under 20'
-			identifier: complexity.functionLike
-			count: 1
-			path: src/Rector/ValidationArrayToFluentRuleRector.php
-
-		-
-			rawMessage: 'Offset ''date''|''email''|''file''|''image''|''numeric''|''string'' on array{string: array{''alpha'', ''alphaDash'', ''alphaNumeric'', ''ascii'', ''between'', ''doesntEndWith'', ''doesntStartWith'', ''endsWith'', ...}, numeric: array{''between'', ''decimal'', ''different'', ''digits'', ''digitsBetween'', ''greaterThan'', ''greaterThanOrEqualTo'', ''lessThan'', ...}, date: array{''format'', ''beforeToday'', ''afterToday'', ''todayOrBefore'', ''todayOrAfter'', ''before'', ''after'', ''beforeOrEqual'', ...}, email: array{''rfcCompliant'', ''strict'', ''validateMxRecord'', ''preventSpoofing'', ''withNativeValidation'', ''max'', ''confirmed'', ''same'', ...}, file: array{''min'', ''max'', ''between'', ''exactly'', ''extensions'', ''mimes'', ''mimetypes''}, image: array{''min'', ''max'', ''between'', ''exactly'', ''extensions'', ''mimes'', ''mimetypes'', ''allowSvg'', ...}} on left side of ?? always exists and is not nullable.'
-			identifier: nullCoalesce.offset
 			count: 1
 			path: src/Rector/ValidationArrayToFluentRuleRector.php
 
