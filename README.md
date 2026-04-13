@@ -25,7 +25,20 @@ public function rules(): array
 }
 ```
 
-Tested on a production codebase: 448 files converted, 3469 tests still passing.
+Tested on a production codebase: 448 files converted, 3469 tests still passing. On a separate 108-FormRequest corpus the rector produced a net -1426 LOC — fluent is substantially more compact than array-form at scale.
+
+## Prerequisites
+
+This rector assumes Pint or an equivalent post-processor for final formatting. The rector's output is valid PHP but imports are inserted at prepend position (not alphabetical) and unused imports are left in place. Pint's `ordered_imports` + `no_unused_imports` fixers clean both up post-rector; php-cs-fixer has equivalents. Without a formatter you'll see rougher-than-example output.
+
+For the cleanest pre-Pint output, enable `->withImportNames()->withRemovingUnusedImports()` in your `rector.php`:
+
+```php
+return RectorConfig::configure()
+    ->withImportNames()
+    ->withRemovingUnusedImports()
+    ->withSets([FluentValidationSetList::ALL]);
+```
 
 ## Installation
 
@@ -103,6 +116,8 @@ return RectorConfig::configure()
 ## Diagnostics
 
 If a file you expected to convert wasn't touched, check `.rector-fluent-validation-skips.log` in your project root. Every bail-capable rule writes a one-line reason there: unsupported attribute args, a hybrid `$this->validate([...])` call, a trait already present on an ancestor class, and so on.
+
+The log is a file sink because Rector's `withParallel(...)` executor doesn't forward worker STDERR to the parent — a diagnostic-line-per-worker-fwrite would vanish on parallel runs (Rector's default). The file sink survives worker death and is inspectable post-run from the project root. If a Rector rule you're writing yourself needs similar diagnostics, the same gotcha applies: `withParallel()` + STDERR means silent data loss.
 
 ### Pass `--clear-cache` when investigating skips
 

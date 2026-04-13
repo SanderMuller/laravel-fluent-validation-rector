@@ -48,6 +48,16 @@ use ReflectionClass;
  * (per-process dedupe only — across workers, duplicates are possible
  * but rare since each worker typically processes a disjoint file set).
  *
+ * Known assumption: one Rector invocation at a time per cwd. Concurrent
+ * invocations (e.g. an IDE-on-save hook racing a pre-push hook in the same
+ * project root) each have their own PPID; each will see the other's
+ * sentinel as "stale" and truncate the log mid-run. Symptom: user sees a
+ * half-written or empty log they can't reproduce. Not hardened against
+ * because real-world occurrence is vanishingly rare and the fix (PID
+ * liveness check via `posix_kill($pid, 0)` alongside the PPID marker)
+ * adds complexity for no observed demand. Documented here so future
+ * debugging finds the explanation quickly.
+ *
  * @phpstan-require-extends AbstractRector
  */
 trait LogsSkipReasons

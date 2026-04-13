@@ -38,9 +38,9 @@ use SanderMuller\FluentValidation\HasFluentRules;
 class MultipleTraitsRequest extends FormRequest
 {
     use HasAuditLog;
+    use HasFluentRules;
     use HasRateLimit;
     use Sanitizes;
-    use HasFluentRules;
 
     public function rules(): array
     {

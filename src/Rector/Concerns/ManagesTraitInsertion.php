@@ -21,13 +21,7 @@ trait ManagesTraitInsertion
     {
         $traitUse = new TraitUse([new Name($shortName)]);
 
-        $insertPosition = 0;
-
-        foreach ($class->stmts as $i => $stmt) {
-            if ($stmt instanceof TraitUse) {
-                $insertPosition = $i + 1;
-            }
-        }
+        $insertPosition = $this->resolveSortedTraitInsertPosition($class, $shortName);
 
         // Emit a blank line (Nop) between the trait and the next class member
         // when it would otherwise sit flush against a non-trait statement.
@@ -39,6 +33,51 @@ trait ManagesTraitInsertion
             : [$traitUse];
 
         array_splice($class->stmts, $insertPosition, 0, $toInsert);
+    }
+
+    /**
+     * Walk the class's existing `use` statements and return the index where
+     * the new trait should be inserted to keep the block alphabetically
+     * sorted. When the new trait sorts before an existing one, insert
+     * immediately before it; when it sorts after all existing traits (or
+     * when the class has no trait uses), fall through to "after the last
+     * trait use" (or index 0 for a trait-less class).
+     *
+     * Pint's `ordered_traits` fixer resorts post-rector regardless, but
+     * emitting at the sorted position means the rector's pre-Pint output
+     * already matches final form — Pint doesn't have to touch converted
+     * files just to reshuffle traits.
+     */
+    private function resolveSortedTraitInsertPosition(Class_ $class, string $shortName): int
+    {
+        $insertPosition = 0;
+
+        foreach ($class->stmts as $i => $stmt) {
+            if (! $stmt instanceof TraitUse) {
+                continue;
+            }
+
+            $existingName = $this->firstTraitName($stmt);
+
+            if ($existingName !== null && strcmp($shortName, $existingName) < 0) {
+                return $i;
+            }
+
+            $insertPosition = $i + 1;
+        }
+
+        return $insertPosition;
+    }
+
+    private function firstTraitName(TraitUse $traitUse): ?string
+    {
+        $first = $traitUse->traits[0] ?? null;
+
+        if (! $first instanceof Name) {
+            return null;
+        }
+
+        return $first->getLast();
     }
 
     private function needsBlankLineAfterTrait(Class_ $class, int $insertPosition): bool
