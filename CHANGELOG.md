@@ -2,6 +2,67 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 0.4.6 - 2026-04-13
+
+### Added
+
+#### Array-form Livewire attribute conversion
+
+`ConvertLivewireRuleAttributeRector` now handles array-form attribute rules, matching the existing string-form behavior:
+
+```php
+// Before
+#[Rule(['required', 'string', 'max:255'])]
+public string $name = '';
+
+#[Validate(['nullable', 'email'])]
+public ?string $email = null;
+
+// After
+public string $name = '';
+
+public ?string $email = null;
+
+/**
+ * @return array<string, FluentRule|string|array<string, mixed>>
+ */
+protected function rules(): array
+{
+    return [
+        'name' => FluentRule::string()->required()->max(255),
+        'email' => FluentRule::email()->nullable(),
+    ];
+}
+
+```
+`as:` label mapping continues to work (`#[Rule([...], as: 'x')]` → `->label('x')`). Empty arrays (`#[Rule([])]`) now emit a specific skip-log entry and leave the attribute in place, instead of silently converting to `FluentRule::field()`.
+
+#### Known behavior: rule-object constructors get the `->rule()` escape hatch
+
+PHP attribute args must be const-expressions. This rules out static method calls like `Password::min(8)` and `Rule::unique('users', 'email')` inside `#[Rule([...])]` — the only legal forms are the constructor calls `new Password(8)` and `new Rule\Unique('users', 'email')`.
+
+The array converter's type-detection layer looks specifically for the `Password::min(...)` and `Rule::factoryMethod(...)` shapes. Constructor calls fall through to the `->rule(...)` escape hatch:
+
+- `#[Rule(['required', new Password(8)])]` → `FluentRule::field()->required()->rule(new Password(8))`
+- `#[Rule(['required', 'email', new Rule\Unique('users', 'email')])]` → `FluentRule::email()->required()->rule(new Rule\Unique('users', 'email'))`
+
+Both outputs are runtime-correct. For the richer `FluentRule::password(8)` / `->unique('users', 'email')` form, prefer `rules(): array` over attribute-form when you need rule objects. Attribute-form is at its best for pure-string rule lists; the const-expr ceiling limits what's expressible beyond that.
+
+### Changed
+
+#### Internal: trait split
+
+`ConvertsValidationRules` (1061 lines) split into two composing traits:
+
+- `ConvertsValidationRuleStrings` — the rule-string surface: type tokens, modifier dispatch, factory construction, the `$needsFluentRuleImport` state. Used directly by `ValidationStringToFluentRuleRector`.
+- `ConvertsValidationRuleArrays` — array-specific helpers + the `convertArrayToFluentRule()` entry point. Composes `ConvertsValidationRuleStrings` via `use`, so any rector using the array trait also gets the string surface. Used by `ValidationArrayToFluentRuleRector` and `ConvertLivewireRuleAttributeRector`.
+
+`$needsFluentRuleImport` stays on the string trait (single owner), so import coordination is unchanged. No user-facing behavior change; `ValidationArrayToFluentRuleRector` drops from 1009 lines to ~170 after the extraction. `detectRuleFactoryType()` got a minor refactor into an `applyFactoryChainCall()` helper during the split.
+
+If you're consuming `ConvertsValidationRules` directly (unlikely for internal-infrastructure traits but possible): rename your import to `ConvertsValidationRuleStrings`. No compat shim in this release; if a consumer reports breakage, a shim ships in 0.4.7.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/0.4.5...0.4.6
+
 ## 0.4.5 - 2026-04-13
 
 ### Fixed
@@ -116,6 +177,7 @@ protected function rules(): array
 
 
 
+
 ```
 The union accurately describes what the generated array contains:
 
@@ -173,6 +235,7 @@ public string $description = '';
 #[Validate('min:1')]
 public int $count = 0;
 // → 'count' => FluentRule::integer()->min(1)
+
 
 
 
@@ -243,6 +306,7 @@ public int $count = 0;
 
 
 
+
 ```
 Maps:
 
@@ -294,6 +358,7 @@ final class Settings extends Component
         ];
     }
 }
+
 
 
 
@@ -387,6 +452,7 @@ Mirrors the 0.3.0 fix on `GroupWildcardRulesToEachRector`. Now every rector in t
 
 
 
+
 ```
 Reported by hihaho (gap note during 0.3.0 re-verification) and collectiq (Nit A).
 
@@ -428,6 +494,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 #### Flat wildcard `'items.*'` entries fold into parent `->each(<scalar>)`
 
@@ -441,6 +508,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
@@ -506,6 +574,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 Reported from a run against the hihaho codebase (20+ files).
 
@@ -521,6 +590,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
