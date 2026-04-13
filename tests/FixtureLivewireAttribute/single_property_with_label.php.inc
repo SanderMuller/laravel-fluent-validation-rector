@@ -28,6 +28,7 @@ final class InventorizationAdminSettings extends Component
     public object $company;
 
     public ?string $notification_email = '';
+
     protected function rules(): array
     {
         return [

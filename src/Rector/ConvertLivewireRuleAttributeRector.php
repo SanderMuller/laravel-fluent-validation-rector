@@ -11,9 +11,11 @@ use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Identifier;
+use PhpParser\Node\NullableType;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassMethod;
+use PhpParser\Node\Stmt\Nop;
 use PhpParser\Node\Stmt\Property;
 use PhpParser\Node\Stmt\Return_;
 use PhpParser\NodeVisitor;
@@ -256,7 +258,7 @@ CODE_SAMPLE
             return null;
         }
 
-        $fluent = $this->convertStringToFluentRule($ruleArg->value->value);
+        $fluent = $this->convertStringToFluentRule($ruleArg->value->value, $this->resolvePropertyTypeHint($property));
 
         if (! $fluent instanceof Expr) {
             return null;
@@ -287,6 +289,35 @@ CODE_SAMPLE
         }
 
         return $fluent;
+    }
+
+    /**
+     * Read the property's PHP type declaration (`public string $x`,
+     * `public ?int $y`, etc.) and map the inner scalar to a key the
+     * shared TYPE_MAP understands. Returns null for nullable-without-type,
+     * union types, intersection types, and class types — none of which
+     * map cleanly to a single FluentRule factory.
+     */
+    private function resolvePropertyTypeHint(Property $property): ?string
+    {
+        $type = $property->type;
+
+        if ($type instanceof NullableType) {
+            $type = $type->type;
+        }
+
+        if (! $type instanceof Identifier) {
+            return null;
+        }
+
+        $name = strtolower($type->toString());
+
+        // Only return scalar names that the trait's TYPE_MAP recognizes.
+        // Anything else (object types, custom classes, mixed, etc.) falls
+        // through to the no-hint behavior so we don't emit a wrong factory.
+        return in_array($name, ['string', 'int', 'integer', 'bool', 'boolean', 'float', 'array'], true)
+            ? $name
+            : null;
     }
 
     private function extractLabelArg(Attribute $attr): ?string
@@ -357,6 +388,17 @@ CODE_SAMPLE
                 'stmts' => [new Return_($this->multilineArray($items))],
             ],
         );
+
+        // Emit a blank line (Nop) before the appended rules() method so it
+        // doesn't sit flush against whatever the previous member is. Pint's
+        // class_attributes_separation fixer would otherwise fire on every
+        // converted file. Skip the Nop when the previous stmt is already a
+        // Nop (don't double-space) or when the class body is empty.
+        $lastStmt = end($class->stmts);
+
+        if ($lastStmt !== false && ! $lastStmt instanceof Nop) {
+            $class->stmts[] = new Nop();
+        }
 
         $class->stmts[] = $method;
 

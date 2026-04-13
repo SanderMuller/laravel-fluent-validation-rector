@@ -36,16 +36,17 @@ Finished the pre-Pint output polish: converter-pathway `FluentRule::` short name
 
 Urgent fix for a 0.3.1 pipeline regression caught by hihaho re-verification: the converter rectors registering `Namespace_` competed with group/trait rectors on the same traversal pass, silently no-op'ing the downstream rules. Reverted converter node-type dispatch, fell back to `UseNodesToAddCollector` for import management (Pint's `ordered_imports` sorts the prepend in consumer projects), taught downstream rectors to recognize both short and FQN `FluentRule::` references, added a full-pipeline regression test.
 
-## In progress — 0.4.0
+### 0.4.0 — 2026-04-13
 
-**Theme:** `#[Rule(...)]` Livewire attribute conversion.
+`#[Rule(...)]` Livewire attribute conversion. New `ConvertLivewireRuleAttributeRector` strips `#[Rule]`/`#[Validate]` attributes from properties and generates a `rules(): array` method. Maps `as:` to `->label()`. Hybrid bail (class with attributes + explicit `$this->validate([...])` call). 7 fixtures.
 
-| Item | Source | Status |
-|---|---|---|
-| `ConvertLivewireRuleAttributeRector` — strip `#[Rule]`/`#[Validate]` attributes, generate `rules(): array` method, map `as:` to `->label()` | Livewire-focused mijntp codebases | **Done** — string-form attribute args, 5 fixtures (single+label, two+labels, merge into existing `rules()`, bail on non-trivial `rules()`, Form component) |
-| Bail + TODO for unsupported attribute args (`messages:`, `onUpdate:`) | mijntp peer suggestion | **Done** — TODO comment lists dropped args verbatim |
-| Array-form `#[Rule([...])]` attributes | mijntp peer | Deferred (manual-migration TODO for now) |
-| README updates + ROADMAP refresh | this release | **Done** |
+### 0.4.1 — 2026-04-13
+
+Three polish items surfaced by collectiq's 7-file `#[Rule]` verification:
+
+- **File-sink skip log** — `LogsSkipReasons` now writes to `.rector-fluent-validation-skips.log` in cwd (with `FILE_APPEND | LOCK_EX`) so workers spawned by `withParallel()` don't lose their skip output. Critical UX fix: pre-0.4.1, ~100% of production runs (which use `withParallel()` by default) saw zero skip-log output regardless of `FLUENT_VALIDATION_RECTOR_VERBOSE=1` because Rector's parallel executor doesn't forward worker STDERR. Added to `.gitignore`.
+- **Blank line before generated `rules()`** — `ConvertLivewireRuleAttributeRector` emits a `Nop` between the previous class member and the appended method, so Pint's `class_attributes_separation` fixer no longer fires on every converted file.
+- **Property-type-aware type inference** — when the rule string has no type token (e.g. `#[Validate('max:2000')]`) but the PHP property is typed (`public string $description`), the rector uses the property type as the factory base. Result: `FluentRule::string()->max(2000)` instead of `FluentRule::field()->rule('max:2000')` escape hatch. Maps `string`/`int`/`integer`/`bool`/`boolean`/`float`/`array` to the corresponding factory; nullable types unwrap to the inner scalar; union/intersection/object types fall through to the no-hint behavior. New `property_type_inference` fixture covers the matrix.
 
 ## Peer feedback log
 

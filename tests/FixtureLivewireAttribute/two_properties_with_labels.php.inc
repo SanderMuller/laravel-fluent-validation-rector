@@ -29,6 +29,7 @@ final class Settings extends Component
     public ?string $notification_email = '';
 
     public ?string $notification_business_email = '';
+
     protected function rules(): array
     {
         return [

@@ -24,6 +24,7 @@ use Livewire\Form;
 final class UserForm extends Form
 {
     public string $name = '';
+
     protected function rules(): array
     {
         return [

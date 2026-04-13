@@ -25,3 +25,6 @@ composer.lock
 .phpunit.result.cache
 
 RELEASE_NOTES*.md
+
+# Rector skip log — written by parallel workers, inspectable post-run
+.rector-fluent-validation-skips.log

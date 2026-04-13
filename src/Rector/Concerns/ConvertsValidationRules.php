@@ -869,7 +869,7 @@ trait ConvertsValidationRules
      * ConvertLivewireRuleAttributeRector (which converts the rule-string arg
      * of `#[Rule('required|string|max:255')]` attributes).
      */
-    private function convertStringToFluentRule(string $ruleString): ?Expr
+    private function convertStringToFluentRule(string $ruleString, ?string $propertyTypeHint = null): ?Expr
     {
         $parts = explode('|', $ruleString);
 
@@ -891,6 +891,16 @@ trait ConvertsValidationRules
             }
 
             $modifiers[] = ['name' => $normalized, 'args' => $parsed['args']];
+        }
+
+        // Property-type inference: when the rule string has no type token
+        // (e.g. `#[Validate('max:2000')]`) but the consumer passed a type
+        // hint from the PHP property declaration (`public string $x = '';`),
+        // use the inferred type as the factory base. This lets `max:2000`
+        // resolve to a real method call on StringRule rather than falling
+        // through to the ->rule('max:2000') escape hatch.
+        if ($type === null && $propertyTypeHint !== null && isset(self::TYPE_MAP[$propertyTypeHint])) {
+            $type = self::TYPE_MAP[$propertyTypeHint];
         }
 
         $resolvedType = $type ?? 'field';
