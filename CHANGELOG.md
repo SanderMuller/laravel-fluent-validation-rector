@@ -2,6 +2,34 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 0.4.5 - 2026-04-13
+
+### Fixed
+
+#### Skip-log `fflush` before sentinel unlock (data loss under `withParallel()`)
+
+0.4.3 introduced a PPID-keyed session sentinel (`.rector-fluent-validation-skips.log.session`) with `flock(LOCK_EX)` to coordinate first-worker truncation across Rector's parallel workers. The mechanism had a latent bug: after writing the session marker under the lock, the code called `flock($handle, LOCK_UN)` and only flushed the buffer later via `fclose` in the `finally` block.
+
+`flock(LOCK_UN)` is POSIX advisory-only and does not imply a buffer flush. Between unlock and `fclose`, another worker could acquire the sentinel lock, `stream_get_contents` through an empty or stale sentinel (the session marker was still sitting in PHP's userland stream buffer on the first worker's side), decide the session was fresh, and re-truncate the log — wiping any entries earlier workers had already appended via `FILE_APPEND | LOCK_EX`.
+
+Reproduced by mijntp during 0.4.3 verification with 100% consistency on macOS/APFS:
+
+- Baseline scenario (5 files, 3 convert + 2 array-form bail, default parallel): log had 9 entries, zero from the bail files.
+- `--debug` (single-process) on the same inputs: log had all 8 expected entries.
+- Parallel runs of only the 2 bail files: log file did not exist at all across 3 consecutive runs (each worker raced to truncate through the unflushed window).
+
+Scenarios 2 (dirty-log preseed) and 3 (run-twice) passed — those exercise only the single-worker hot path, where the `fclose` flush at the end of the process handled the race by accident.
+
+Fix: explicit `fflush($handle)` immediately before `flock($handle, LOCK_UN)` in `ensureLogSessionFreshness()`. Guarantees the session marker is written through to the OS before the next lock-holder reads it. The race window is now zero for correctly-implementing platforms.
+
+#### `@return` docblock emits short alias pre-Pint
+
+0.4.3 added `setDocComment` to pre-empt rector-preset's loose `@return array<string, mixed>`, but wrote the type as `\SanderMuller\FluentValidation\FluentRule` — the fully-qualified name — even though `queueFluentRuleImport()` already registers the short alias in the file's imports. Pint's `fully_qualified_strict_types` fixer cleaned it up post-rector, but the pre-Pint output was chattier than necessary.
+
+Flagged by collectiq during 0.4.3 verification. Fix: emit `FluentRule` short name directly in the Doc string. Same class of polish as the 0.3.0 "synthesized `FluentRule::` uses short name" fix. No fixture updates needed — the test config's `->withImportNames()` was silently normalizing the FQN to short name in fixture assertions, so consumer-facing output now matches what the fixtures already expected.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/0.4.4...0.4.5
+
 ## 0.4.4 - 2026-04-13
 
 ### Fixed
@@ -87,6 +115,7 @@ Theoretical today — no peer codebase has exercised the pattern — but the bai
 protected function rules(): array
 
 
+
 ```
 The union accurately describes what the generated array contains:
 
@@ -144,6 +173,7 @@ public string $description = '';
 #[Validate('min:1')]
 public int $count = 0;
 // → 'count' => FluentRule::integer()->min(1)
+
 
 
 
@@ -212,6 +242,7 @@ public int $count = 0;
 
 
 
+
 ```
 Maps:
 
@@ -263,6 +294,7 @@ final class Settings extends Component
         ];
     }
 }
+
 
 
 
@@ -354,6 +386,7 @@ Mirrors the 0.3.0 fix on `GroupWildcardRulesToEachRector`. Now every rector in t
 
 
 
+
 ```
 Reported by hihaho (gap note during 0.3.0 re-verification) and collectiq (Nit A).
 
@@ -394,6 +427,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 #### Flat wildcard `'items.*'` entries fold into parent `->each(<scalar>)`
 
@@ -407,6 +441,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
@@ -470,6 +505,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 Reported from a run against the hihaho codebase (20+ files).
 
@@ -485,6 +521,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
