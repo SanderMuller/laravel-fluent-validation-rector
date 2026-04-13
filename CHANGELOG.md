@@ -2,6 +2,72 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 0.4.8 - 2026-04-13
+
+### Added
+
+#### Validation-equivalence integration test (correctness)
+
+Every release so far has claimed the rector's output preserves runtime validation semantics. The fixture tests verify the output *text* matches expected shape, but until now nothing empirically verified that the converted FluentRule chains produce the same Laravel-validator error messages as the string-form rules they replaced.
+
+This mattered for modal operators — `bail`, `sometimes`, `nullable`, `required_without`, etc. — whose semantics are order-sensitive and mode-switching, not additive. The string parser emits tokens in encounter order after pulling the type token forward. If that ordering ever subtly diverged from Laravel's expected rule-sequence semantics, downstream codebases would silently get different validation behavior than they had before running the rector.
+
+New `tests/ValidationEquivalenceTest.php` runs 16 parametrized cases covering:
+
+- `required + email + max` (simple, two invalid shapes)
+- `bail` (empty input, non-string value — verifies only-one-error semantics)
+- `sometimes` (field absent, field present + invalid)
+- `nullable` (null accepted, invalid still fails)
+- `required_without` (one missing, both missing)
+- `integer + min/max` (both boundaries)
+- `in:` list (value not in list)
+- `array + each()` nested (typed children via dotted key equivalence)
+- `boolean` (non-boolean input)
+
+Each case runs Laravel's validator against invalid input using both the string-form rules (what the user wrote pre-conversion) and the FluentRule builder (what the rector would emit), and asserts the error messages are identical.
+
+Uses Orchestra Testbench for the Laravel container + facade bootstrap (FluentRule's builder touches `Validator::` and `Rule::` facades during rule materialization). First integration-level test in the package; `AbstractRectorTestCase`-based fixture tests continue to cover conversion correctness.
+
+Caught during mijntp's 0.4.7 open-ended feedback as the highest-priority paranoia item.
+
+#### `NEWLINED_ARRAY_PRINT` regression guard
+
+`ConvertLivewireRuleAttributeRector::multilineArray()` attaches Rector's `AttributeKey::NEWLINED_ARRAY_PRINT` attribute to the generated `rules()` method's return array, forcing one-item-per-line emission regardless of array size. The attribute key is Rector-internal and has churned across past major versions.
+
+New `tests/RectorInternalContractsTest.php::testNewlinedArrayPrintConstantExists` fails fast with a targeted error message if the constant vanishes in a Rector 3+ upgrade, pointing the maintainer at the replacement attribute to wire into `multilineArray()` instead of letting the absence silently collapse generated `rules()` methods to a single line.
+
+Flagged by mijntp.
+
+### Changed
+
+#### `ManagesTraitInsertion` emits at alphabetically-sorted position
+
+0.3.0's `ManagesNamespaceImports` fix taught the rector to insert top-of-file `use` imports at the alphabetically-correct position rather than prepending. The class-body trait list (`use HasFluentRules;` inside the class) kept the old behavior: append after the last existing trait.
+
+0.4.8 extends the symmetry to class-body trait insertion. `ManagesTraitInsertion::resolveSortedTraitInsertPosition()` walks existing `TraitUse` statements and inserts the new trait at the position where it sorts alphabetically among them:
+
+```php
+// Before (append)
+class MyRequest {
+    use HasAuditLog;
+    use HasRateLimit;
+    use Sanitizes;
+    use HasFluentRules;   // appended
+}
+
+// After (sorted)
+class MyRequest {
+    use HasAuditLog;
+    use HasFluentRules;   // sorted between HasAuditLog and HasRateLimit
+    use HasRateLimit;
+    use Sanitizes;
+}
+
+```
+Pint's `ordered_traits` continues to resort if a consumer's existing trait list wasn't already alphabetical, but on well-ordered class bodies Pint is typically a no-op now.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/0.4.7...0.4.8
+
 ## 0.4.7 - 2026-04-13
 
 ### Fixed
@@ -61,6 +127,7 @@ protected function rules(): array
         'email' => FluentRule::email()->nullable(),
     ];
 }
+
 
 
 ```
@@ -208,6 +275,7 @@ protected function rules(): array
 
 
 
+
 ```
 The union accurately describes what the generated array contains:
 
@@ -265,6 +333,7 @@ public string $description = '';
 #[Validate('min:1')]
 public int $count = 0;
 // → 'count' => FluentRule::integer()->min(1)
+
 
 
 
@@ -339,6 +408,7 @@ public int $count = 0;
 
 
 
+
 ```
 Maps:
 
@@ -390,6 +460,7 @@ final class Settings extends Component
         ];
     }
 }
+
 
 
 
@@ -487,6 +558,7 @@ Mirrors the 0.3.0 fix on `GroupWildcardRulesToEachRector`. Now every rector in t
 
 
 
+
 ```
 Reported by hihaho (gap note during 0.3.0 re-verification) and collectiq (Nit A).
 
@@ -530,6 +602,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 #### Flat wildcard `'items.*'` entries fold into parent `->each(<scalar>)`
 
@@ -543,6 +616,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
@@ -612,6 +686,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 Reported from a run against the hihaho codebase (20+ files).
 
@@ -627,6 +702,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
