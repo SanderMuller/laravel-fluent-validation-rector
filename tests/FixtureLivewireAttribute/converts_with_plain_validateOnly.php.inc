@@ -3,12 +3,17 @@
 namespace SanderMuller\FluentValidationRector\Tests\FixtureLivewireAttribute;
 
 use Livewire\Attributes\Validate;
-use Livewire\Form;
+use Livewire\Component;
 
-final class UserForm extends Form
+final class PlainValidateOnlyPage extends Component
 {
-    #[Validate('required|string|max:255', as: 'user name')]
+    #[Validate('required|string|max:255')]
     public string $name = '';
+
+    public function saveName(): void
+    {
+        $this->validateOnly('name');
+    }
 }
 
 ?>
@@ -19,11 +24,16 @@ namespace SanderMuller\FluentValidationRector\Tests\FixtureLivewireAttribute;
 
 use SanderMuller\FluentValidation\FluentRule;
 use Livewire\Attributes\Validate;
-use Livewire\Form;
+use Livewire\Component;
 
-final class UserForm extends Form
+final class PlainValidateOnlyPage extends Component
 {
     public string $name = '';
+
+    public function saveName(): void
+    {
+        $this->validateOnly('name');
+    }
 
     /**
      * @return array<string, FluentRule|string|array<string, mixed>>
@@ -31,7 +41,7 @@ final class UserForm extends Form
     protected function rules(): array
     {
         return [
-            'name' => FluentRule::string()->required()->max(255)->label('user name'),
+            'name' => FluentRule::string()->required()->max(255),
         ];
     }
 }

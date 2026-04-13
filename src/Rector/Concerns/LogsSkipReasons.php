@@ -30,13 +30,23 @@ use ReflectionClass;
  * the Rector run finishes.
  *
  * The log lives in the consumer's current working directory (typically
- * the project root). Add `.rector-fluent-validation-skips.log` to
- * `.gitignore` if you don't want it tracked. The file is overwritten at
- * the start of each Rector invocation so stale entries from previous
- * runs don't leak in.
+ * the project root). Add `.rector-fluent-validation-skips.log` and
+ * `.rector-fluent-validation-skips.log.session` to `.gitignore` if you
+ * don't want them tracked. The log is truncated at the start of each
+ * Rector invocation so stale entries from previous runs don't leak in.
+ *
+ * Truncation is coordinated via a PPID-keyed sentinel file (`*.session`)
+ * with `flock` serialization: the first worker to see a sentinel whose
+ * PPID doesn't match the current run's PPID truncates the log and
+ * updates the sentinel; all other workers append. This is the fix for
+ * the per-worker-static-flag race observed under `withParallel()`,
+ * where each worker would independently truncate and wipe earlier
+ * workers' entries.
  *
  * Each line is written exactly once per (rule, file, class, reason)
- * tuple to deduplicate multi-pass output within a single Rector run.
+ * tuple to deduplicate multi-pass output within a single Rector run
+ * (per-process dedupe only — across workers, duplicates are possible
+ * but rare since each worker typically processes a disjoint file set).
  *
  * @phpstan-require-extends AbstractRector
  */
@@ -50,13 +60,12 @@ trait LogsSkipReasons
     private static array $loggedSkips = [];
 
     /**
-     * Tracks whether the log file has been truncated in this PID. We
-     * truncate on first write so stale entries from a prior Rector run
-     * don't leak into the current run's output, but only once per
-     * process so subsequent workers append instead of truncating each
-     * other's entries.
+     * Per-process flag: did this worker already verify its session
+     * matches the sentinel (and thus the log's current contents)? Once
+     * set, subsequent writes skip the sentinel check and append
+     * directly. Scoped per-process — each worker runs this check once.
      */
-    private static bool $logFileTruncated = false;
+    private static bool $logSessionVerified = false;
 
     private function logSkip(Class_ $class, string $reason): void
     {
@@ -75,14 +84,154 @@ trait LogsSkipReasons
 
         $entry = sprintf("[fluent-validation:skip] %s %s (%s): %s\n", $rule, $className, $file, $reason);
 
-        $logFilePath = self::skipLogFilePath();
-        $flags = self::$logFileTruncated ? FILE_APPEND | LOCK_EX : LOCK_EX;
-        @file_put_contents($logFilePath, $entry, $flags);
-        self::$logFileTruncated = true;
+        self::ensureLogSessionFreshness();
+
+        @file_put_contents(self::skipLogFilePath(), $entry, FILE_APPEND | LOCK_EX);
 
         if (getenv('FLUENT_VALIDATION_RECTOR_VERBOSE') === '1') {
             fwrite(STDERR, $entry);
         }
+    }
+
+    /**
+     * Truncate the skip log when this is the first write of a new
+     * Rector invocation. "New invocation" is detected via a session
+     * sentinel file that stores the parent PID (all workers under
+     * `withParallel()` share the same PPID — the main Rector process
+     * that forks them). If the sentinel is missing or its PID doesn't
+     * match the current PPID, we're in a new run and truncate the log.
+     *
+     * Serialized via `flock(LOCK_EX)` on the sentinel itself so two
+     * workers racing on the "first write" moment won't both truncate.
+     * Each worker runs the check once per process; subsequent writes
+     * skip straight to append.
+     *
+     * On non-POSIX platforms where `posix_getppid` isn't available, falls
+     * back to an mtime-based staleness heuristic — if the sentinel's
+     * last-modified time is older than `STALE_SENTINEL_SECONDS`, treat
+     * as a new run. Rector invocations typically complete within that
+     * window for the sentinel check to be reliable.
+     *
+     * Without this, per-process static flags cause later workers to
+     * truncate entries written by earlier workers — observed by mijntp
+     * under `withParallel(300, 15, 15)` as a deterministic data loss
+     * where only the last-writing worker's entries survived.
+     */
+    private static function ensureLogSessionFreshness(): void
+    {
+        if (self::$logSessionVerified) {
+            return;
+        }
+
+        $sentinelPath = self::skipLogSessionSentinelPath();
+        $logPath = self::skipLogFilePath();
+        $sessionMarker = self::currentLogSessionMarker();
+
+        $handle = @fopen($sentinelPath, 'c+b');
+
+        if ($handle === false) {
+            // Sentinel unavailable (unwritable cwd, etc.); degrade gracefully
+            // by skipping the truncation check and appending to whatever log
+            // exists. Worst case: entries accumulate across runs, which is
+            // strictly better than losing entries within a single run.
+            self::$logSessionVerified = true;
+
+            return;
+        }
+
+        try {
+            if (! flock($handle, LOCK_EX)) {
+                self::$logSessionVerified = true;
+
+                return;
+            }
+
+            rewind($handle);
+            $existing = stream_get_contents($handle);
+            $existing = $existing === false ? '' : trim($existing);
+
+            if (self::isSessionStale($existing, $sessionMarker, $sentinelPath)) {
+                @file_put_contents($logPath, '', LOCK_EX);
+
+                ftruncate($handle, 0);
+                rewind($handle);
+                fwrite($handle, $sessionMarker);
+            }
+
+            // Touch the sentinel so the mtime-based fallback stays fresh
+            // while this rector run is still producing log entries.
+            @touch($sentinelPath);
+
+            flock($handle, LOCK_UN);
+        } finally {
+            fclose($handle);
+        }
+
+        self::$logSessionVerified = true;
+    }
+
+    /**
+     * How long a sentinel can sit idle before we consider it a prior run
+     * (mtime-based fallback path). Rector invocations on realistic
+     * codebases complete in well under this window; consumers running
+     * exceptionally long rector runs (>5 min) on non-POSIX systems may
+     * see the fallback decline to truncate across back-to-back runs,
+     * which is an acceptable degradation vs. losing entries.
+     */
+    private const STALE_SENTINEL_SECONDS = 300;
+
+    /**
+     * Decide whether an existing sentinel belongs to a prior rector
+     * invocation. On POSIX the PPID-based check is authoritative: if the
+     * stored marker matches the current PPID, this is the same run. The
+     * mtime fallback kicks in only when PPID is unavailable (Windows,
+     * non-POSIX) or when the sentinel contains an mtime-format marker.
+     */
+    private static function isSessionStale(string $existing, string $current, string $sentinelPath): bool
+    {
+        if ($existing === '') {
+            return true;
+        }
+
+        if (str_starts_with($current, 'ppid:') && $existing === $current) {
+            return false;
+        }
+
+        if (str_starts_with($current, 'mtime:') || str_starts_with($existing, 'mtime:')) {
+            $mtime = @filemtime($sentinelPath);
+
+            if ($mtime === false) {
+                return true;
+            }
+
+            return (time() - $mtime) > self::STALE_SENTINEL_SECONDS;
+        }
+
+        return $existing !== $current;
+    }
+
+    /**
+     * Session identifier shared by all workers in one Rector invocation.
+     * PPID is stable: under `withParallel()` every worker's parent is
+     * the same main Rector process; under single-process runs the
+     * worker's own PPID is the shell, which is also stable for the
+     * duration of that invocation.
+     *
+     * On non-POSIX platforms `posix_getppid` isn't available. We fall
+     * back to an `mtime:` sentinel whose freshness is checked via
+     * `filemtime()` in `isSessionStale()`. This is less precise than
+     * PPID but avoids per-worker data loss on Windows, which would
+     * otherwise trigger the same race this sentinel is meant to fix
+     * (each worker has a unique PID, so PID-based markers would never
+     * match across workers).
+     */
+    private static function currentLogSessionMarker(): string
+    {
+        if (function_exists('posix_getppid')) {
+            return 'ppid:' . posix_getppid();
+        }
+
+        return 'mtime:' . getmypid();
     }
 
     private static function skipLogFilePath(): string
@@ -97,5 +246,10 @@ trait LogsSkipReasons
         }
 
         return $cwd . '/.rector-fluent-validation-skips.log';
+    }
+
+    private static function skipLogSessionSentinelPath(): string
+    {
+        return self::skipLogFilePath() . '.session';
     }
 }

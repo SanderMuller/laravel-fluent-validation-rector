@@ -30,6 +30,9 @@ final class Settings extends Component
 
     public ?string $notification_business_email = '';
 
+    /**
+     * @return array<string, FluentRule|string|array<string, mixed>>
+     */
     protected function rules(): array
     {
         return [

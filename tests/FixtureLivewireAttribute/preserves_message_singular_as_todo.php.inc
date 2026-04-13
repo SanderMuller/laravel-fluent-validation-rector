@@ -30,6 +30,9 @@ final class ReportContentButton extends Component
 
     public string $description = '';
 
+    /**
+     * @return array<string, FluentRule|string|array<string, mixed>>
+     */
     protected function rules(): array
     {
         return [

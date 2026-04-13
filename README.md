@@ -87,6 +87,10 @@ return RectorConfig::configure()
 
 If your codebase has a shared FormRequest / Livewire base (e.g. `app/Http/Requests/FormRequest.php` extending `Illuminate\Foundation\Http\FormRequest`), declaring `use HasFluentRules;` on that base once lets every subclass inherit it. The rector's ancestor-chain detection (via `ReflectionClass`) will skip re-adding the trait to subclasses automatically — no `base_classes` configuration needed. This was the idiomatic outcome on the codebases where it was tested: one place to declare, quiet subclass runs.
 
+### Manually spot-check `#[Rule]` attribute conversions without component tests
+
+`ConvertLivewireRuleAttributeRector` verifies the generated `rules(): array` is syntactically correct, but it can't prove the converted rule is behaviorally equivalent to the source `#[Rule]` attribute — PHPStan and the test suite validate structure, not runtime validation outcomes. If a converted Livewire component doesn't have a feature test that exercises its validation paths, spot-check the diff by hand: confirm each property's chain matches the original pipe-delimited rule, and watch for unsupported attribute args (e.g. `message:`, `messages:`, `onUpdate:`) that are logged to `.rector-fluent-validation-skips.log` and need manual migration to Livewire's `messages(): array` hook.
+
 ### Long fluent chains on one line
 
 The rector doesn't insert line breaks between method calls — `FluentRule::string()->required()->max(255)` is valid PHP on a single line and keeps diffs minimal. If you prefer multi-line chains, Pint's [`method_chaining_indentation`](https://mlocati.github.io/php-cs-fixer-configurator/#version:3.0|fixer:method_chaining_indentation) fixer (or php-cs-fixer's equivalent) reflows them after Rector runs.

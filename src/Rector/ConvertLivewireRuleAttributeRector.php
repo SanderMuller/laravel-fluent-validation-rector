@@ -2,6 +2,7 @@
 
 namespace SanderMuller\FluentValidationRector\Rector;
 
+use PhpParser\Comment\Doc;
 use PhpParser\Node;
 use PhpParser\Node\Arg;
 use PhpParser\Node\ArrayItem;
@@ -389,6 +390,16 @@ CODE_SAMPLE
             ],
         );
 
+        // Pre-empt rector-preset's DocblockReturnArrayFromDirectArrayInstanceRector,
+        // which would otherwise add a loose `@return array<string, mixed>`. The
+        // generated rules() values are FluentRule chains, raw rule strings (merged
+        // into an existing rules() array), or nested arrays for Livewire dotted
+        // rules — this annotation is the tightest accurate union without reaching
+        // into each entry's concrete type.
+        $method->setDocComment(new Doc(
+            "/**\n * @return array<string, \\SanderMuller\\FluentValidation\\FluentRule|string|array<string, mixed>>\n */",
+        ));
+
         // Emit a blank line (Nop) before the appended rules() method so it
         // doesn't sit flush against whatever the previous member is. Pint's
         // class_attributes_separation fixer would otherwise fire on every
@@ -444,13 +455,18 @@ CODE_SAMPLE
 
     /**
      * Detect whether any method in the class calls `$this->validate([...])`
-     * with a non-empty array argument. That signals the class uses explicit
-     * per-call rule arrays rather than the attribute-based rules, so the
-     * attribute conversion would produce dead code.
+     * or `$this->validateOnly($field, [...])` with an explicit rules-array
+     * argument. That signals the class uses explicit per-call rule arrays
+     * rather than the attribute-based rules, so the attribute conversion
+     * would produce dead code.
      *
-     * Conservatively matches any method-call chain with name `validate` and
-     * a first-arg Array_ literal, regardless of receiver — in practice this
-     * is almost always `$this->validate([...])` inside a Livewire component.
+     * Livewire signatures:
+     *   validate(array $rules = null, ...)              — rules at arg 0
+     *   validateOnly(string $field, array $rules = null, ...) — rules at arg 1
+     *
+     * `validateOnly($field)` with no rules arg uses the component's `rules()`
+     * method (or attributes), so conversion remains safe there — only the
+     * explicit-rules form triggers the bail.
      */
     private function hasExplicitValidateCall(Class_ $class): bool
     {
@@ -465,21 +481,23 @@ CODE_SAMPLE
                 return null;
             }
 
-            if (! $this->isName($inner->name, 'validate')) {
+            if ($this->isName($inner->name, 'validate')) {
+                $rulesArg = $inner->args[0] ?? null;
+            } elseif ($this->isName($inner->name, 'validateOnly')) {
+                $rulesArg = $inner->args[1] ?? null;
+            } else {
                 return null;
             }
 
-            $firstArg = $inner->args[0] ?? null;
-
-            if (! $firstArg instanceof Arg) {
+            if (! $rulesArg instanceof Arg) {
                 return null;
             }
 
             // Accept both direct Array_ args (validate(['x' => ...])) and
             // wrapped calls like validate(RuleSet::compileToArrays([...]))
             // that pass an Array_ or Expr to a helper. The common signal is
-            // "user is providing rules at call time" — any non-null arg
-            // meets that bar for the hybrid-bail heuristic.
+            // "user is providing rules at call time" — any non-null arg at
+            // the rules-position meets that bar for the hybrid-bail heuristic.
             $found = true;
 
             return NodeVisitor::STOP_TRAVERSAL;

@@ -40,11 +40,24 @@ Urgent fix for a 0.3.1 pipeline regression caught by hihaho re-verification: the
 
 `#[Rule(...)]` Livewire attribute conversion. New `ConvertLivewireRuleAttributeRector` strips `#[Rule]`/`#[Validate]` attributes from properties and generates a `rules(): array` method. Maps `as:` to `->label()`. Hybrid bail (class with attributes + explicit `$this->validate([...])` call). 7 fixtures.
 
-### 0.4.1 — 2026-04-13
+### 0.4.1 — ghost tag
 
-Three polish items surfaced by collectiq's 7-file `#[Rule]` verification:
+Tag landed on the pre-fix commit (`ab4a7a5`) before the three 0.4.1 fixes were merged. Immutable, so re-tagged as 0.4.2. Both collectiq and mijntp caught the zero-delta on re-verification (ghost-tag SHA mismatch). Users on `^0.4.1` should upgrade to `^0.4.2`.
 
-- **File-sink skip log** — `LogsSkipReasons` now writes to `.rector-fluent-validation-skips.log` in cwd (with `FILE_APPEND | LOCK_EX`) so workers spawned by `withParallel()` don't lose their skip output. Critical UX fix: pre-0.4.1, ~100% of production runs (which use `withParallel()` by default) saw zero skip-log output regardless of `FLUENT_VALIDATION_RECTOR_VERBOSE=1` because Rector's parallel executor doesn't forward worker STDERR. Added to `.gitignore`.
+### 0.4.3 — 2026-04-13
+
+Four polish items:
+
+- **`validateOnly()` in hybrid bail** — `ConvertLivewireRuleAttributeRector::hasExplicitValidateCall()` now also matches `$this->validateOnly($field, $rules)` with an explicit rules array at arg 1. `validateOnly($field)` without a rules override keeps converting (it uses `rules()`, so no dead code risk). Two new fixtures pin both shapes.
+- **Tighter `@return` on generated `rules()`** — emits `@return array<string, FluentRule|string|array<string, mixed>>` via `setDocComment` so rector-preset's `DocblockReturnArrayFromDirectArrayInstanceRector` doesn't overwrite with the loose `@return array<string, mixed>`. Updated 6 existing fixtures.
+- **Skip-log race under `withParallel()`** — caught by mijntp's 0.4.2 verification. Per-worker `static $logFileTruncated` meant every worker independently decided it was "first" and truncated the log, wiping earlier workers' entries. Replaced with a PPID-keyed session sentinel (`.rector-fluent-validation-skips.log.session`) under `flock(LOCK_EX)`: first worker to see a PPID-mismatch truncates, all others append. POSIX feature-detect with an mtime-staleness fallback (300s) for non-POSIX / Windows so the same mechanism degrades gracefully without per-worker data loss. `.gitignore` updated to include the sentinel.
+- **README "Tips" — manual spot-check note** — flagged by mijntp. Files without component-level tests should be spot-checked post-`#[Rule]`-conversion since the rector verifies syntactic correctness only, not behavioral equivalence. Points at `.rector-fluent-validation-skips.log` for dropped-arg inspection.
+
+### 0.4.2 — 2026-04-13
+
+Three polish items surfaced by collectiq's 7-file `#[Rule]` verification (originally planned as 0.4.1 but that tag ghosted):
+
+- **File-sink skip log** — `LogsSkipReasons` now writes to `.rector-fluent-validation-skips.log` in cwd (with `FILE_APPEND | LOCK_EX`) so workers spawned by `withParallel()` don't lose their skip output. Critical UX fix: pre-0.4.2, ~100% of production runs (which use `withParallel()` by default) saw zero skip-log output regardless of `FLUENT_VALIDATION_RECTOR_VERBOSE=1` because Rector's parallel executor doesn't forward worker STDERR. Added to `.gitignore`.
 - **Blank line before generated `rules()`** — `ConvertLivewireRuleAttributeRector` emits a `Nop` between the previous class member and the appended method, so Pint's `class_attributes_separation` fixer no longer fires on every converted file.
 - **Property-type-aware type inference** — when the rule string has no type token (e.g. `#[Validate('max:2000')]`) but the PHP property is typed (`public string $description`), the rector uses the property type as the factory base. Result: `FluentRule::string()->max(2000)` instead of `FluentRule::field()->rule('max:2000')` escape hatch. Maps `string`/`int`/`integer`/`bool`/`boolean`/`float`/`array` to the corresponding factory; nullable types unwrap to the inner scalar; union/intersection/object types fall through to the no-hint behavior. New `property_type_inference` fixture covers the matrix.
 
@@ -57,6 +70,10 @@ Three polish items surfaced by collectiq's 7-file `#[Rule]` verification:
 - **Nit B (0.1.1)** — trait `use` imports prepended. **Fixed in 0.3.0** via `ManagesNamespaceImports`.
 - **0.3.0 + 0.3.1 re-verification** — Pint is a no-op on collectiq's output. Gold-standard `validation_rejects_missing_fields` HTTP test held through every release.
 - **0.3.2 sanity check** — 8 files converted, same set, 10/10 HTTP tests pass. No regressions from the pipeline fix.
+- **0.4.0 verification** — 7 `#[Rule]`-attribute files. Caught `message:` singular silently dropped (pre-tag fix), 5-of-7 hybrid classes (pre-tag fix via `hasExplicitValidateCall`). 26/26 feature tests green.
+- **0.4.1 ghost-tag catch** — on re-verification detected byte-identical vendor source vs 0.4.0, then a clean SHA check (`git rev-parse 0.4.1` → `ab4a7a5` vs expected `db64e56`) diagnosed the ghost-tag within minutes. Drove the 0.4.2 re-tag.
+- **0.4.2 re-verification** — full acceptance scorecard across all 3 items: file-sink log created (72 lines under `withParallel(300, 15, 15)`), `FluentRule::string()->max(2000)` inference working on typed properties, blank line before `rules()` present and `class_attributes_separation` Pint fixer no longer firing. 26/26 tests, 52 assertions.
+- **0.4.3 planned verification** — dirty-log preseed, run-twice, `--debug` (single-process) vs parallel for skip-log race fix.
 
 ### hihaho — `y0vob4dg`
 
@@ -80,6 +97,8 @@ Three polish items surfaced by collectiq's 7-file `#[Rule]` verification:
 - **Finding A (0.3.0 re-verify)** — import ordering. Vacuously passed on mijntp (no trait insertion fires) but verified elsewhere.
 - **Finding B (0.3.0 re-verify)** — redundant trait on inheriting subclasses. **Shipped in 0.3.0** via `DetectsInheritedTraits`. Caught not just the 6 explicitly-flagged Livewire subclasses but also all 17 FormRequests extending a local abstract base — zero-files-touched on 0.3.0+ for mijntp.
 - **0.3.2 verification** — batched with 0.4.0 per peer preference.
+- **0.4.1 ghost-tag co-catch** — independently confirmed byte-for-byte no-op vs 0.4.0 on the 3 Settings files, pinpointed `installRulesMethod()` L361 as still-flat at that SHA. Second signal that turned the ghost-tag into an unambiguous tag issue rather than a subtle regression.
+- **0.4.2 verification + skip-log race finding** — confirmed all 3 fixes landed on `00b6589`; deterministically reproduced a per-worker truncation race in `LogsSkipReasons.php` under `withParallel()` (Run A: 0 array-form entries; Run B `--debug`: all entries; Run C parallel-only: file missing). Drove the 0.4.3 PPID-sentinel fix. Pinned dirty-log-preseed + run-twice as the regression scenarios.
 
 ## Deferred
 

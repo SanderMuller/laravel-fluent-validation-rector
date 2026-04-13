@@ -26,5 +26,8 @@ composer.lock
 
 RELEASE_NOTES*.md
 
-# Rector skip log — written by parallel workers, inspectable post-run
+# Rector skip log — written by parallel workers, inspectable post-run.
+# The .session sentinel is a PPID-keyed marker used to coordinate
+# per-run log truncation across parallel workers.
 .rector-fluent-validation-skips.log
+.rector-fluent-validation-skips.log.session
