@@ -186,13 +186,12 @@ CODE_SAMPLE
             return false;
         }
 
-        if (! $this->usesFluentRule($class)) {
-            $this->logSkip($class, 'no FluentRule usage in rules() method');
-
-            return false;
-        }
-
-        return true;
+        // No FluentRule in rules() means there's nothing to optimize; the
+        // trait would be a no-op. Silent skip — on codebases where `rules()`
+        // is a common naming convention for non-validation helpers (Actions,
+        // Console\Kernel, Collections), logging this bail inflates the skip
+        // log with entries users can't act on.
+        return $this->usesFluentRule($class);
     }
 
     private function isLivewireClass(Class_ $class): bool

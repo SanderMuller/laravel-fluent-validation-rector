@@ -112,16 +112,17 @@ CODE_SAMPLE
 
     private function shouldAddTraitToClass(Class_ $class): bool
     {
-        if ($class->isAbstract()) {
-            $this->logSkip($class, 'abstract class');
-
+        // Candidacy gate: only log decisions for classes that are plausible
+        // Livewire components. Random Action / Console\Kernel / Collection
+        // classes that happen to have a rules() method aren't candidates for
+        // this trait; skipping them produces no diagnostic value and inflates
+        // the skip log with noise users can't act on.
+        if (! $this->isLivewireClass($class)) {
             return false;
         }
 
-        // Target Livewire components and forms — check direct parent OR
-        // fall back to heuristic (presence of render() method indicates Livewire)
-        if (! $this->isLivewireClass($class)) {
-            $this->logSkip($class, 'not detected as a Livewire component (no Livewire parent or render() method)');
+        if ($class->isAbstract()) {
+            $this->logSkip($class, 'abstract class');
 
             return false;
         }
@@ -148,13 +149,11 @@ CODE_SAMPLE
             return false;
         }
 
-        if (! $this->usesFluentRule($class)) {
-            $this->logSkip($class, 'no FluentRule usage in rules() method');
-
-            return false;
-        }
-
-        return true;
+        // No FluentRule in rules() means there's nothing to optimize; the
+        // trait would be a no-op. Silent skip — if the user expected the
+        // converter to populate FluentRule usage and it didn't, the converter
+        // rector's own logs explain why, not this one.
+        return $this->usesFluentRule($class);
     }
 
     private function alreadyHasTrait(Class_ $class): bool
