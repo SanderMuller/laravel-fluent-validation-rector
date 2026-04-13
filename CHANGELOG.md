@@ -2,6 +2,40 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 0.4.9 - 2026-04-13
+
+### Added
+
+#### Run-summary stdout line
+
+Users running Rector on codebases with heavy trait-hoisting (abstract bases that propagate the performance traits via `DetectsInheritedTraits`) or hybrid Livewire `validate([...])` bail conditions see `[OK] 0 files changed` from Rector itself and assume the rules didn't fire. The actual story lives in `.rector-fluent-validation-skips.log`, but until now there was no pointer to it — users had to know to look.
+
+0.4.9 emits a single STDOUT line at the end of each Rector invocation when the skip log contains entries:
+
+```
+[fluent-validation] 42 skip entries written to .rector-fluent-validation-skips.log — see for details
+
+```
+Implementation is a shutdown function registered from the package's `config/config.php`, which rector-extension-installer includes in consumer projects' Rector runs. The shutdown function:
+
+- Runs on parent PHP process exit, after Rector's own output has flushed. Doesn't interleave with Rector's `[OK]` summary.
+- Gates on "am I the parent?" via absence of `--identifier` in `$_SERVER['argv']`. Workers are spawned with `--identifier <uuid>`; the parent isn't. This avoids each worker emitting its own summary line.
+- Only emits when the skip log exists and is non-empty. Silent when there's nothing to report — users never see a useless summary line.
+- Writes to STDOUT (not STDERR). STDOUT from the parent process reaches the user's terminal directly; STDERR under `withParallel()` has the swallow problem that motivated the file sink in 0.4.2, but we're emitting from the parent here, not a worker.
+
+Singular/plural noun matches entry count (`1 skip entry` / `N skip entries`).
+
+The shutdown function is idempotent — if `config/config.php` gets loaded multiple times in the same process (uncommon but possible), the handler registers exactly once via a static flag.
+
+#### Public API
+
+`SanderMuller\FluentValidationRector\RunSummary` has two public static methods:
+
+- `registerShutdownHandler()` — called from `config/config.php`. Idempotent, gated on parent-ness.
+- `format(): ?string` — returns the summary line as a string, or null when the log is absent/empty. Exposed for unit testing without needing to trigger a PHP shutdown cycle; consumers shouldn't need to call this directly.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/0.4.8...0.4.9
+
 ## 0.4.8 - 2026-04-13
 
 ### Added
@@ -62,6 +96,7 @@ class MyRequest {
     use HasRateLimit;
     use Sanitizes;
 }
+
 
 ```
 Pint's `ordered_traits` continues to resort if a consumer's existing trait list wasn't already alphabetical, but on well-ordered class bodies Pint is typically a no-op now.
@@ -127,6 +162,7 @@ protected function rules(): array
         'email' => FluentRule::email()->nullable(),
     ];
 }
+
 
 
 
@@ -276,6 +312,7 @@ protected function rules(): array
 
 
 
+
 ```
 The union accurately describes what the generated array contains:
 
@@ -333,6 +370,7 @@ public string $description = '';
 #[Validate('min:1')]
 public int $count = 0;
 // → 'count' => FluentRule::integer()->min(1)
+
 
 
 
@@ -409,6 +447,7 @@ public int $count = 0;
 
 
 
+
 ```
 Maps:
 
@@ -460,6 +499,7 @@ final class Settings extends Component
         ];
     }
 }
+
 
 
 
@@ -559,6 +599,7 @@ Mirrors the 0.3.0 fix on `GroupWildcardRulesToEachRector`. Now every rector in t
 
 
 
+
 ```
 Reported by hihaho (gap note during 0.3.0 re-verification) and collectiq (Nit A).
 
@@ -603,6 +644,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 #### Flat wildcard `'items.*'` entries fold into parent `->each(<scalar>)`
 
@@ -616,6 +658,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
@@ -687,6 +730,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 Reported from a run against the hihaho codebase (20+ files).
 
@@ -702,6 +746,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
