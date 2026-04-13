@@ -3,7 +3,6 @@
 namespace SanderMuller\FluentValidationRector\Rector;
 
 use PhpParser\Node;
-use PhpParser\NodeVisitor;
 use PhpParser\Node\Arg;
 use PhpParser\Node\ArrayItem;
 use PhpParser\Node\Attribute;
@@ -17,6 +16,7 @@ use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Stmt\Property;
 use PhpParser\Node\Stmt\Return_;
+use PhpParser\NodeVisitor;
 use PhpParser\PrettyPrinter\Standard;
 use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\PostRector\Collector\UseNodesToAddCollector;
