@@ -2,6 +2,73 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 0.4.0 - 2026-04-13
+
+### Added
+
+#### `ConvertLivewireRuleAttributeRector`
+
+Livewire's validation attributes only accept const-expression arguments, so expressing FluentRule chains, closures, or custom rule objects inside them is impossible. The idiomatic migration is to move the rule into a `rules(): array` method where the full FluentRule API is available. This rector automates that migration.
+
+```php
+// Before
+use Livewire\Attributes\Rule;
+use Livewire\Component;
+
+final class Settings extends Component
+{
+    #[Rule('nullable|email', as: 'notificatie e-mailadres')]
+    public ?string $notification_email = '';
+}
+
+// After
+use Livewire\Component;
+use SanderMuller\FluentValidation\FluentRule;
+
+final class Settings extends Component
+{
+    public ?string $notification_email = '';
+
+    protected function rules(): array
+    {
+        return [
+            'notification_email' => FluentRule::email()->nullable()->label('notificatie e-mailadres'),
+        ];
+    }
+}
+
+```
+`use HasFluentValidation;` is added separately by `AddHasFluentValidationTraitRector` (the set list runs this rector before the trait rector).
+
+**Handles:**
+
+- Both short `#[Rule]`/`#[Validate]` and fully-qualified `#[\Livewire\Attributes\Rule]`/`#[\Livewire\Attributes\Validate]`.
+- The `as:` named argument becomes `->label('...')` on the chain.
+- Multiple properties in the same class collect into a single `rules(): array` method (appended in source order), emitted with one item per line via Rector's `NEWLINED_ARRAY_PRINT` attribute — readable regardless of item count.
+- An existing `rules(): array` method with a simple `return [...]` is merged into (attribute rules appended); an existing `rules()` method with non-trivial control flow (conditional returns, logic) bails with a skip log — migrate manually.
+- Form components (`extends \Livewire\Form`) work the same as regular components.
+
+**Bail on hybrid classes.** Classes that declare `#[Rule]`/`#[Validate]` attributes AND call `$this->validate([...])` with an explicit array argument use the explicit args as the authoritative validation source — Livewire ignores attribute rules once `validate()` is called with explicit rules. Converting the attributes in such classes would produce a `rules(): array` method that's dead code (the explicit `validate([...])` bypasses it) and creates noisy diffs. The rector detects these classes via a `MethodCall name=validate + non-null first arg` scan and skips them with a log reason. Users can still consolidate manually.
+
+**Dropped unsupported args.** The `message:` (singular), `messages:` (plural), and `onUpdate:` named attribute arguments have no direct FluentRule builder equivalents. The rule-string and `as:` label migrate; the unsupported args are dropped and logged via the package's skip-reason mechanism (visible with `FLUENT_VALIDATION_RECTOR_VERBOSE=1`). An in-source `// TODO:` comment beside the converted chain was planned but PhpParser's pretty-printer doesn't reliably render comments on sub-expressions inside array items — that's deferred to a follow-up release with a proper post-rector implementation.
+
+**Array-form `#[Rule([...])]` attributes are deferred.** Array-based attribute arguments require sharing more of `ValidationArrayToFluentRuleRector`'s private helpers via the `ConvertsValidationRules` trait. Tractable; for now the rector logs a skip pointing to the property so manual migration is unambiguous.
+
+Reported by [@kb7vilgo](https://github.com/) (mijntp) with a reference before/after from `InventorizationAdminSettings`. Pre-tag verification on collectiq's 7 `#[Rule]`-using files surfaced the hybrid-class pattern (5 of the 7) and the `message:` singular vs `messages:` plural Livewire-attribute-arg naming, both fixed before tagging.
+
+### Changed
+
+#### `FluentValidationSetList::CONVERT` now includes the new rector
+
+Running `FluentValidationSetList::ALL` (or `CONVERT` alone) picks up attribute conversion automatically. No config change required.
+
+#### Shared trait improvements
+
+- `convertStringToFluentRule()` moved from `ValidationStringToFluentRuleRector` to the `ConvertsValidationRules` trait, so all three converters (string-form, array-form, attribute) share one implementation.
+- `wrapInRuleEscapeHatch()` factored out; both callers (string converter + the new attribute path) reuse it.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/0.3.2...0.4.0
+
 ## 0.3.2 - 2026-04-12
 
 ### Fixed
@@ -51,6 +118,7 @@ Mirrors the 0.3.0 fix on `GroupWildcardRulesToEachRector`. Now every rector in t
 'author_notes' => FluentRule::string()->nullable()->max(65535),
 
 
+
 ```
 Reported by hihaho (gap note during 0.3.0 re-verification) and collectiq (Nit A).
 
@@ -86,6 +154,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 #### Flat wildcard `'items.*'` entries fold into parent `->each(<scalar>)`
 
@@ -99,6 +168,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
@@ -152,6 +222,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 Reported from a run against the hihaho codebase (20+ files).
 
@@ -167,6 +238,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
