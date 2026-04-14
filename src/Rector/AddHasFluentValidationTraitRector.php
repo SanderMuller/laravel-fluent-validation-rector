@@ -15,7 +15,7 @@ use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesTraitInsertion;
 use SanderMuller\FluentValidationRector\RunSummary;
-use SanderMuller\FluentValidationRector\Tests\AddHasFluentValidationTraitRectorTest;
+use SanderMuller\FluentValidationRector\Tests\AddHasFluentValidationTrait\AddHasFluentValidationTraitRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
 use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;

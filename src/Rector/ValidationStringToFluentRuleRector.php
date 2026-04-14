@@ -16,7 +16,7 @@ use Rector\StaticTypeMapper\ValueObject\Type\FullyQualifiedObjectType;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ConvertsValidationRuleStrings;
 use SanderMuller\FluentValidationRector\RunSummary;
-use SanderMuller\FluentValidationRector\Tests\ValidationStringToFluentRuleRectorTest;
+use SanderMuller\FluentValidationRector\Tests\ValidationStringToFluentRule\ValidationStringToFluentRuleRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
 use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
