@@ -29,7 +29,7 @@ final class ArrayRuleUniqueAttributeComponent extends Component
     public string $email = '';
 
     /**
-     * @return array<string, FluentRule|string|array<string, mixed>>
+     * @return array<string, FluentRule>
      */
     protected function rules(): array
     {

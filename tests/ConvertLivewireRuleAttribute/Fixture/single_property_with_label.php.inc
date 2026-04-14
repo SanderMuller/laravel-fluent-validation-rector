@@ -30,7 +30,7 @@ final class InventorizationAdminSettings extends Component
     public ?string $notification_email = '';
 
     /**
-     * @return array<string, FluentRule|string|array<string, mixed>>
+     * @return array<string, FluentRule>
      */
     protected function rules(): array
     {

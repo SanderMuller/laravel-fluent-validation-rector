@@ -26,7 +26,7 @@ final class UserForm extends Form
     public string $name = '';
 
     /**
-     * @return array<string, FluentRule|string|array<string, mixed>>
+     * @return array<string, FluentRule>
      */
     protected function rules(): array
     {

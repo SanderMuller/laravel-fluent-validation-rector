@@ -444,19 +444,28 @@ CODE_SAMPLE
             ],
         );
 
-        // Pre-empt rector-preset's DocblockReturnArrayFromDirectArrayInstanceRector,
-        // which would otherwise add a loose `@return array<string, mixed>`. The
-        // generated rules() values are FluentRule chains, raw rule strings (merged
-        // into an existing rules() array), or nested arrays for Livewire dotted
-        // rules — this annotation is the tightest accurate union without reaching
-        // into each entry's concrete type.
+        // Every entry on the fresh-emit path is a FluentRule chain — the
+        // collected entries come from either `convertStringToFluentRule()`
+        // or `convertArrayAttributeArg()`, both of which return FluentRule
+        // builder expressions (or null, in which case the entry isn't
+        // appended). Mixed string/array entries only exist on the
+        // merge-into-existing-rules() path, which doesn't touch docblocks.
+        // So the narrowest accurate annotation is `array<string, FluentRule>`.
         //
-        // The short name `FluentRule` is already guaranteed in-scope by the
-        // queueFluentRuleImport() call in refactor(); emitting the short alias
-        // here keeps the pre-Pint output clean (avoids Pint's
+        // Pre-empts rector-preset's DocblockReturnArrayFromDirectArrayInstanceRector
+        // (which would add loose `array<string, mixed>`). Since `FluentRule`
+        // is a supertype of specific FluentRule subclasses like `EmailRule`
+        // that PHPStan infers from chains like `FluentRule::email()->...`,
+        // this declared type is covariance-safe and doesn't produce the
+        // over-broad-vs-inferred mismatch that type-perfect flagged on the
+        // previous 3-way union.
+        //
+        // The short name `FluentRule` is already in-scope via the
+        // queueFluentRuleImport() call in refactor(); emitting the short
+        // alias keeps the pre-Pint output clean (avoids Pint's
         // fully_qualified_strict_types fixer firing on every converted file).
         $method->setDocComment(new Doc(
-            "/**\n * @return array<string, FluentRule|string|array<string, mixed>>\n */",
+            "/**\n * @return array<string, FluentRule>\n */",
         ));
 
         // Emit a blank line (Nop) before the appended rules() method so it

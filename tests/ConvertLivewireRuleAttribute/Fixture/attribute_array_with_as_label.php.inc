@@ -26,7 +26,7 @@ final class ArrayWithAsLabelAttributeComponent extends Component
     public string $displayName = '';
 
     /**
-     * @return array<string, FluentRule|string|array<string, mixed>>
+     * @return array<string, FluentRule>
      */
     protected function rules(): array
     {

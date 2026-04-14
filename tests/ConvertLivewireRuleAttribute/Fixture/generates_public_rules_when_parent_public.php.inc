@@ -26,7 +26,7 @@ final class ChildWithPublicParentRules extends BaseWithPublicRules
     public string $name = '';
 
     /**
-     * @return array<string, FluentRule|string|array<string, mixed>>
+     * @return array<string, FluentRule>
      */
     public function rules(): array
     {

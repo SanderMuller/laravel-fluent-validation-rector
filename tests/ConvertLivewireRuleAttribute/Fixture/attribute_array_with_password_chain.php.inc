@@ -28,7 +28,7 @@ final class ArrayPasswordChainAttributeComponent extends Component
     public string $password = '';
 
     /**
-     * @return array<string, FluentRule|string|array<string, mixed>>
+     * @return array<string, FluentRule>
      */
     protected function rules(): array
     {

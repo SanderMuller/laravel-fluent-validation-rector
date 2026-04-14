@@ -46,7 +46,7 @@ final class TypedPropertyComponent extends Component
     public string $title = '';
 
     /**
-     * @return array<string, FluentRule|string|array<string, mixed>>
+     * @return array<string, FluentRule>
      */
     protected function rules(): array
     {
