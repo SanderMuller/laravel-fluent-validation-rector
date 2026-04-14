@@ -2,6 +2,39 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 0.4.10 - 2026-04-14
+
+### Fixed
+
+#### Run summary no longer depends on rector/extension-installer
+
+0.4.9 registered the shutdown-emit hook from `config/config.php`, which Rector's extension-installer plugin loads automatically for packages declaring `type: rector-extension`. Both collectiq and mijntp caught that the plugin isn't installed on their projects — `rector/extension-installer` ships as a namespace-isolated internal dependency inside `rector/rector` itself but doesn't scan the consumer's vendor tree. Without the plugin, `config/config.php` is dead metadata.
+
+Result: 0.4.9 was strictly additive on most codebases — the rules converted correctly, but the new stdout summary never fired. Worse than "visibly broken" because the discoverability gap it was meant to close was now hidden behind a different form of invisibility.
+
+0.4.10 moves the registration into each of the 7 rule constructors. When Rector's DI container instantiates any of the fluent-validation rules during config initialization, that rule's `__construct()` calls `RunSummary::registerShutdownHandler()`. The existing idempotent guard (`self::$registered`) ensures exactly-once registration per PHP process regardless of how many rules fire. Consumers using any `FluentValidationSetList::*` set or any individual rule via `->withRules([...])` get the hook automatically — no extension-installer dependency, no `require-dev` addition, no `allow-plugins` approval.
+
+The `config/config.php` registration is retained as belt-and-suspenders: extension-installer-enabled consumers register via the config load path; others register via rule construction. The idempotent guard prevents double-registration in either case.
+
+#### Second gate: the rule-constructor path fires outside Rector too
+
+Rule constructors fire whenever the class is instantiated. That includes:
+
+- Consumer test suites that happen to spin up our rector classes (e.g. Pest / PHPUnit tests for custom Rector rule configs)
+- Composer post-install autoload scripts touching the class
+- IDE inspection runs
+- Any arbitrary PHP process that imports the class for its own reasons
+
+Without a second gate, each of these would register a shutdown handler that emits the summary at process exit — leaking a `[fluent-validation] N skip entries written to…` line into pest/phpunit/phpstan/composer output.
+
+0.4.10 adds `isRectorInvocation()` — a basename check against `$_SERVER['argv'][0]`. The gate matches `rector`, `rector.phar`, `vendor/bin/rector`, and any `rector`-substring script name. Rejects `pest`, `phpunit`, `phpstan`, `composer`, `php`, and anything else. Combined with the existing `--identifier` worker check, the summary fires only during `vendor/bin/rector process`-parent invocations.
+
+### Refactor
+
+Reorganized `tests/` into the per-rule folder convention Rector core and extensions use (`rector-phpunit`, `rector-doctrine`, etc.): `tests/<RuleName>/{<RuleName>RectorTest.php, Fixture/, config/}`. Prompted by Rector maintainer feedback. No behavior change, no consumer impact — tests aren't distributed in the `composer require --dev` artifact. Skip fixtures under `ConvertLivewireRuleAttribute/Fixture/` also renamed from `bail_*` / `*_bails` to `skip_*` to match the same convention (`skip_*.php.inc` for no-change scenarios, single-section, no `-----` separator).
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/0.4.9...0.4.10
+
 ## 0.4.9 - 2026-04-13
 
 ### Added
@@ -14,6 +47,7 @@ Users running Rector on codebases with heavy trait-hoisting (abstract bases that
 
 ```
 [fluent-validation] 42 skip entries written to .rector-fluent-validation-skips.log — see for details
+
 
 ```
 Implementation is a shutdown function registered from the package's `config/config.php`, which rector-extension-installer includes in consumer projects' Rector runs. The shutdown function:
@@ -98,6 +132,7 @@ class MyRequest {
 }
 
 
+
 ```
 Pint's `ordered_traits` continues to resort if a consumer's existing trait list wasn't already alphabetical, but on well-ordered class bodies Pint is typically a no-op now.
 
@@ -162,6 +197,7 @@ protected function rules(): array
         'email' => FluentRule::email()->nullable(),
     ];
 }
+
 
 
 
@@ -313,6 +349,7 @@ protected function rules(): array
 
 
 
+
 ```
 The union accurately describes what the generated array contains:
 
@@ -370,6 +407,7 @@ public string $description = '';
 #[Validate('min:1')]
 public int $count = 0;
 // → 'count' => FluentRule::integer()->min(1)
+
 
 
 
@@ -448,6 +486,7 @@ public int $count = 0;
 
 
 
+
 ```
 Maps:
 
@@ -499,6 +538,7 @@ final class Settings extends Component
         ];
     }
 }
+
 
 
 
@@ -600,6 +640,7 @@ Mirrors the 0.3.0 fix on `GroupWildcardRulesToEachRector`. Now every rector in t
 
 
 
+
 ```
 Reported by hihaho (gap note during 0.3.0 re-verification) and collectiq (Nit A).
 
@@ -645,6 +686,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 #### Flat wildcard `'items.*'` entries fold into parent `->each(<scalar>)`
 
@@ -658,6 +700,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
@@ -731,6 +774,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 Reported from a run against the hihaho codebase (20+ files).
 
@@ -746,6 +790,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
