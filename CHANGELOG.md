@@ -2,6 +2,61 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 0.4.11 - 2026-04-14
+
+`GroupWildcardRulesToEachRector` now applies to Livewire components. Requires `sandermuller/laravel-fluent-validation ^1.7.1`.
+
+### Changed
+
+#### Livewire components are no longer skipped by the wildcard grouping rector
+
+Before 0.4.11, `GroupWildcardRulesToEachRector` skipped Livewire components (detected via direct parent match on `Livewire\Component` / `Livewire\Form`, `HasFluentValidation` trait usage, or the presence of a `render()` method) because nested `each()` / `children()` calls broke Livewire's wildcard key reading at runtime. The rule had worked correctly on FormRequests since 0.3.0 but produced runtime-broken output on Livewire.
+
+`sandermuller/laravel-fluent-validation` 1.7.0 shipped `HasFluentValidation::getRules()`, which flattens nested `each()` / `children()` back to wildcard keys via `RuleSet::flattenRules()`. `validate()` and `validateOnly()` on a Livewire component using the trait now see the flat form Livewire expects, regardless of whether the source `rules()` method uses nested or flat notation.
+
+With the runtime support in place, the Rector's Livewire-skip guard is obsolete:
+
+```php
+// Before 0.4.11 — skipped on Livewire
+class MyComponent extends Component {
+    public function rules(): array {
+        return [
+            'items' => FluentRule::array()->required(),
+            'items.*.name' => FluentRule::string()->required(),
+        ];
+    }
+}
+
+// 0.4.11 — groups into nested each(), flattened back to wildcard at runtime
+class MyComponent extends Component {
+    public function rules(): array {
+        return [
+            'items' => FluentRule::array()->required()->each([
+                'name' => FluentRule::string()->required(),
+            ]),
+        ];
+    }
+}
+
+```
+Removed from `GroupWildcardRulesToEachRector`:
+
+- `isLivewireClass()` check at the top of `refactorClass()`
+- `isLivewireClass()` method (direct parent + trait + `render()` heuristic)
+- `LIVEWIRE_CLASSES` constant
+- `use SanderMuller\FluentValidation\HasFluentValidation;` import (no longer needed)
+- Skip-log message `'detected as Livewire (nested each() breaks Livewire wildcard handling; trait added separately)'`
+
+The associated `skip_livewire*.php.inc` fixtures were converted to `group_livewire_*.php.inc` with expected-output halves that exercise the nested-each form.
+
+#### Main package constraint bumped to `^1.7.1`
+
+`composer.json` now requires `sandermuller/laravel-fluent-validation: ^1.7.1`. Consumers upgrading this Rector from 0.4.10 to 0.4.11 with an older main package pinned (1.6.x or below) will get a composer conflict rather than a silent runtime break when Livewire components start using the grouped output. The conflict is the intentionally-safer failure mode.
+
+If you don't use Livewire, nothing breaks: FormRequest and `$request->validate()` pathways were never affected by the Livewire-skip guard and work identically across 0.4.x.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/0.4.10...0.4.11
+
 ## 0.4.10 - 2026-04-14
 
 ### Fixed
@@ -47,6 +102,7 @@ Users running Rector on codebases with heavy trait-hoisting (abstract bases that
 
 ```
 [fluent-validation] 42 skip entries written to .rector-fluent-validation-skips.log — see for details
+
 
 
 ```
@@ -133,6 +189,7 @@ class MyRequest {
 
 
 
+
 ```
 Pint's `ordered_traits` continues to resort if a consumer's existing trait list wasn't already alphabetical, but on well-ordered class bodies Pint is typically a no-op now.
 
@@ -197,6 +254,7 @@ protected function rules(): array
         'email' => FluentRule::email()->nullable(),
     ];
 }
+
 
 
 
@@ -350,6 +408,7 @@ protected function rules(): array
 
 
 
+
 ```
 The union accurately describes what the generated array contains:
 
@@ -407,6 +466,7 @@ public string $description = '';
 #[Validate('min:1')]
 public int $count = 0;
 // → 'count' => FluentRule::integer()->min(1)
+
 
 
 
@@ -487,6 +547,7 @@ public int $count = 0;
 
 
 
+
 ```
 Maps:
 
@@ -538,6 +599,7 @@ final class Settings extends Component
         ];
     }
 }
+
 
 
 
@@ -641,6 +703,7 @@ Mirrors the 0.3.0 fix on `GroupWildcardRulesToEachRector`. Now every rector in t
 
 
 
+
 ```
 Reported by hihaho (gap note during 0.3.0 re-verification) and collectiq (Nit A).
 
@@ -687,6 +750,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 #### Flat wildcard `'items.*'` entries fold into parent `->each(<scalar>)`
 
@@ -700,6 +764,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
@@ -775,6 +840,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 Reported from a run against the hihaho codebase (20+ files).
 
@@ -790,6 +856,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
