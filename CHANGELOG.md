@@ -2,6 +2,33 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 0.4.13 - 2026-04-14
+
+### Changed
+
+#### `@return` annotation tightened to match PHPStan's inferred type
+
+`ConvertLivewireRuleAttributeRector::installRulesMethod()` attached a three-way union docblock annotation to the generated `rules()` method since 0.4.3:
+
+```php
+/**
+ * @return array<string, FluentRule|string|array<string, mixed>>
+ */
+protected function rules(): array { /* … */ }
+
+```
+The union was defensive — `FluentRule` for chain entries, `string` for raw rule-string fallbacks, `array<string, mixed>` for nested Livewire dotted rules. But those last two shapes only exist on the `mergeIntoExistingRulesMethod()` path, which doesn't emit a docblock. The fresh-emit path (the only path that sets the docblock) produces entries exclusively from `convertStringToFluentRule()` and `convertArrayAttributeArg()` — both return FluentRule builder expressions.
+
+Surfaced during 0.4.11 verification: `type-perfect` + `tomasvotruba/type-coverage` flagged `return.type` errors when the actual inferred type was a specific FluentRule subclass (e.g. `array<string, EmailRule>` from `FluentRule::email()->...`) but the declared type advertised the broader three-way union. The declared-wider-than-inferred mismatch is noise for anyone running strict-mode PHPStan on converted files.
+
+0.4.13 narrows to `array<string, FluentRule>`:
+
+- Accurate for the fresh-emit case (all entries are FluentRule chains).
+- Covariance-safe with PHPStan's narrower inferred subclass types (`FluentRule` is a supertype of `EmailRule`, `StringRule`, etc. that the specific factory methods return).
+- Still pre-empts rector-preset's `DocblockReturnArrayFromDirectArrayInstanceRector` from adding the loose `array<string, mixed>`.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/0.4.12...0.4.13
+
 ## 0.4.12 - 2026-04-14
 
 ### Fixed
@@ -74,6 +101,7 @@ class MyComponent extends Component {
 }
 
 
+
 ```
 Removed from `GroupWildcardRulesToEachRector`:
 
@@ -138,6 +166,7 @@ Users running Rector on codebases with heavy trait-hoisting (abstract bases that
 
 ```
 [fluent-validation] 42 skip entries written to .rector-fluent-validation-skips.log — see for details
+
 
 
 
@@ -228,6 +257,7 @@ class MyRequest {
 
 
 
+
 ```
 Pint's `ordered_traits` continues to resort if a consumer's existing trait list wasn't already alphabetical, but on well-ordered class bodies Pint is typically a no-op now.
 
@@ -292,6 +322,7 @@ protected function rules(): array
         'email' => FluentRule::email()->nullable(),
     ];
 }
+
 
 
 
@@ -449,6 +480,7 @@ protected function rules(): array
 
 
 
+
 ```
 The union accurately describes what the generated array contains:
 
@@ -506,6 +538,7 @@ public string $description = '';
 #[Validate('min:1')]
 public int $count = 0;
 // → 'count' => FluentRule::integer()->min(1)
+
 
 
 
@@ -590,6 +623,7 @@ public int $count = 0;
 
 
 
+
 ```
 Maps:
 
@@ -641,6 +675,7 @@ final class Settings extends Component
         ];
     }
 }
+
 
 
 
@@ -748,6 +783,7 @@ Mirrors the 0.3.0 fix on `GroupWildcardRulesToEachRector`. Now every rector in t
 
 
 
+
 ```
 Reported by hihaho (gap note during 0.3.0 re-verification) and collectiq (Nit A).
 
@@ -796,6 +832,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 #### Flat wildcard `'items.*'` entries fold into parent `->each(<scalar>)`
 
@@ -809,6 +846,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
@@ -888,6 +926,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 Reported from a run against the hihaho codebase (20+ files).
 
@@ -903,6 +942,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
