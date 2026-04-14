@@ -12,6 +12,7 @@ use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Identifier;
+use PhpParser\Node\Name;
 use PhpParser\Node\NullableType;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\Class_;
@@ -25,6 +26,7 @@ use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\PostRector\Collector\UseNodesToAddCollector;
 use Rector\Rector\AbstractRector;
 use Rector\StaticTypeMapper\ValueObject\Type\FullyQualifiedObjectType;
+use ReflectionClass;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ConvertsValidationRuleArrays;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
@@ -137,6 +139,19 @@ CODE_SAMPLE
         // diffs. Bail instead; let users consolidate manually if they want.
         if ($this->hasExplicitValidateCall($node)) {
             $this->logSkip($node, 'class calls $this->validate([...]) with explicit args — attribute conversion skipped to avoid generating dead-code rules()');
+
+            return null;
+        }
+
+        // Resolve visibility BEFORE mutating properties (stripping attributes).
+        // A final ancestor `rules()` means the generated method can't be
+        // installed at all — bail now to avoid stripping attributes that we
+        // then can't replace with a rules() method. Same call runs again
+        // inside installRulesMethod() for the public-vs-protected resolution;
+        // the resolveGeneratedRulesVisibility() helper is cheap (one
+        // ReflectionClass walk) so double-calling isn't a concern.
+        if ($this->resolveGeneratedRulesVisibility($node) === null) {
+            $this->logSkip($node, 'parent class declares final rules() method; cannot override — skipping to avoid fatal-on-load');
 
             return null;
         }
@@ -407,6 +422,14 @@ CODE_SAMPLE
             return $this->mergeIntoExistingRulesMethod($class, $existing, $entries);
         }
 
+        $visibility = $this->resolveGeneratedRulesVisibility($class);
+
+        if ($visibility === null) {
+            $this->logSkip($class, 'parent class declares final rules() method; cannot override — skipping to avoid fatal-on-load');
+
+            return false;
+        }
+
         $items = array_map(
             static fn (array $entry): ArrayItem => new ArrayItem($entry['expr'], new String_($entry['name'])),
             $entries,
@@ -415,7 +438,7 @@ CODE_SAMPLE
         $method = new ClassMethod(
             new Identifier('rules'),
             [
-                'flags' => Class_::MODIFIER_PROTECTED,
+                'flags' => $visibility,
                 'returnType' => new Identifier('array'),
                 'stmts' => [new Return_($this->multilineArray($items))],
             ],
@@ -450,6 +473,92 @@ CODE_SAMPLE
         $class->stmts[] = $method;
 
         return true;
+    }
+
+    /**
+     * Resolve the correct visibility modifier for the generated `rules()`
+     * method by walking the class's ancestor chain via `ReflectionClass`.
+     *
+     * PHP's rules for overriding inherited methods:
+     *
+     * - If any ancestor declares `rules()` as `final`, the concrete subclass
+     *   CANNOT override it. Emitting a `rules()` method produces a fatal at
+     *   class-load time ("Cannot override final method"). Return null here
+     *   to signal that `installRulesMethod()` should bail with a skip-log
+     *   entry rather than ship broken output.
+     * - Visibility can be widened but not narrowed in PHP inheritance.
+     *   If an ancestor has `public rules()`, the subclass's `rules()` must
+     *   also be `public` — narrowing to `protected` is a fatal covariance
+     *   violation. Return `MODIFIER_PUBLIC` to match.
+     * - If no ancestor has `rules()` (common case — Livewire `Component` has
+     *   no `rules()` by default), default to `MODIFIER_PROTECTED` since the
+     *   method is only invoked by Livewire's validator machinery internally
+     *   and external visibility isn't useful.
+     *
+     * Mijntp caught this missing check during 0.4.11 verification: a
+     * Livewire base class `BaseSmsTwoFactor` declares
+     * `final public function rules()`, and the rector was generating
+     * `protected function rules()` on every `#[Rule]`-attributed subclass,
+     * producing fatal-on-load since 0.4.0. The check has been missing for
+     * 5 releases and only surfaced because mijntp started phpstan-analysing
+     * the generated output rather than just parsing it.
+     *
+     * Returns null when generation must be aborted, otherwise the correct
+     * visibility flag to pass to the `ClassMethod` constructor.
+     */
+    private function resolveGeneratedRulesVisibility(Class_ $class): ?int
+    {
+        // Detect the parent class via AST (the `$class->extends` node) rather
+        // than reflecting on the child itself. The child class is typically
+        // being parsed from a file that isn't autoloadable at rector-time
+        // (e.g. the consumer's source file hasn't been loaded yet, or a
+        // fixture .php.inc file that PSR-4 doesn't see). The parent class
+        // should be autoloadable via the project's composer autoload if it
+        // exists in vendor/ or the project's own src/ path.
+        if (! $class->extends instanceof Name) {
+            return Class_::MODIFIER_PROTECTED;
+        }
+
+        $parentName = $this->getName($class->extends);
+
+        if ($parentName === null || ! class_exists($parentName)) {
+            // Parent isn't autoloadable in the rector's runtime context
+            // (e.g. the child extends `Livewire\Component` and Livewire
+            // isn't in this test's autoload scope). Fall through to the
+            // default protected visibility — if the parent were real, PHP
+            // would enforce visibility-covariance at class-load time, so
+            // a wrong default here only fails if the parent exists and
+            // declares `rules()`, which can't be the case if class_exists
+            // returns false.
+            return Class_::MODIFIER_PROTECTED;
+        }
+
+        // class_exists() above guarantees ReflectionClass constructor succeeds,
+        // so no try/catch needed — PHPStan confirms Throwable is unreachable here.
+        $parent = new ReflectionClass($parentName);
+
+        do {
+            if ($parent->hasMethod('rules')) {
+                $parentRules = $parent->getMethod('rules');
+
+                if ($parentRules->isFinal()) {
+                    return null;
+                }
+
+                if ($parentRules->isPublic()) {
+                    return Class_::MODIFIER_PUBLIC;
+                }
+
+                // Protected or private on the ancestor: a protected override
+                // on the child is legal (widening private → protected is
+                // fine, protected → protected is same-level).
+                return Class_::MODIFIER_PROTECTED;
+            }
+
+            $parent = $parent->getParentClass();
+        } while ($parent !== false);
+
+        return Class_::MODIFIER_PROTECTED;
     }
 
     /**
