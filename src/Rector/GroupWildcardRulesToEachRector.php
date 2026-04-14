@@ -20,7 +20,6 @@ use PhpParser\Node\Stmt\Return_;
 use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\Rector\AbstractRector;
 use SanderMuller\FluentValidation\FluentRule;
-use SanderMuller\FluentValidation\HasFluentValidation;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesNamespaceImports;
 use SanderMuller\FluentValidationRector\RunSummary;
@@ -35,7 +34,11 @@ use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
  * Before: 'items' => ..., 'items.*.name' => ..., 'items.*.email' => ...
  * After:  'items' => FluentRule::array()->required()->each(['name' => ..., 'email' => ...])
  *
- * Skips Livewire classes (each() nesting breaks Livewire's wildcard handling).
+ * Applies to Livewire components too: `sandermuller/laravel-fluent-validation` 1.7+
+ * flattens nested each()/children() back to wildcard keys at runtime via
+ * `HasFluentValidation::getRules()`, so Livewire's wildcard handling sees the
+ * flat form it expects. Pre-1.7 main-package installs would break at runtime;
+ * composer constraint enforces >= 1.7.1.
  *
  * @see GroupWildcardRulesToEachRectorTest
  */
@@ -45,12 +48,6 @@ final class GroupWildcardRulesToEachRector extends AbstractRector implements Doc
     use ManagesNamespaceImports;
 
     private const int MAX_NESTING_DEPTH = 4;
-
-    /** @var list<string> */
-    private const array LIVEWIRE_CLASSES = [
-        'Livewire\Component',
-        'Livewire\Form',
-    ];
 
     public function __construct()
     {
@@ -156,12 +153,6 @@ CODE_SAMPLE
     /** @phpstan-impure */
     private function refactorClass(Class_ $class): bool
     {
-        if ($this->isLivewireClass($class)) {
-            $this->logSkip($class, 'detected as Livewire (nested each() breaks Livewire wildcard handling; trait added separately)');
-
-            return false;
-        }
-
         // Build map of local string constants for resolving self::X keys
         $this->localConstants = $this->collectLocalStringConstants($class);
 
@@ -208,40 +199,6 @@ CODE_SAMPLE
         }
 
         return $constants;
-    }
-
-    // ─── Livewire guard ──────────────────────────────────────────────────
-
-    private function isLivewireClass(Class_ $class): bool
-    {
-        if ($class->extends instanceof Name) {
-            $parentName = $this->getName($class->extends);
-
-            if (in_array($parentName, self::LIVEWIRE_CLASSES, true)) {
-                return true;
-            }
-        }
-
-        // Check if the class uses HasFluentValidation trait (Livewire trait)
-        foreach ($class->getTraitUses() as $traitUse) {
-            foreach ($traitUse->traits as $trait) {
-                if ($this->getName($trait) === HasFluentValidation::class) {
-                    return true;
-                }
-            }
-        }
-
-        // Heuristic: classes with a render() method are Livewire components/forms,
-        // even if they extend an intermediate base class. Matches the detection
-        // used in AddHasFluentValidationTraitRector so indirect Livewire subclasses
-        // aren't silently grouped without the matching trait.
-        foreach ($class->getMethods() as $method) {
-            if ($this->isName($method, 'render')) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     // ─── Array grouping ──────────────────────────────────────────────────

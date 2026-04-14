@@ -1,0 +1,40 @@
+<?php
+
+namespace SanderMuller\FluentValidationRector\Tests\GroupWildcardRulesToEach\Fixture;
+
+use Livewire\Component;
+use SanderMuller\FluentValidation\FluentRule;
+
+class LivewireComponent extends Component
+{
+    public function rules(): array
+    {
+        return [
+            'items' => FluentRule::array()->required(),
+            'items.*.name' => FluentRule::string()->required(),
+        ];
+    }
+}
+
+?>
+-----
+<?php
+
+namespace SanderMuller\FluentValidationRector\Tests\GroupWildcardRulesToEach\Fixture;
+
+use Livewire\Component;
+use SanderMuller\FluentValidation\FluentRule;
+
+class LivewireComponent extends Component
+{
+    public function rules(): array
+    {
+        return [
+            'items' => FluentRule::array()->required()->each([
+                'name' => FluentRule::string()->required(),
+            ]),
+        ];
+    }
+}
+
+?>

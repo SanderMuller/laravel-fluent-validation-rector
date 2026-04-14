@@ -108,7 +108,7 @@ return RectorConfig::configure()
 - **`ValidationStringToFluentRuleRector`** converts pipe-delimited rule strings (`'required|string|max:255'`) to fluent chains. Works in FormRequest `rules()`, `$request->validate()`, and `Validator::make()`.
 - **`ValidationArrayToFluentRuleRector`** converts array-based rules (`['required', 'string', Rule::unique(...)]`), including `Rule::` objects, `Password::min()` chains, conditional tuples, closures, and custom rule objects.
 - **`ConvertLivewireRuleAttributeRector`** strips Livewire `#[Rule('...')]` / `#[Validate('...')]` property attributes and generates a `rules(): array` method. Preserves the property, maps `as:` to `->label()`, and bails on non-trivial existing `rules()` methods.
-- **`GroupWildcardRulesToEachRector`** folds flat wildcard and dotted keys into nested `each()` / `children()` calls. Skips Livewire classes. When a dot-notation key has no explicit parent rule, the rector synthesizes a bare `FluentRule::array()` parent so nested `required` children still fire.
+- **`GroupWildcardRulesToEachRector`** folds flat wildcard and dotted keys into nested `each()` / `children()` calls. Applies to FormRequests and Livewire components alike — on Livewire, the `HasFluentValidation` trait's `getRules()` override flattens the nested form back to wildcard keys at runtime (requires main package 1.7.1+). When a dot-notation key has no explicit parent rule, the rector synthesizes a bare `FluentRule::array()` parent so nested `required` children still fire.
 - **`AddHasFluentRulesTraitRector`** adds `use HasFluentRules;` to FormRequests that use FluentRule.
 - **`AddHasFluentValidationTraitRector`** adds `use HasFluentValidation;` to Livewire components that use FluentRule.
 - **`SimplifyFluentRuleRector`** cleans up FluentRule chains after migration: factory shortcuts (`string()->url()` → `url()`), `->label()` folded into the factory arg, `min()` + `max()` → `between()`, redundant type removal.
@@ -148,7 +148,7 @@ The rector does not insert line breaks between method calls. `FluentRule::string
 
 - PHP 8.2+
 - Rector 2.4+
-- [sandermuller/laravel-fluent-validation](https://github.com/sandermuller/laravel-fluent-validation) ^1.0
+- [sandermuller/laravel-fluent-validation](https://github.com/sandermuller/laravel-fluent-validation) ^1.7.1 (`HasFluentValidation::getRules()` introduced in 1.7 is required for Livewire wildcard-key flattening — older main-package versions would break at runtime on Livewire components with nested `each()`)
 
 ## License
 
