@@ -2,6 +2,41 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 0.4.12 - 2026-04-14
+
+### Fixed
+
+#### Inheritance-aware `rules()` method generation
+
+Since 0.4.0, `ConvertLivewireRuleAttributeRector::installRulesMethod()` always emitted `protected function rules(): array` on the concrete subclass. Two PHP inheritance rules make this unsafe without a parent-class check:
+
+1. **A subclass cannot override a `final` parent method.** If the parent declares `final public function rules()`, PHP throws `Fatal error: Cannot override final method <Parent>::rules()` at class-load time. Any consumer with a shared Livewire base that owns validation (reasonable "parent owns rules, children extend behavior" pattern) hit this the moment their codebase loaded.
+2. **Visibility cannot be narrowed across inheritance.** If the parent's `rules()` is `public`, emitting `protected rules()` on the subclass is a fatal covariance violation: `Access level to <Child>::rules() must be public (as in class <Parent>)`.
+
+Caught by mijntp during 0.4.11 verification. Their `BaseSmsTwoFactor::rules()` is `final public`, and every concrete `#[Rule]`-attributed subclass got fatal-on-load from the rector output. Earlier verification rounds ran `php -l` (parse-check, doesn't link inheritance) and fixture tests that didn't instantiate the converted classes. PHPStan-analysing the rector output against the real project autoload — which mijntp started doing this release — caught both violations immediately.
+
+#### What 0.4.12 does
+
+`ConvertLivewireRuleAttributeRector::resolveGeneratedRulesVisibility()` walks the parent chain via `ReflectionClass` (detected from the AST `$class->extends` node — child class doesn't need to be autoloadable). For each ancestor:
+
+- **Ancestor has `final rules()`** → helper returns `null`. `refactor()` logs a skip entry (`parent class declares final rules() method; cannot override — skipping to avoid fatal-on-load`) and bails before any property mutation. The child class is left unchanged; `#[Rule]` attributes stay in place.
+- **Ancestor has `public rules()` (non-final)** → helper returns `MODIFIER_PUBLIC`. Generated method is emitted as `public function rules(): array { … }` to satisfy visibility covariance.
+- **Ancestor has `protected` or `private rules()`** → helper returns `MODIFIER_PROTECTED`. `protected` override is legal when narrowing isn't happening.
+- **No ancestor has `rules()`** (the common case — Livewire `Component` has no default `rules()`) → helper returns `MODIFIER_PROTECTED`. Matches pre-0.4.12 default.
+
+The check runs BEFORE `extractAndStripRuleAttribute()` so a bail never strips attributes the rector couldn't replace with a generated method. The visibility resolution runs twice on the happy path (once in `refactor()` as the gate, once in `installRulesMethod()` for the emit) — one extra ReflectionClass walk per converted class is trivial cost vs. the correctness gain.
+
+#### Fixtures pinning the behavior
+
+Two new fixtures plus two helper classes under `tests/ConvertLivewireRuleAttribute/FixtureSupport/`:
+
+- `skip_parent_has_final_rules.php.inc` — child extends a base with `final public rules()`, has `#[Rule]` attributes, expected output: no change + specific skip-log entry.
+- `generates_public_rules_when_parent_public.php.inc` — child extends a base with `public rules()` (non-final), has `#[Rule]` attributes, expected output: `rules()` method emitted as `public function rules()`.
+
+The helper classes (`BaseWithFinalPublicRules`, `BaseWithPublicRules`) are real autoloadable PHP files so `ReflectionClass` resolves against them at test time.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/0.4.11...0.4.12
+
 ## 0.4.11 - 2026-04-14
 
 `GroupWildcardRulesToEachRector` now applies to Livewire components. Requires `sandermuller/laravel-fluent-validation ^1.7.1`.
@@ -37,6 +72,7 @@ class MyComponent extends Component {
         ];
     }
 }
+
 
 ```
 Removed from `GroupWildcardRulesToEachRector`:
@@ -102,6 +138,7 @@ Users running Rector on codebases with heavy trait-hoisting (abstract bases that
 
 ```
 [fluent-validation] 42 skip entries written to .rector-fluent-validation-skips.log — see for details
+
 
 
 
@@ -190,6 +227,7 @@ class MyRequest {
 
 
 
+
 ```
 Pint's `ordered_traits` continues to resort if a consumer's existing trait list wasn't already alphabetical, but on well-ordered class bodies Pint is typically a no-op now.
 
@@ -254,6 +292,7 @@ protected function rules(): array
         'email' => FluentRule::email()->nullable(),
     ];
 }
+
 
 
 
@@ -409,6 +448,7 @@ protected function rules(): array
 
 
 
+
 ```
 The union accurately describes what the generated array contains:
 
@@ -466,6 +506,7 @@ public string $description = '';
 #[Validate('min:1')]
 public int $count = 0;
 // → 'count' => FluentRule::integer()->min(1)
+
 
 
 
@@ -548,6 +589,7 @@ public int $count = 0;
 
 
 
+
 ```
 Maps:
 
@@ -599,6 +641,7 @@ final class Settings extends Component
         ];
     }
 }
+
 
 
 
@@ -704,6 +747,7 @@ Mirrors the 0.3.0 fix on `GroupWildcardRulesToEachRector`. Now every rector in t
 
 
 
+
 ```
 Reported by hihaho (gap note during 0.3.0 re-verification) and collectiq (Nit A).
 
@@ -751,6 +795,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 #### Flat wildcard `'items.*'` entries fold into parent `->each(<scalar>)`
 
@@ -764,6 +809,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
@@ -841,6 +887,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 Reported from a run against the hihaho codebase (20+ files).
 
@@ -856,6 +903,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
