@@ -2,14 +2,13 @@
 
 namespace SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute\Fixture;
 
-use Illuminate\Validation\Rules\Password;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
 
-final class ArrayPasswordChainAttributeComponent extends Component
+final class ValidateOnUpdateFalseComponent extends Component
 {
-    #[Validate(['required', new Password(8)])]
-    public string $password = '';
+    #[Validate('required|string|max:255', onUpdate: false)]
+    public string $name = '';
 }
 
 ?>
@@ -20,14 +19,12 @@ namespace SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute
 
 use SanderMuller\FluentValidation\FluentRule;
 use Illuminate\Contracts\Validation\ValidationRule;
-use Illuminate\Validation\Rules\Password;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
 
-final class ArrayPasswordChainAttributeComponent extends Component
+final class ValidateOnUpdateFalseComponent extends Component
 {
-    #[Validate]
-    public string $password = '';
+    public string $name = '';
 
     /**
      * @return array<string, ValidationRule|string|array<mixed>>
@@ -35,7 +32,7 @@ final class ArrayPasswordChainAttributeComponent extends Component
     protected function rules(): array
     {
         return [
-            'password' => FluentRule::field()->required()->rule(new Password(8)),
+            'name' => FluentRule::string()->required()->max(255),
         ];
     }
 }

@@ -24,6 +24,7 @@ use Livewire\Form;
 
 final class UserForm extends Form
 {
+    #[Validate]
     public string $name = '';
 
     /**

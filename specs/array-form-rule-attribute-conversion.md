@@ -239,4 +239,17 @@ just syntactically plausible code. Three correctness pillars:
   fails-closed skip-log path for unconvertible values. `as:` / `message:` /
   named-args on keyed-first-arg attributes are skip-logged via the existing
   unsupported-args path — array-form expansion of those stays scoped to
-  Phase 3. Phases 2–4 remain queued.
+  Phase 3.
+- 2026-04-15 — **Phase 2 shipped.** Real-time validation preservation via
+  empty `#[Validate]` marker, default on. `ConfigurableRectorInterface`
+  wired with `PRESERVE_REALTIME_VALIDATION = 'preserve_realtime_validation'`
+  config key (default `true`) so consumers without `wire:model.live` can
+  opt out. Decision + insertion live in a new `ResolvesRealtimeValidationMarker`
+  concern. `#[Rule]` (deprecated) and `#[Validate(onUpdate: false)]` correctly
+  skip the marker. Also extracted `ResolvesInheritedRulesVisibility` concern
+  to keep `ConvertLivewireRuleAttributeRector` under the PHPStan cognitive-
+  complexity cap. ~11 existing `#[Validate]` fixtures updated to show the
+  preserved marker; 3 new regression fixtures pin `onUpdate: false` strips
+  cleanly, `#[Rule]` strips without marker, and config-disabled opt-out via
+  a separate test class + fixture directory (pattern from prior
+  `insteadof`-opt-in test setup). Phases 3–4 remain queued.

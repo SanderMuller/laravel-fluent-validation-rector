@@ -28,6 +28,7 @@ use Livewire\Component;
 
 final class KeyedArrayWithRuleObjectValue extends Component
 {
+    #[Validate]
     public string $password = '';
 
     /**

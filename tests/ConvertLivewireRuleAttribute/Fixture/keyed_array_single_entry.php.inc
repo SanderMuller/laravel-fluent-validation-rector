@@ -24,6 +24,7 @@ use Livewire\Component;
 
 final class KeyedArraySingleEntry extends Component
 {
+    #[Validate]
     public array $todos = [];
 
     /**

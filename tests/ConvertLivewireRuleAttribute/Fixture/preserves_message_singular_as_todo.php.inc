@@ -27,8 +27,10 @@ use Livewire\Component;
 
 final class ReportContentButton extends Component
 {
+    #[Validate]
     public string $category = '';
 
+    #[Validate]
     public string $description = '';
 
     /**

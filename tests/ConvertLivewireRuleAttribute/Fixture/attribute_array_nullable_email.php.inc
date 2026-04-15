@@ -24,6 +24,7 @@ use Livewire\Component;
 
 final class ArrayNullableEmailAttributeComponent extends Component
 {
+    #[Validate]
     public ?string $email = null;
 
     /**

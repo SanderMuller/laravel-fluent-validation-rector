@@ -22,16 +22,18 @@ use PhpParser\Node\Stmt\Property;
 use PhpParser\Node\Stmt\Return_;
 use PhpParser\NodeVisitor;
 use PhpParser\PrettyPrinter\Standard;
+use Rector\Contract\Rector\ConfigurableRectorInterface;
 use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\PostRector\Collector\UseNodesToAddCollector;
 use Rector\Rector\AbstractRector;
 use Rector\StaticTypeMapper\ValueObject\Type\FullyQualifiedObjectType;
-use ReflectionClass;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ConvertsValidationRuleArrays;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsLivewireRuleAttributes;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ExpandsKeyedAttributeArrays;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ResolvesInheritedRulesVisibility;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ResolvesRealtimeValidationMarker;
 use SanderMuller\FluentValidationRector\RunSummary;
 use SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute\ConvertLivewireRuleAttributeRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
@@ -74,16 +76,29 @@ use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
  *
  * @see ConvertLivewireRuleAttributeRectorTest
  */
-final class ConvertLivewireRuleAttributeRector extends AbstractRector implements DocumentedRuleInterface
+final class ConvertLivewireRuleAttributeRector extends AbstractRector implements ConfigurableRectorInterface, DocumentedRuleInterface
 {
+    public const string PRESERVE_REALTIME_VALIDATION = 'preserve_realtime_validation';
+
     use ConvertsValidationRuleArrays;
     use DetectsLivewireRuleAttributes;
     use ExpandsKeyedAttributeArrays;
     use LogsSkipReasons;
+    use ResolvesInheritedRulesVisibility;
+    use ResolvesRealtimeValidationMarker;
 
     public function __construct(private readonly UseNodesToAddCollector $useNodesToAddCollector)
     {
         RunSummary::registerShutdownHandler();
+    }
+
+    public function configure(array $configuration): void
+    {
+        $value = $configuration[self::PRESERVE_REALTIME_VALIDATION] ?? null;
+
+        if (is_bool($value)) {
+            $this->preserveRealtimeValidation = $value;
+        }
     }
 
     public function getRuleDefinition(): RuleDefinition
@@ -135,75 +150,11 @@ CODE_SAMPLE
             return null;
         }
 
-        // Candidacy gate: bail silently on classes that don't carry at least
-        // one #[Rule]/#[Validate] attribute. Pre-0.4.17 the rector's
-        // hybrid-bail fired on any class with a $this->validate(...) call
-        // regardless of whether it had attributes to migrate; mijntp ran
-        // 0.4.14 across a production app and got 34 spurious skip-log entries
-        // on Actions / FormRequests / Controllers / DataObjects that had
-        // `validate()` calls for reasons unrelated to Livewire attribute
-        // conversion. Scoping the hybrid-bail behind the attribute-presence
-        // check eliminates that noise without affecting the genuine case —
-        // a class with no Livewire rule attributes has nothing for this
-        // rector to do anyway, so a silent no-op is correct.
-        if (! $this->hasAnyLivewireRuleAttribute($node)) {
+        if (! $this->shouldProcessClass($node)) {
             return null;
         }
 
-        // Hybrid classes — those that declare #[Rule]/#[Validate] attributes AND
-        // call $this->validate([...]) with an explicit array arg — already rely on
-        // the explicit validate() args as the source of truth. Converting the
-        // attributes to a rules() method in such classes produces dead code
-        // (Livewire would still use the explicit array), which creates noisy
-        // diffs. Bail instead; let users consolidate manually if they want.
-        if ($this->hasExplicitValidateCall($node)) {
-            $this->logSkip($node, 'class calls $this->validate([...]) with explicit args — attribute conversion skipped to avoid generating dead-code rules()');
-
-            return null;
-        }
-
-        // Resolve visibility BEFORE mutating properties (stripping attributes).
-        // A final ancestor `rules()` means the generated method can't be
-        // installed at all — bail now to avoid stripping attributes that we
-        // then can't replace with a rules() method. Same call runs again
-        // inside installRulesMethod() for the public-vs-protected resolution;
-        // the resolveGeneratedRulesVisibility() helper is cheap (one
-        // ReflectionClass walk) so double-calling isn't a concern.
-        if ($this->resolveGeneratedRulesVisibility($node) === null) {
-            $this->logSkip($node, 'parent class declares final rules() method; cannot override — skipping to avoid fatal-on-load');
-
-            return null;
-        }
-
-        /** @var list<array{name: string, expr: Expr}> $collected */
-        $collected = [];
-
-        foreach ($node->stmts as $stmt) {
-            if (! $stmt instanceof Property) {
-                continue;
-            }
-
-            $entries = $this->extractAndStripRuleAttribute($stmt, $node);
-
-            if ($entries === null) {
-                continue;
-            }
-
-            foreach ($stmt->props as $propertyItem) {
-                $propertyName = $propertyItem->name->toString();
-
-                foreach ($entries as $entry) {
-                    $collected[] = [
-                        // `null` name = default single-chain extraction → use
-                        // the property name. Explicit keys from a keyed-array
-                        // attribute (`#[Validate(['todos' => …, 'todos.*' => …])]`)
-                        // are kept verbatim.
-                        'name' => $entry['name'] ?? $propertyName,
-                        'expr' => $this->cloneExpr($entry['expr']),
-                    ];
-                }
-            }
-        }
+        $collected = $this->collectRuleEntries($node);
 
         if ($collected === []) {
             return null;
@@ -216,6 +167,84 @@ CODE_SAMPLE
         $this->queueFluentRuleImport();
 
         return $node;
+    }
+
+    /**
+     * Walk every Property on the class, extract its rule-attribute entries,
+     * and expand them into one `{name, expr}` pair per property-item per
+     * entry. `null` names from a default single-chain extraction fall back
+     * to the annotated property's own name; explicit keyed-array names
+     * (`#[Validate(['todos' => …, 'todos.*' => …])]`) are kept verbatim.
+     *
+     * @return list<array{name: string, expr: Expr}>
+     */
+    private function collectRuleEntries(Class_ $class): array
+    {
+        $collected = [];
+
+        foreach ($class->stmts as $stmt) {
+            if (! $stmt instanceof Property) {
+                continue;
+            }
+
+            $entries = $this->extractAndStripRuleAttribute($stmt, $class);
+
+            if ($entries === null) {
+                continue;
+            }
+
+            foreach ($stmt->props as $propertyItem) {
+                $propertyName = $propertyItem->name->toString();
+
+                foreach ($entries as $entry) {
+                    $collected[] = [
+                        'name' => $entry['name'] ?? $propertyName,
+                        'expr' => $this->cloneExpr($entry['expr']),
+                    ];
+                }
+            }
+        }
+
+        return $collected;
+    }
+
+    /**
+     * Gate the class through three pre-processing checks:
+     *
+     * 1. **Attribute presence.** Silent no-op on classes without a
+     *    `#[Rule]` / `#[Validate]` attribute — nothing for this rector to do.
+     *    Pre-0.4.17 the hybrid-bail fired on any class with a `$this->validate(…)`
+     *    call regardless of attribute presence, producing dozens of spurious
+     *    skip-log entries on Actions / FormRequests / Controllers /
+     *    DataObjects with unrelated `validate()` calls.
+     * 2. **Hybrid classes.** Attributes AND explicit `$this->validate([…])`
+     *    with a rules-array arg means the explicit call is the source of
+     *    truth; converting the attributes would produce dead-code `rules()`.
+     *    Skip-log.
+     * 3. **Final ancestor `rules()`.** Resolved BEFORE mutating properties —
+     *    when a parent class declares `final public function rules(): array`,
+     *    the generated method can't be installed. Bail early to avoid
+     *    stripping attributes we then can't replace.
+     */
+    private function shouldProcessClass(Class_ $class): bool
+    {
+        if (! $this->hasAnyLivewireRuleAttribute($class)) {
+            return false;
+        }
+
+        if ($this->hasExplicitValidateCall($class)) {
+            $this->logSkip($class, 'class calls $this->validate([...]) with explicit args — attribute conversion skipped to avoid generating dead-code rules()');
+
+            return false;
+        }
+
+        if ($this->resolveGeneratedRulesVisibility($class) === null) {
+            $this->logSkip($class, 'parent class declares final rules() method; cannot override — skipping to avoid fatal-on-load');
+
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -235,6 +264,7 @@ CODE_SAMPLE
     private function extractAndStripRuleAttribute(Property $property, Class_ $class): ?array
     {
         $allEntries = [];
+        $markerName = null;
 
         foreach ($property->attrGroups as $groupIndex => $attrGroup) {
             $remainingAttrs = [];
@@ -259,6 +289,10 @@ CODE_SAMPLE
                 if ($allEntries === []) {
                     $allEntries = $converted;
                 }
+
+                if ($markerName === null && $this->shouldPreserveRealtimeMarker($attr)) {
+                    $markerName = $attr->name;
+                }
             }
 
             if ($remainingAttrs === []) {
@@ -271,6 +305,8 @@ CODE_SAMPLE
         }
 
         $property->attrGroups = array_values($property->attrGroups);
+
+        $this->appendRealtimeValidationMarker($property, $markerName);
 
         return $allEntries === [] ? null : $allEntries;
     }
@@ -539,92 +575,6 @@ CODE_SAMPLE
         $class->stmts[] = $method;
 
         return true;
-    }
-
-    /**
-     * Resolve the correct visibility modifier for the generated `rules()`
-     * method by walking the class's ancestor chain via `ReflectionClass`.
-     *
-     * PHP's rules for overriding inherited methods:
-     *
-     * - If any ancestor declares `rules()` as `final`, the concrete subclass
-     *   CANNOT override it. Emitting a `rules()` method produces a fatal at
-     *   class-load time ("Cannot override final method"). Return null here
-     *   to signal that `installRulesMethod()` should bail with a skip-log
-     *   entry rather than ship broken output.
-     * - Visibility can be widened but not narrowed in PHP inheritance.
-     *   If an ancestor has `public rules()`, the subclass's `rules()` must
-     *   also be `public` — narrowing to `protected` is a fatal covariance
-     *   violation. Return `MODIFIER_PUBLIC` to match.
-     * - If no ancestor has `rules()` (common case — Livewire `Component` has
-     *   no `rules()` by default), default to `MODIFIER_PROTECTED` since the
-     *   method is only invoked by Livewire's validator machinery internally
-     *   and external visibility isn't useful.
-     *
-     * Mijntp caught this missing check during 0.4.11 verification: a
-     * Livewire base class `BaseSmsTwoFactor` declares
-     * `final public function rules()`, and the rector was generating
-     * `protected function rules()` on every `#[Rule]`-attributed subclass,
-     * producing fatal-on-load since 0.4.0. The check has been missing for
-     * 5 releases and only surfaced because mijntp started phpstan-analysing
-     * the generated output rather than just parsing it.
-     *
-     * Returns null when generation must be aborted, otherwise the correct
-     * visibility flag to pass to the `ClassMethod` constructor.
-     */
-    private function resolveGeneratedRulesVisibility(Class_ $class): ?int
-    {
-        // Detect the parent class via AST (the `$class->extends` node) rather
-        // than reflecting on the child itself. The child class is typically
-        // being parsed from a file that isn't autoloadable at rector-time
-        // (e.g. the consumer's source file hasn't been loaded yet, or a
-        // fixture .php.inc file that PSR-4 doesn't see). The parent class
-        // should be autoloadable via the project's composer autoload if it
-        // exists in vendor/ or the project's own src/ path.
-        if (! $class->extends instanceof Name) {
-            return Class_::MODIFIER_PROTECTED;
-        }
-
-        $parentName = $this->getName($class->extends);
-
-        if ($parentName === null || ! class_exists($parentName)) {
-            // Parent isn't autoloadable in the rector's runtime context
-            // (e.g. the child extends `Livewire\Component` and Livewire
-            // isn't in this test's autoload scope). Fall through to the
-            // default protected visibility — if the parent were real, PHP
-            // would enforce visibility-covariance at class-load time, so
-            // a wrong default here only fails if the parent exists and
-            // declares `rules()`, which can't be the case if class_exists
-            // returns false.
-            return Class_::MODIFIER_PROTECTED;
-        }
-
-        // class_exists() above guarantees ReflectionClass constructor succeeds,
-        // so no try/catch needed — PHPStan confirms Throwable is unreachable here.
-        $parent = new ReflectionClass($parentName);
-
-        do {
-            if ($parent->hasMethod('rules')) {
-                $parentRules = $parent->getMethod('rules');
-
-                if ($parentRules->isFinal()) {
-                    return null;
-                }
-
-                if ($parentRules->isPublic()) {
-                    return Class_::MODIFIER_PUBLIC;
-                }
-
-                // Protected or private on the ancestor: a protected override
-                // on the child is legal (widening private → protected is
-                // fine, protected → protected is same-level).
-                return Class_::MODIFIER_PROTECTED;
-            }
-
-            $parent = $parent->getParentClass();
-        } while ($parent !== false);
-
-        return Class_::MODIFIER_PROTECTED;
     }
 
     /**

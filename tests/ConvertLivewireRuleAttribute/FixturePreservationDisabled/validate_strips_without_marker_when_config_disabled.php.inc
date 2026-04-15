@@ -1,41 +1,30 @@
 <?php
 
-namespace SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute\Fixture;
+namespace SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute\FixturePreservationDisabled;
 
 use Livewire\Attributes\Validate;
 use Livewire\Component;
 
-final class PlainValidateOnlyPage extends Component
+final class ValidateWithoutMarkerComponent extends Component
 {
     #[Validate('required|string|max:255')]
     public string $name = '';
-
-    public function saveName(): void
-    {
-        $this->validateOnly('name');
-    }
 }
 
 ?>
 -----
 <?php
 
-namespace SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute\Fixture;
+namespace SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute\FixturePreservationDisabled;
 
 use SanderMuller\FluentValidation\FluentRule;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
 
-final class PlainValidateOnlyPage extends Component
+final class ValidateWithoutMarkerComponent extends Component
 {
-    #[Validate]
     public string $name = '';
-
-    public function saveName(): void
-    {
-        $this->validateOnly('name');
-    }
 
     /**
      * @return array<string, ValidationRule|string|array<mixed>>

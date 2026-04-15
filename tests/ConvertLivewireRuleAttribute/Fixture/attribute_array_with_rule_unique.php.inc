@@ -27,6 +27,7 @@ use Livewire\Component;
 
 final class ArrayRuleUniqueAttributeComponent extends Component
 {
+    #[Validate]
     public string $email = '';
 
     /**

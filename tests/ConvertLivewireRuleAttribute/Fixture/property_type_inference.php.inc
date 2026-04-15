@@ -36,14 +36,19 @@ use Livewire\Component;
 
 final class TypedPropertyComponent extends Component
 {
+    #[Validate]
     public string $category = '';
 
+    #[Validate]
     public string $description = '';
 
+    #[Validate]
     public int $count = 0;
 
+    #[Validate]
     public bool $confirmed = false;
 
+    #[Validate]
     public string $title = '';
 
     /**

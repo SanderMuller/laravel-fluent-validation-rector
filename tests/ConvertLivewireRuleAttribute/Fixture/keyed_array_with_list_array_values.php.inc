@@ -27,6 +27,7 @@ use Livewire\Component;
 
 final class KeyedArrayWithListArrayValues extends Component
 {
+    #[Validate]
     public array $todos = [];
 
     /**
