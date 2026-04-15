@@ -7,6 +7,7 @@ use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\Namespace_;
 use PhpParser\Node\Stmt\Nop;
 use PhpParser\Node\Stmt\TraitUse;
+use PhpParser\Node\Stmt\TraitUseAdaptation;
 use Rector\Rector\AbstractRector;
 
 /**
@@ -20,9 +21,13 @@ trait ManagesTraitInsertion
 {
     use ManagesNamespaceImports;
 
-    private function insertTraitUseInClass(Class_ $class, string $shortName): void
+    /**
+     * @param  list<TraitUseAdaptation>  $adaptations  optional `insteadof` / `as` adaptations
+     *                                                 emitted inside the trait-use body
+     */
+    private function insertTraitUseInClass(Class_ $class, string $shortName, array $adaptations = []): void
     {
-        $traitUse = new TraitUse([new Name($shortName)]);
+        $traitUse = new TraitUse([new Name($shortName)], $adaptations);
 
         $insertPosition = $this->resolveSortedTraitInsertPosition($class, $shortName);
 

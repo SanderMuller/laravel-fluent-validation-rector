@@ -29,26 +29,38 @@ trait DetectsFilamentForms
 
     private function isFilamentClass(Class_ $class): bool
     {
-        if ($this->classHasFilamentTraitDirectly($class)) {
+        if ($this->findDirectFilamentTrait($class) instanceof Name) {
             return true;
         }
 
         return $this->ancestorHasFilamentTrait($class);
     }
 
-    private function classHasFilamentTraitDirectly(Class_ $class): bool
+    /**
+     * Return the Name node of the first Filament trait used directly on this
+     * class (not inherited). Used when emitting the `insteadof` adaptation so
+     * the adaptation references the same namespace form the consumer wrote
+     * (short alias vs fully-qualified). Returns null if the class has no
+     * direct Filament trait.
+     */
+    private function findDirectFilamentTrait(Class_ $class): ?Name
     {
         foreach ($class->getTraitUses() as $traitUse) {
             foreach ($traitUse->traits as $trait) {
                 $name = $this->getName($trait);
 
                 if ($name !== null && $this->nameMatchesFilamentNeedle($name)) {
-                    return true;
+                    return $trait;
                 }
             }
         }
 
-        return false;
+        return null;
+    }
+
+    private function classHasFilamentTraitDirectly(Class_ $class): bool
+    {
+        return $this->findDirectFilamentTrait($class) instanceof Name;
     }
 
     private function ancestorHasFilamentTrait(Class_ $class): bool

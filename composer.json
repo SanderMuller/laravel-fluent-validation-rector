@@ -15,7 +15,7 @@
     "require": {
         "php": "^8.2",
         "rector/rector": "^2.4.1",
-        "sandermuller/laravel-fluent-validation": "^1.8",
+        "sandermuller/laravel-fluent-validation": "^1.8.1",
         "symplify/rule-doc-generator-contracts": "^11.2"
     },
     "require-dev": {
@@ -43,6 +43,9 @@
             "SanderMuller\\FluentValidationRector\\Tests\\": "tests/"
         }
     },
+    "bin": [
+        "bin/fluent-validation-migrate"
+    ],
     "extra": {
         "rector": {
             "includes": ["config/config.php"]

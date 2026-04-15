@@ -33,7 +33,12 @@ use SanderMuller\FluentValidationRector\Tests\AddHasFluentValidationTrait\Fixtur
 
 final class PreviouslyMismatchedFilamentComponent extends Component
 {
-    use HasFluentValidationForFilament;
+    use HasFluentValidationForFilament {
+        HasFluentValidationForFilament::validate insteadof InteractsWithForms;
+        HasFluentValidationForFilament::validateOnly insteadof InteractsWithForms;
+        HasFluentValidationForFilament::getRules insteadof InteractsWithForms;
+        HasFluentValidationForFilament::getValidationAttributes insteadof InteractsWithForms;
+    }
     use InteractsWithForms;
 
     public function rules(): array

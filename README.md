@@ -48,6 +48,7 @@ public function rules(): array
 - [Diagnostics](#diagnostics) — skip log, cache interactions, manual spot-checks
 
 **Reference**
+- [Filament migration helper](#filament-migration-helper) — `vendor/bin/fluent-validation-migrate` for the `1.7.x → 1.8.1` upgrade
 - [Known limitations](#known-limitations)
 - [License](#license)
 
@@ -57,7 +58,10 @@ public function rules(): array
 composer require --dev sandermuller/laravel-fluent-validation-rector
 ```
 
-Requires PHP 8.2+, Rector 2.4+, and [sandermuller/laravel-fluent-validation](https://github.com/sandermuller/laravel-fluent-validation) ^1.7.1. The main-package constraint is important: 1.7.1 introduced the `HasFluentValidation::getRules()` override that flattens nested `each()`/`children()` back to wildcard keys at runtime, which the grouping rector relies on for Livewire safety. Older main-package versions would break at runtime on Livewire components with grouped rules.
+Requires PHP 8.2+, Rector 2.4+, and [sandermuller/laravel-fluent-validation](https://github.com/sandermuller/laravel-fluent-validation) ^1.8.1. The main-package constraint is important: 1.8.1 introduces the `HasFluentValidationForFilament` trait with overrides that require an `insteadof` adaptation alongside Filament's `InteractsWithForms` / `InteractsWithSchemas`. Rector emits the correct adaptation automatically on direct Filament compositions.
+
+> [!IMPORTANT]
+> Upgrading a codebase from main-package `1.7.x` to `1.8.1`? Run `vendor/bin/fluent-validation-migrate` BEFORE your first `vendor/bin/rector process`. See [Filament migration helper](#filament-migration-helper) for details — once the upgrade puts a Filament+Livewire class into its fatal-at-load state, AST-based tools (including rector) can't touch it.
 
 ## Quick start
 
@@ -96,7 +100,7 @@ Grouped by the set that includes them. `FluentValidationSetList::ALL` runs every
 ### Traits (set `TRAITS`)
 
 - **`AddHasFluentRulesTraitRector`** adds `use HasFluentRules;` to FormRequests that use FluentRule.
-- **`AddHasFluentValidationTraitRector`** adds the fluent-validation trait to Livewire components that use FluentRule. Picks `HasFluentValidation` for plain Livewire components, or `HasFluentValidationForFilament` (main package `^1.8`) when Filament's `InteractsWithForms` (v3/v4) or `InteractsWithSchemas` (v5) is present on the class or any ancestor. If the wrong variant is already on a Filament class, the rector swaps it to the right one and drops the orphaned import.
+- **`AddHasFluentValidationTraitRector`** adds the fluent-validation trait to Livewire components that use FluentRule. Picks `HasFluentValidation` for plain Livewire components, or `HasFluentValidationForFilament` + a 4-method `insteadof` block when Filament's `InteractsWithForms` (v3/v4) or `InteractsWithSchemas` (v5) is used **directly** on the class. Ancestor-only Filament usage is skip-logged (PHP method resolution through inheritance is fragile; user must add the trait on the concrete subclass). If the wrong variant is already directly on a class, the rector swaps it to the right one and drops the orphaned import.
 
 > [!TIP]
 > If your codebase has a shared FormRequest or Livewire base, declare `use HasFluentRules;` (or `HasFluentValidation`) on the base once and every subclass inherits it. The trait rectors walk the ancestor chain via `ReflectionClass` and won't re-add the trait on subclasses, so no `base_classes` configuration is needed.
@@ -184,6 +188,35 @@ At the end of each Rector invocation, a single STDOUT line surfaces the log's ex
 
 > [!NOTE]
 > `ConvertLivewireRuleAttributeRector` verifies the generated `rules(): array` is syntactically correct, but it can't prove the converted rule is behaviorally equivalent to the source attribute. If a converted Livewire component has no feature test covering validation, review the diff by hand and watch for dropped `message:` / `messages:` / `onUpdate:` args (logged to the skip file) that need manual migration to Livewire's `messages(): array` hook.
+
+## Filament migration helper
+
+Consumers upgrading from main-package `1.7.x` to `1.8.1` with Filament + Livewire components face an autoload catch-22: the new `HasFluentValidationForFilament` trait + Filament's `InteractsWithForms` compose to a method-collision fatal-at-load until an `insteadof` adaptation is in place. Rector (and every other AST-based tool) autoloads classes during analysis, which trips the fatal before the tool can fix the file.
+
+The package ships a standalone source-text migrator for this exact state:
+
+```bash
+# preview what would change (no writes)
+vendor/bin/fluent-validation-migrate --dry-run
+
+# apply in-place across app/ (default), or pass custom paths
+vendor/bin/fluent-validation-migrate
+vendor/bin/fluent-validation-migrate app/ src/Livewire/
+```
+
+The script operates purely on file text — no class autoload, no Rector, no PhpParser — so it runs successfully even when `vendor/bin/rector process` would fatal partway through. On each `.php` file containing BOTH a `HasFluentValidation` (or `HasFluentValidationForFilament`) import AND a Filament trait (`InteractsWithForms` / `InteractsWithSchemas`), it:
+
+1. Swaps the import + in-class trait-use line to `HasFluentValidationForFilament`.
+2. Adds the 4-method `insteadof` block for `validate`, `validateOnly`, `getRules`, and `getValidationAttributes`.
+3. Leaves `$this->validate(...)` / `$this->validateOnly(...)` call sites alone — the trait overrides those standard names in `1.8.1`, so existing call sites stay correct.
+
+Files that don't match the pattern (plain Livewire using `HasFluentValidation` without Filament, or classes already carrying the correct adaptation) are untouched. The script is idempotent — running it twice yields the same result as running it once.
+
+Standard migration order for a `1.7.x → 1.8.1` upgrade:
+
+1. `composer require sandermuller/laravel-fluent-validation:^1.8.1`
+2. `vendor/bin/fluent-validation-migrate` (fix-up the affected classes before the fatal spreads to tooling)
+3. `vendor/bin/rector process` (regular rector run, now against a clean codebase)
 
 ## Known limitations
 

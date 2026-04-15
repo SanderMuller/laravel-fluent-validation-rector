@@ -31,7 +31,12 @@ use SanderMuller\FluentValidationRector\Tests\AddHasFluentValidationTrait\Fixtur
 
 final class FilamentV5Component extends Component
 {
-    use HasFluentValidationForFilament;
+    use HasFluentValidationForFilament {
+        HasFluentValidationForFilament::validate insteadof InteractsWithSchemas;
+        HasFluentValidationForFilament::validateOnly insteadof InteractsWithSchemas;
+        HasFluentValidationForFilament::getRules insteadof InteractsWithSchemas;
+        HasFluentValidationForFilament::getValidationAttributes insteadof InteractsWithSchemas;
+    }
     use InteractsWithSchemas;
 
     public function rules(): array
