@@ -2,6 +2,43 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 0.4.14 - 2026-04-15
+
+### Changed
+
+#### `@return` annotation uses Laravel's `ValidationRule` interface
+
+`ConvertLivewireRuleAttributeRector::installRulesMethod()` now emits:
+
+```php
+/**
+ * @return array<string, ValidationRule|string|array<mixed>>
+ */
+protected function rules(): array { /* … */ }
+
+```
+The annotation imports `Illuminate\Contracts\Validation\ValidationRule` via Rector's import-names pass (the same pass that handles `FluentRule` imports), so the pre-Pint output has a proper `use` statement + short-name reference.
+
+**Why `ValidationRule` + `string` + `array<mixed>` union:**
+
+- `FluentRule` (the static factory class) doesn't implement any shared interface with the concrete rule classes it produces. Verified directly: `class FluentRule` has no extends/implements, while `class EmailRule implements DataAwareRule, ValidationRule, ValidatorAwareRule`. The 0.4.13 annotation `array<string, FluentRule>` was semantically wrong — PHPStan correctly flagged it as a `return.type` mismatch.
+- All concrete `*Rule` classes the rector emits (`EmailRule`, `StringRule`, `FieldRule`, `IntegerRule`, etc.) already implement `Illuminate\Contracts\Validation\ValidationRule`. That's the accurate common supertype.
+- `string` + `array<mixed>` cover Laravel-native rule forms a user might add via manual edit to the generated method (raw pipe-delimited strings, array-tuple rules). Future-safe annotation.
+
+**Why not `array<string, mixed>`:**
+
+`mixed` matches Laravel's own `rules()` convention and would also satisfy vanilla PHPStan, but strict-mode tooling (`rector/type-perfect`, `tomasvotruba/type-coverage`) flags `mixed` as "too broad — use narrower type." The `ValidationRule|string|array<mixed>` union is strictly narrower than `mixed` while still covering every shape the rector emits or a user might add.
+
+**Why not a shared `FluentRule` interface on the main package:**
+
+Mijntp's initial proposal was to add a shared supertype to `laravel-fluent-validation` 1.8 so the annotation could reference a package-native type. fwwl0vv3 (main-package maintainer) declined the interface on the grounds that `FluentRule` is intentionally a factory, not a value type, and Laravel's existing `ValidationRule` interface already provides the right supertype for the concrete rules. The rector's fix is standalone — no cross-package coordination or version bump required on the main package.
+
+### Fixtures
+
+Updated 10 fixtures under `tests/ConvertLivewireRuleAttribute/Fixture/` to match the new annotation. Each fixture now also shows the `use Illuminate\Contracts\Validation\ValidationRule;` import added to the file-level import block.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/0.4.13...0.4.14
+
 ## 0.4.13 - 2026-04-14
 
 ### Changed
@@ -15,6 +52,7 @@ All notable changes to `sandermuller/laravel-fluent-validation-rector` will be d
  * @return array<string, FluentRule|string|array<string, mixed>>
  */
 protected function rules(): array { /* … */ }
+
 
 ```
 The union was defensive — `FluentRule` for chain entries, `string` for raw rule-string fallbacks, `array<string, mixed>` for nested Livewire dotted rules. But those last two shapes only exist on the `mergeIntoExistingRulesMethod()` path, which doesn't emit a docblock. The fresh-emit path (the only path that sets the docblock) produces entries exclusively from `convertStringToFluentRule()` and `convertArrayAttributeArg()` — both return FluentRule builder expressions.
@@ -102,6 +140,7 @@ class MyComponent extends Component {
 
 
 
+
 ```
 Removed from `GroupWildcardRulesToEachRector`:
 
@@ -166,6 +205,7 @@ Users running Rector on codebases with heavy trait-hoisting (abstract bases that
 
 ```
 [fluent-validation] 42 skip entries written to .rector-fluent-validation-skips.log — see for details
+
 
 
 
@@ -258,6 +298,7 @@ class MyRequest {
 
 
 
+
 ```
 Pint's `ordered_traits` continues to resort if a consumer's existing trait list wasn't already alphabetical, but on well-ordered class bodies Pint is typically a no-op now.
 
@@ -322,6 +363,7 @@ protected function rules(): array
         'email' => FluentRule::email()->nullable(),
     ];
 }
+
 
 
 
@@ -481,6 +523,7 @@ protected function rules(): array
 
 
 
+
 ```
 The union accurately describes what the generated array contains:
 
@@ -538,6 +581,7 @@ public string $description = '';
 #[Validate('min:1')]
 public int $count = 0;
 // → 'count' => FluentRule::integer()->min(1)
+
 
 
 
@@ -624,6 +668,7 @@ public int $count = 0;
 
 
 
+
 ```
 Maps:
 
@@ -675,6 +720,7 @@ final class Settings extends Component
         ];
     }
 }
+
 
 
 
@@ -784,6 +830,7 @@ Mirrors the 0.3.0 fix on `GroupWildcardRulesToEachRector`. Now every rector in t
 
 
 
+
 ```
 Reported by hihaho (gap note during 0.3.0 re-verification) and collectiq (Nit A).
 
@@ -833,6 +880,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 #### Flat wildcard `'items.*'` entries fold into parent `->each(<scalar>)`
 
@@ -846,6 +894,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
@@ -927,6 +976,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 Reported from a run against the hihaho codebase (20+ files).
 
@@ -942,6 +992,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
