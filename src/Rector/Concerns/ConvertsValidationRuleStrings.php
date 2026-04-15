@@ -84,6 +84,8 @@ trait ConvertsValidationRuleStrings
 {
     use LogsSkipReasons;
 
+    use NormalizesRulesDocblock;
+
     /**
      * In-memory cache of parent class FQCNs that are unsafe to convert (subclass
      * calls parent::rules() with array manipulation). Populated from both file-level
@@ -273,19 +275,31 @@ trait ConvertsValidationRuleStrings
                 continue;
             }
 
-            $this->traverseNodesWithCallable($classMethod, function (Node $node) use (&$hasChanged): ?Return_ {
+            $methodChanged = false;
+
+            $this->traverseNodesWithCallable($classMethod, function (Node $node) use (&$methodChanged): ?Return_ {
                 if (! $node instanceof Return_ || ! $node->expr instanceof Array_) {
                     return null;
                 }
 
                 if ($this->processValidationRules($node->expr)) {
-                    $hasChanged = true;
+                    $methodChanged = true;
 
                     return $node;
                 }
 
                 return null;
             });
+
+            if ($methodChanged) {
+                $hasChanged = true;
+
+                // Body mutation may have invalidated a narrow `@return` annotation
+                // written against the pre-conversion rule shape. Normalize now,
+                // before Pint touches the file — see NormalizesRulesDocblock for
+                // the rationale and mijntp's 0.4.14 finding.
+                $this->normalizeRulesDocblockIfStale($classMethod);
+            }
         }
 
         return $hasChanged ? $classLike : null;

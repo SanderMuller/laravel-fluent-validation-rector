@@ -16,6 +16,7 @@ use SanderMuller\FluentValidation\HasFluentValidation;
 use SanderMuller\FluentValidation\HasFluentValidationForFilament;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsFilamentForms;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
+use SanderMuller\FluentValidationRector\Rector\Concerns\IdentifiesLivewireClasses;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesTraitInsertion;
 use SanderMuller\FluentValidationRector\RunSummary;
@@ -57,6 +58,7 @@ final class AddHasFluentValidationTraitRector extends AbstractRector implements 
 {
     use DetectsFilamentForms;
     use DetectsInheritedTraits;
+    use IdentifiesLivewireClasses;
     use LogsSkipReasons;
     use ManagesTraitInsertion;
 
@@ -312,25 +314,6 @@ CODE_SAMPLE
         }
 
         return $adaptations;
-    }
-
-    private function isLivewireClass(Class_ $class): bool
-    {
-        if ($class->extends instanceof Name) {
-            $parentName = $this->getName($class->extends);
-
-            if (in_array($parentName, ['Livewire\Component', 'Livewire\Form'], true)) {
-                return true;
-            }
-        }
-
-        foreach ($class->getMethods() as $method) {
-            if ($this->isName($method, 'render')) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /**

@@ -43,9 +43,6 @@
             "SanderMuller\\FluentValidationRector\\Tests\\": "tests/"
         }
     },
-    "bin": [
-        "bin/fluent-validation-migrate"
-    ],
     "extra": {
         "rector": {
             "includes": ["config/config.php"]

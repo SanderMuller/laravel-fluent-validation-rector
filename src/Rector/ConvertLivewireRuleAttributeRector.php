@@ -29,6 +29,7 @@ use Rector\StaticTypeMapper\ValueObject\Type\FullyQualifiedObjectType;
 use ReflectionClass;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ConvertsValidationRuleArrays;
+use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsLivewireRuleAttributes;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\RunSummary;
 use SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute\ConvertLivewireRuleAttributeRectorTest;
@@ -75,6 +76,7 @@ use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
 final class ConvertLivewireRuleAttributeRector extends AbstractRector implements DocumentedRuleInterface
 {
     use ConvertsValidationRuleArrays;
+    use DetectsLivewireRuleAttributes;
     use LogsSkipReasons;
 
     public function __construct(private readonly UseNodesToAddCollector $useNodesToAddCollector)
@@ -128,6 +130,21 @@ CODE_SAMPLE
     public function refactor(Node $node): ?Node
     {
         if (! $node instanceof Class_) {
+            return null;
+        }
+
+        // Candidacy gate: bail silently on classes that don't carry at least
+        // one #[Rule]/#[Validate] attribute. Pre-0.4.17 the rector's
+        // hybrid-bail fired on any class with a $this->validate(...) call
+        // regardless of whether it had attributes to migrate; mijntp ran
+        // 0.4.14 across a production app and got 34 spurious skip-log entries
+        // on Actions / FormRequests / Controllers / DataObjects that had
+        // `validate()` calls for reasons unrelated to Livewire attribute
+        // conversion. Scoping the hybrid-bail behind the attribute-presence
+        // check eliminates that noise without affecting the genuine case —
+        // a class with no Livewire rule attributes has nothing for this
+        // rector to do anyway, so a silent no-op is correct.
+        if (! $this->hasAnyLivewireRuleAttribute($node)) {
             return null;
         }
 
@@ -237,22 +254,6 @@ CODE_SAMPLE
         $property->attrGroups = array_values($property->attrGroups);
 
         return $fluentExpr;
-    }
-
-    private function isLivewireRuleAttribute(Attribute $attr): bool
-    {
-        $name = $this->getName($attr->name);
-
-        if ($name === null) {
-            return false;
-        }
-
-        return in_array($name, [
-            'Livewire\Attributes\Rule',
-            'Livewire\Attributes\Validate',
-            'Rule',
-            'Validate',
-        ], true);
     }
 
     private function convertAttributeToFluentExpr(Attribute $attr, Property $property, Class_ $class): ?Expr
@@ -605,6 +606,12 @@ CODE_SAMPLE
         foreach ($entries as $entry) {
             $returnArray->items[] = new ArrayItem($entry['expr'], new String_($entry['name']));
         }
+
+        // Merging new entries into an existing rules() body invalidates any
+        // author-written narrow `@return` annotation that was accurate for
+        // the pre-merge shape. See NormalizesRulesDocblock for the rationale
+        // and mijntp's 0.4.14 finding on 5 production files.
+        $this->normalizeRulesDocblockIfStale($method);
 
         return true;
     }

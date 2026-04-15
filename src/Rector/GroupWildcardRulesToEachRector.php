@@ -22,6 +22,7 @@ use Rector\Rector\AbstractRector;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesNamespaceImports;
+use SanderMuller\FluentValidationRector\Rector\Concerns\NormalizesRulesDocblock;
 use SanderMuller\FluentValidationRector\RunSummary;
 use SanderMuller\FluentValidationRector\Tests\GroupWildcardRulesToEach\GroupWildcardRulesToEachRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
@@ -46,6 +47,7 @@ final class GroupWildcardRulesToEachRector extends AbstractRector implements Doc
 {
     use LogsSkipReasons;
     use ManagesNamespaceImports;
+    use NormalizesRulesDocblock;
 
     private const int MAX_NESTING_DEPTH = 4;
 
@@ -163,19 +165,32 @@ CODE_SAMPLE
                 continue;
             }
 
-            $this->traverseNodesWithCallable($method, function (Node $inner) use (&$hasChanged): ?Return_ {
+            $methodChanged = false;
+
+            $this->traverseNodesWithCallable($method, function (Node $inner) use (&$methodChanged): ?Return_ {
                 if (! $inner instanceof Return_ || ! $inner->expr instanceof Array_) {
                     return null;
                 }
 
                 if ($this->groupRulesArray($inner->expr)) {
-                    $hasChanged = true;
+                    $methodChanged = true;
 
                     return $inner;
                 }
 
                 return null;
             });
+
+            if ($methodChanged) {
+                $hasChanged = true;
+
+                // Grouping flat wildcards into `array()->each(...)` changes the
+                // terminal Rule subclass (e.g. StringRule → ArrayRule), which
+                // invalidates narrow author-written `@return` annotations. See
+                // NormalizesRulesDocblock for rationale; mijntp's 0.4.14 run
+                // surfaced 5 production files with this exact shape.
+                $this->normalizeRulesDocblockIfStale($method);
+            }
         }
 
         return $hasChanged;
