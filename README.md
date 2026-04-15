@@ -30,7 +30,7 @@ public function rules(): array
 }
 ```
 
-> Tested on a production codebase: **448 files converted, 3469 tests still passing**. On a separate 108-FormRequest corpus the rector produced a net **−1,426 LOC** — fluent is substantially more compact than array-form at scale.
+> Tested on a production codebase: **448 files converted, 3469 tests still passing**.
 
 ## Contents
 
