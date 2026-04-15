@@ -21,7 +21,6 @@ use PhpParser\Node\Stmt\Nop;
 use PhpParser\Node\Stmt\Property;
 use PhpParser\Node\Stmt\Return_;
 use PhpParser\NodeVisitor;
-use PhpParser\PrettyPrinter\Standard;
 use Rector\Contract\Rector\ConfigurableRectorInterface;
 use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\PostRector\Collector\UseNodesToAddCollector;
@@ -31,7 +30,9 @@ use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ConvertsValidationRuleArrays;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsLivewireRuleAttributes;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ExpandsKeyedAttributeArrays;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ExtractsLivewireAttributeLabels;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ReportsLivewireAttributeArgs;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ResolvesInheritedRulesVisibility;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ResolvesRealtimeValidationMarker;
 use SanderMuller\FluentValidationRector\RunSummary;
@@ -83,7 +84,9 @@ final class ConvertLivewireRuleAttributeRector extends AbstractRector implements
     use ConvertsValidationRuleArrays;
     use DetectsLivewireRuleAttributes;
     use ExpandsKeyedAttributeArrays;
+    use ExtractsLivewireAttributeLabels;
     use LogsSkipReasons;
+    use ReportsLivewireAttributeArgs;
     use ResolvesInheritedRulesVisibility;
     use ResolvesRealtimeValidationMarker;
 
@@ -266,6 +269,14 @@ CODE_SAMPLE
         $allEntries = [];
         $markerName = null;
 
+        // Aggregate opt-out check runs BEFORE the strip loop so a later
+        // `#[Validate(onUpdate: false)]` attribute on the same property
+        // (past the first-wins extraction point, soon to be stripped) can
+        // still veto marker preservation. Without this the first-wins
+        // behaviour for rule extraction would silently re-enable real-time
+        // validation for a property whose user explicitly turned it off.
+        $vetoedByOptOut = $this->anyValidateOptsOutOfRealtime($property);
+
         foreach ($property->attrGroups as $groupIndex => $attrGroup) {
             $remainingAttrs = [];
 
@@ -306,7 +317,9 @@ CODE_SAMPLE
 
         $property->attrGroups = array_values($property->attrGroups);
 
-        $this->appendRealtimeValidationMarker($property, $markerName);
+        if (! $vetoedByOptOut) {
+            $this->appendRealtimeValidationMarker($property, $markerName);
+        }
 
         return $allEntries === [] ? null : $allEntries;
     }
@@ -347,7 +360,13 @@ CODE_SAMPLE
         }
 
         if ($ruleArg->value instanceof Array_ && $this->isKeyedArrayAttribute($ruleArg->value)) {
-            return $this->convertKeyedAttributeToEntries($ruleArg->value, $attr, $property, $class);
+            $entries = $this->convertKeyedAttributeToEntries($ruleArg->value, $attr, $property, $class);
+
+            if ($entries === null) {
+                return null;
+            }
+
+            return $this->applyKeyedLabels($entries, $this->extractKeyedLabels($attr));
         }
 
         $fluent = $this->convertSingleValueRuleArg($ruleArg->value, $property, $class);
@@ -356,7 +375,7 @@ CODE_SAMPLE
             return null;
         }
 
-        $label = $this->extractLabelArg($attr);
+        $label = $this->extractRootLabel($attr);
 
         if ($label !== null) {
             $fluent = new MethodCall($fluent, new Identifier('label'), [
@@ -380,21 +399,6 @@ CODE_SAMPLE
         }
 
         return null;
-    }
-
-    private function logUnsupportedAttributeArgs(Attribute $attr, Property $property, Class_ $class): void
-    {
-        $unsupportedSummary = $this->describeUnsupportedAttributeArgs($attr);
-
-        if ($unsupportedSummary === null) {
-            return;
-        }
-
-        $this->logSkip($class, sprintf(
-            '#[Rule] attribute on property $%s dropped unsupported args (%s); migrate to messages() / hooks manually',
-            $this->firstPropertyName($property),
-            $unsupportedSummary,
-        ));
     }
 
     /**
@@ -456,46 +460,6 @@ CODE_SAMPLE
         return in_array($name, ['string', 'int', 'integer', 'bool', 'boolean', 'float', 'array'], true)
             ? $name
             : null;
-    }
-
-    private function extractLabelArg(Attribute $attr): ?string
-    {
-        foreach ($attr->args as $arg) {
-            if ($arg->name instanceof Identifier && $arg->name->toString() === 'as' && $arg->value instanceof String_) {
-                return $arg->value->value;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Describe any attribute args we don't know how to migrate (`messages:`,
-     * `onUpdate:`). Used to surface a TODO comment beside the converted
-     * chain — peer-requested so manual-migration targets are obvious.
-     */
-    private function describeUnsupportedAttributeArgs(Attribute $attr): ?string
-    {
-        $dropped = [];
-
-        foreach ($attr->args as $arg) {
-            if (! $arg->name instanceof Identifier) {
-                continue;
-            }
-
-            $name = $arg->name->toString();
-
-            // Livewire's attribute arg list: `as` (→ ->label()), `message` (singular,
-            // per-property message override), `messages` (plural, for attribute chains
-            // on a single property — rare but documented), `onUpdate` (lifecycle hook).
-            // Only `as` has a direct FluentRule equivalent; the rest get a TODO
-            // comment listing the dropped payload so manual migration is obvious.
-            if (in_array($name, ['message', 'messages', 'onUpdate'], true)) {
-                $dropped[] = $name . ': ' . $this->print($arg->value);
-            }
-        }
-
-        return $dropped === [] ? null : implode(', ', $dropped);
     }
 
     /**
@@ -729,13 +693,6 @@ CODE_SAMPLE
 
         $this->useNodesToAddCollector->addUseImport(new FullyQualifiedObjectType(FluentRule::class));
         $this->needsFluentRuleImport = false;
-    }
-
-    private function print(Node $node): string
-    {
-        $printer = new Standard();
-
-        return $printer->prettyPrint([$node]);
     }
 
     /**

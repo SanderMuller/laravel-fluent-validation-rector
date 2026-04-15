@@ -115,59 +115,66 @@ just syntactically plausible code. Three correctness pillars:
 
 ## Implementation
 
-### Phase 1: Fix keyed-array attribute handling (Priority: HIGH)
+### Phase 1: Fix keyed-array attribute handling (Priority: HIGH) — ✅ shipped
 
-- [ ] Detect the keyed-array shape inside `convertArrayAttributeArg()`: if
+- [x] Detect the keyed-array shape inside `convertArrayAttributeArg()`: if
       any `ArrayItem->key` is a `String_`, route to a new
       `convertKeyedArrayAttribute()` path instead of the list-chain converter
-- [ ] Expand each keyed entry into its own `property.subkey => FluentRule…`
+- [x] Expand each keyed entry into its own `property.subkey => FluentRule…`
       entry in the collected rules map. Keys that are pure property names
       merge with the annotated property's own entry; `.` / `.*` keys produce
       additional entries. Reuse `convertArrayToFluentRule()` or
       `convertStringToFluentRule()` for each value based on its shape
-- [ ] Reject keyed arrays where any value can't convert — skip-log with the
+- [x] Reject keyed arrays where any value can't convert — skip-log with the
       offending key and leave the whole attribute intact (better a visible
       no-op than partial rules)
-- [ ] Tests — fixtures for: single keyed entry, property + `.*` wildcard
+- [x] Tests — fixtures for: single keyed entry, property + `.*` wildcard
       pair, value-is-list-array, value-is-string, value-with-rule-object,
       unconvertible value bail
+- [x] Post-ship hardening: reject numeric-string keys (`['0' => 'required']`)
+      which would synthesise bogus top-level rule entries. Codex adversarial
+      review catch, fixture pins the bail.
 
-### Phase 2: Preserve real-time validation semantics (Priority: HIGH)
+### Phase 2: Preserve real-time validation semantics (Priority: HIGH) — ✅ shipped
 
-- [ ] After conversion, detect whether the property needs real-time
+- [x] After conversion, detect whether the property needs real-time
       preservation. Heuristic: the property had `#[Validate]` (not the
       deprecated `#[Rule]`) and no explicit `onUpdate: false` on any of
       its Validate attributes. `onUpdate: false` attributes don't need
       the marker — stripping them is a no-op
-- [ ] When preservation is needed, retain (or synthesize) an empty
+- [x] When preservation is needed, retain (or synthesize) an empty
       `#[Validate]` attribute on the property instead of removing all
       attribute groups. Documented Livewire idiom:
       `#[Validate] public string $name = '';`
-- [ ] Add a config flag `preserve_realtime_validation` (default `true`) so
+- [x] Add a config flag `preserve_realtime_validation` (default `true`) so
       consumers whose properties aren't bound to `wire:model.live` can opt
       out of the marker attributes if they find them noisy
-- [ ] Tests — fixtures for: `#[Validate]` preserved as empty marker,
+- [x] Tests — fixtures for: `#[Validate]` preserved as empty marker,
       `#[Validate(onUpdate: false)]` stripped cleanly, `#[Rule]` deprecated
       form stripped cleanly (no marker), config-disabled mode strips all
+- [x] Post-ship hardening: aggregate `onUpdate: false` check across all
+      `#[Validate]` attributes on the property (first-wins for rule
+      extraction; aggregated veto for marker preservation). Codex adversarial
+      review catch, regression fixture pins the multi-attribute case.
 
-### Phase 3: Correct the named-args surface (Priority: MEDIUM)
+### Phase 3: Correct the named-args surface (Priority: MEDIUM) — ✅ shipped
 
-- [ ] Remove `'messages'` from `describeUnsupportedAttributeArgs()` — it is
+- [x] Remove `'messages'` from `describeUnsupportedAttributeArgs()` — it is
       not a Livewire-accepted arg. If encountered, still warn (user-authored
       typo worth flagging) but drop the "dropped" verb since there's nothing
       to migrate
-- [ ] Add detection for `attribute:` and `translate:` args. `attribute:`
+- [x] Add detection for `attribute:` and `translate:` args. `attribute:`
       in array form maps sub-keys to human-friendly labels — expand into
       per-entry `->label()` calls. `translate: false` has no FluentRule
       equivalent and is rare; skip-log and preserve the `#[Validate]` marker
       (Phase 2 composes here)
-- [ ] Extend `as:` handling for array-form: accept an array-keyed map and
+- [x] Extend `as:` handling for array-form: accept an array-keyed map and
       apply `->label()` per expanded rule entry, not just to the root
       property
-- [ ] `message:` array-form handling — deferred to Phase 4 (see Open
+- [x] `message:` array-form handling — deferred to Phase 4 (see Open
       Questions); for now skip-log array-form `message:` with a clear
       pointer to the deferred work
-- [ ] Tests — fixtures for each recognized arg + a fixture pinning array-form
+- [x] Tests — fixtures for each recognized arg + a fixture pinning array-form
       `as:` / `attribute:` expansion across wildcard keys
 
 ### Phase 4: `message:` migration to `messages(): array` (Priority: LOW)
@@ -252,4 +259,38 @@ just syntactically plausible code. Three correctness pillars:
   preserved marker; 3 new regression fixtures pin `onUpdate: false` strips
   cleanly, `#[Rule]` strips without marker, and config-disabled opt-out via
   a separate test class + fixture directory (pattern from prior
-  `insteadof`-opt-in test setup). Phases 3–4 remain queued.
+  `insteadof`-opt-in test setup).
+- 2026-04-15 — **Phase 3 shipped.** `as:` / `attribute:` recognised as
+  synonyms for the field display name. String-form on either arg emits
+  `->label('…')` on the root chain. Array-form keyed maps applied per-entry
+  via an `applyKeyedLabels()` step that runs after keyed-first-arg
+  expansion. Label extraction + `logUnsupportedAttributeArgs` moved into
+  dedicated `ExtractsLivewireAttributeLabels` and `ReportsLivewireAttributeArgs`
+  concerns to keep the host class under the PHPStan complexity cap.
+
+  **`attribute:` wins over `as:` on conflict.** Initial draft of the
+  extractor used PHP array-merge semantics, which made the precedence
+  source-order dependent: `as: [x => A], attribute: [x => B]` produced B,
+  but swapping the arg order produced A. Codex adversarial review caught
+  it; fix collects each arg's map separately and merges with `$attributeMap
+  + $asMap` (the PHP array-union operator keeps the left operand on
+  duplicate keys). Same precedence applies to the string form via
+  `extractRootLabel`. Rationale for picking `attribute:`: it matches
+  Laravel's own `attribute` naming for custom attribute display names
+  (fourth arg to `Validator::make`); `as:` is Livewire's shorter alias.
+  Either is correct in isolation; the policy is deterministic and
+  independent of source ordering.
+
+  `translate: false` added to the dropped-unsupported-args log (no
+  FluentRule equivalent). `messages:` (plural) no longer classified as a
+  dropped known arg — it was never a Livewire-documented shape. Emitted
+  instead via a dedicated "unrecognized arg; likely typo for `message:`?"
+  log line. Array-form `message:` gets its own deferred-to-Phase-4 log
+  pointer. Rule conversion continues to run on the first-arg rule payload
+  regardless of unsupported named args; only the log-line category changed.
+
+  9 new fixtures: string `attribute:` synonym, array-form `as:` with
+  wildcard, array-form `attribute:` with wildcard, `translate: false`
+  dropped, `messages:` typo, array-form `message:` deferred, plus three
+  regression pins from the codex review (string `as:`/`attribute:` conflict
+  in both source orders, array-form conflict). Phase 4 remains queued.

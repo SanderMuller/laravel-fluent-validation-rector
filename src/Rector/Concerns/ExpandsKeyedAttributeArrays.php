@@ -95,6 +95,25 @@ trait ExpandsKeyedAttributeArrays
             return null;
         }
 
+        // Reject numeric-string keys (`['0' => 'required']`). PHP internally
+        // normalizes `['0' => …]` to an integer key which the literal
+        // list-array path would classify positionally; PhpParser preserves the
+        // String_ node as written, so our keyed-shape detector matches. But
+        // a numeric key doesn't refer to a meaningful field path on the
+        // annotated property and would synthesise `rules()` entries for
+        // `'0'` / `'1'` / etc. that have nothing to do with the source
+        // attribute. Fail closed — a visible no-op is safer than
+        // silently manufacturing top-level numeric rule keys.
+        if (is_numeric($item->key->value)) {
+            $this->logSkip($class, sprintf(
+                '#[Rule] attribute on property $%s uses numeric keyed entries (key %s) — not a documented Livewire shape, bailing',
+                $this->firstPropertyName($property),
+                $item->key->value,
+            ));
+
+            return null;
+        }
+
         $fluent = $this->convertSingleValueRuleArg($item->value, $property, $class);
 
         if (! $fluent instanceof Expr) {
