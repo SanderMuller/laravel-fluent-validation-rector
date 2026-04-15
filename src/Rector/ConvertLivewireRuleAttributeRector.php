@@ -30,6 +30,7 @@ use ReflectionClass;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ConvertsValidationRuleArrays;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsLivewireRuleAttributes;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ExpandsKeyedAttributeArrays;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\RunSummary;
 use SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute\ConvertLivewireRuleAttributeRectorTest;
@@ -77,6 +78,7 @@ final class ConvertLivewireRuleAttributeRector extends AbstractRector implements
 {
     use ConvertsValidationRuleArrays;
     use DetectsLivewireRuleAttributes;
+    use ExpandsKeyedAttributeArrays;
     use LogsSkipReasons;
 
     public function __construct(private readonly UseNodesToAddCollector $useNodesToAddCollector)
@@ -181,17 +183,25 @@ CODE_SAMPLE
                 continue;
             }
 
-            $result = $this->extractAndStripRuleAttribute($stmt, $node);
+            $entries = $this->extractAndStripRuleAttribute($stmt, $node);
 
-            if (! $result instanceof Expr) {
+            if ($entries === null) {
                 continue;
             }
 
             foreach ($stmt->props as $propertyItem) {
-                $collected[] = [
-                    'name' => $propertyItem->name->toString(),
-                    'expr' => $this->cloneExpr($result),
-                ];
+                $propertyName = $propertyItem->name->toString();
+
+                foreach ($entries as $entry) {
+                    $collected[] = [
+                        // `null` name = default single-chain extraction → use
+                        // the property name. Explicit keys from a keyed-array
+                        // attribute (`#[Validate(['todos' => …, 'todos.*' => …])]`)
+                        // are kept verbatim.
+                        'name' => $entry['name'] ?? $propertyName,
+                        'expr' => $this->cloneExpr($entry['expr']),
+                    ];
+                }
             }
         }
 
@@ -209,13 +219,22 @@ CODE_SAMPLE
     }
 
     /**
-     * Extract a FluentRule Expr from the property's #[Rule] / #[Validate]
-     * attributes and remove those attributes. Returns null when no
-     * attribute matched or the attribute shape isn't convertible.
+     * Extract the rules-entry list from the property's #[Rule] / #[Validate]
+     * attributes and remove those attributes. Each returned entry is a
+     * `{name: ?string, expr: Expr}` pair: `name = null` means "use the
+     * annotated property's own name" (the default single-chain case), an
+     * explicit `name` comes from a keyed-array attribute and is used
+     * verbatim as the `rules()` key.
+     *
+     * Returns null when no attribute matched or the attribute shape isn't
+     * convertible — the existing attribute groups are preserved in that
+     * case so the consumer can see the untouched input.
+     *
+     * @return list<array{name: ?string, expr: Expr}>|null
      */
-    private function extractAndStripRuleAttribute(Property $property, Class_ $class): ?Expr
+    private function extractAndStripRuleAttribute(Property $property, Class_ $class): ?array
     {
-        $fluentExpr = null;
+        $allEntries = [];
 
         foreach ($property->attrGroups as $groupIndex => $attrGroup) {
             $remainingAttrs = [];
@@ -227,18 +246,18 @@ CODE_SAMPLE
                     continue;
                 }
 
-                $converted = $this->convertAttributeToFluentExpr($attr, $property, $class);
+                $converted = $this->convertAttributeToEntries($attr, $property, $class);
 
-                if (! $converted instanceof Expr) {
+                if ($converted === null) {
                     $remainingAttrs[] = $attr;
 
                     continue;
                 }
 
-                // First convertible Rule attribute becomes the chain root; additional
+                // First convertible Rule attribute becomes the source; additional
                 // attributes on the same property are unusual, so the first one wins.
-                if (! $fluentExpr instanceof Expr) {
-                    $fluentExpr = $converted;
+                if ($allEntries === []) {
+                    $allEntries = $converted;
                 }
             }
 
@@ -253,10 +272,33 @@ CODE_SAMPLE
 
         $property->attrGroups = array_values($property->attrGroups);
 
-        return $fluentExpr;
+        return $allEntries === [] ? null : $allEntries;
     }
 
-    private function convertAttributeToFluentExpr(Attribute $attr, Property $property, Class_ $class): ?Expr
+    /**
+     * Convert one `#[Rule(…)]` / `#[Validate(…)]` attribute into a list of
+     * `rules()` entries. Three branches:
+     *
+     * - String first arg — single chain, `name = null` (use property name).
+     * - **List-array** first arg (`['required', 'email']`) — single chain,
+     *   `name = null`.
+     * - **Keyed-array** first arg (`['todos' => 'required', 'todos.*' => …]`) —
+     *   one entry per key, each carrying the key as its explicit `name`.
+     *
+     * The keyed branch is routed whenever any `ArrayItem->key` is a `String_`.
+     * Mixed keyed-and-list arrays (valid PHP but not a Livewire shape) are
+     * treated as keyed for safety — the list slots would end up on
+     * auto-incremented integer keys, which aren't useful as `rules()` keys, so
+     * the bail is correct.
+     *
+     * `as:` / `message:` / `onUpdate:` / `attribute:` / `translate:` named
+     * args are only applied to the single-chain branches in this release.
+     * Array-form named args paired with a keyed first arg are not yet
+     * expanded — that is Phase 3 work tracked against the array-form spec.
+     *
+     * @return list<array{name: ?string, expr: Expr}>|null
+     */
+    private function convertAttributeToEntries(Attribute $attr, Property $property, Class_ $class): ?array
     {
         if ($attr->args === []) {
             return null;
@@ -268,13 +310,11 @@ CODE_SAMPLE
             return null;
         }
 
-        if ($ruleArg->value instanceof String_) {
-            $fluent = $this->convertStringToFluentRule($ruleArg->value->value, $this->resolvePropertyTypeHint($property));
-        } elseif ($ruleArg->value instanceof Array_) {
-            $fluent = $this->convertArrayAttributeArg($ruleArg->value, $property, $class);
-        } else {
-            return null;
+        if ($ruleArg->value instanceof Array_ && $this->isKeyedArrayAttribute($ruleArg->value)) {
+            return $this->convertKeyedAttributeToEntries($ruleArg->value, $attr, $property, $class);
         }
+
+        $fluent = $this->convertSingleValueRuleArg($ruleArg->value, $property, $class);
 
         if (! $fluent instanceof Expr) {
             return null;
@@ -288,23 +328,37 @@ CODE_SAMPLE
             ]);
         }
 
-        $unsupportedSummary = $this->describeUnsupportedAttributeArgs($attr);
+        $this->logUnsupportedAttributeArgs($attr, $property, $class);
 
-        if ($unsupportedSummary !== null) {
-            // The unsupported payload is logged via logSkip() so users running with
-            // FLUENT_VALIDATION_RECTOR_VERBOSE=1 see exactly what got dropped. An
-            // in-source `// TODO:` comment would be friendlier but PhpParser's
-            // pretty-printer doesn't reliably emit comments attached to sub-expressions
-            // inside array items; a proper implementation needs a post-rector pass to
-            // inject a Nop+Comment node before the return, which is scoped out of 0.4.0.
-            $this->logSkip($class, sprintf(
-                '#[Rule] attribute on property $%s dropped unsupported args (%s); migrate to messages() / hooks manually',
-                $this->firstPropertyName($property),
-                $unsupportedSummary,
-            ));
+        return [['name' => null, 'expr' => $fluent]];
+    }
+
+    private function convertSingleValueRuleArg(Expr $value, Property $property, Class_ $class): ?Expr
+    {
+        if ($value instanceof String_) {
+            return $this->convertStringToFluentRule($value->value, $this->resolvePropertyTypeHint($property));
         }
 
-        return $fluent;
+        if ($value instanceof Array_) {
+            return $this->convertArrayAttributeArg($value, $property, $class);
+        }
+
+        return null;
+    }
+
+    private function logUnsupportedAttributeArgs(Attribute $attr, Property $property, Class_ $class): void
+    {
+        $unsupportedSummary = $this->describeUnsupportedAttributeArgs($attr);
+
+        if ($unsupportedSummary === null) {
+            return;
+        }
+
+        $this->logSkip($class, sprintf(
+            '#[Rule] attribute on property $%s dropped unsupported args (%s); migrate to messages() / hooks manually',
+            $this->firstPropertyName($property),
+            $unsupportedSummary,
+        ));
     }
 
     /**
