@@ -34,6 +34,47 @@ trait ManagesNamespaceImports
     }
 
     /**
+     * Remove a top-level `use <fqcn>;` statement from the namespace. Handles
+     * grouped uses by peeling only the matching UseItem from the group (other
+     * members preserved) and dropping the whole Use_ only when its UseItem
+     * list is emptied. No-op when the import isn't present.
+     */
+    private function removeUseImportFromNamespace(Namespace_ $namespace, string $fqcn): void
+    {
+        $target = ltrim($fqcn, '\\');
+
+        foreach ($namespace->stmts as $i => $stmt) {
+            if (! $stmt instanceof Use_) {
+                continue;
+            }
+
+            $remaining = [];
+
+            foreach ($stmt->uses as $useItem) {
+                if ($useItem->name->toString() === $target) {
+                    continue;
+                }
+
+                $remaining[] = $useItem;
+            }
+
+            if ($remaining === $stmt->uses) {
+                continue;
+            }
+
+            if ($remaining === []) {
+                unset($namespace->stmts[$i]);
+
+                continue;
+            }
+
+            $stmt->uses = $remaining;
+        }
+
+        $namespace->stmts = array_values($namespace->stmts);
+    }
+
+    /**
      * @param  array<Node\Stmt>  $stmts
      */
     private function hasUseImport(array $stmts, string $fqcn): bool

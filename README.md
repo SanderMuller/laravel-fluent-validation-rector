@@ -96,7 +96,7 @@ Grouped by the set that includes them. `FluentValidationSetList::ALL` runs every
 ### Traits (set `TRAITS`)
 
 - **`AddHasFluentRulesTraitRector`** adds `use HasFluentRules;` to FormRequests that use FluentRule.
-- **`AddHasFluentValidationTraitRector`** adds `use HasFluentValidation;` to Livewire components that use FluentRule.
+- **`AddHasFluentValidationTraitRector`** adds the fluent-validation trait to Livewire components that use FluentRule. Picks `HasFluentValidation` for plain Livewire components, or `HasFluentValidationForFilament` (main package `^1.8`) when Filament's `InteractsWithForms` (v3/v4) or `InteractsWithSchemas` (v5) is present on the class or any ancestor. If the wrong variant is already on a Filament class, the rector swaps it to the right one and drops the orphaned import.
 
 > [!TIP]
 > If your codebase has a shared FormRequest or Livewire base, declare `use HasFluentRules;` (or `HasFluentValidation`) on the base once and every subclass inherits it. The trait rectors walk the ancestor chain via `ReflectionClass` and won't re-add the trait on subclasses, so no `base_classes` configuration is needed.

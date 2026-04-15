@@ -2,6 +2,43 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 0.4.15 - 2026-04-15
+
+### Changed
+
+#### `AddHasFluentValidationTraitRector` picks the right trait variant for Filament components
+
+Main package `1.8.0` ships a dedicated `HasFluentValidationForFilament` trait — additive, exposes `validateFluent()` without overriding any Livewire/Filament methods, so there is no collision with Filament's `InteractsWithForms` or v5's `InteractsWithSchemas`. The rector now selects the correct variant automatically:
+
+- Plain Livewire component → `HasFluentValidation` (transparent: overrides `validate()` / `validateOnly()`, existing call sites keep working with FluentRule objects).
+- Livewire + Filament (`InteractsWithForms` v3/v4 OR `InteractsWithSchemas` v5, detected directly or via the ancestor chain) → `HasFluentValidationForFilament`. Consumer code must call `$this->validateFluent(...)` in submit handlers; `validate()` remains Filament's and handles form-schema rules as before.
+
+Detection walks the parent chain via `ReflectionClass`, so subclasses of a shared Filament base class pick the Filament variant without needing the Filament trait re-declared on every subclass.
+
+**Swap-on-detect:** if a class is already tagged with the wrong variant (plain `HasFluentValidation` on a Filament class, or vice versa), the rector removes the wrong one, inserts the correct one, and drops the now-orphaned top-level `use` import. Skipping on mismatch would silently ship a runtime collision; swap is the safe default.
+
+**Conflict guard:** the trait insertion is skipped (with a skip-log entry) when the class declares a method that would collide with the chosen trait's public surface — `validate()` / `validateOnly()` for `HasFluentValidation`, `validateFluent()` for `HasFluentValidationForFilament`. These are hard user decisions the rector never overrides.
+
+### Upgrade
+
+- `sandermuller/laravel-fluent-validation` constraint bumped to `^1.8`. Consumers on `1.7.x` should stay on rector `0.4.14`; there is no `1.8` fallback path inside the rector.
+- No rector config changes. The 0.4.15 prerelease plan had added a `filament_conflict_resolution` option with an `insteadof` adaptation emitter; that work was scrapped before release once the main-package trait-design fix landed. If you ever saw that option in a prerelease build, it has been removed.
+
+### New rector-side helper
+
+- `DetectsFilamentForms` concern centralises the Filament-trait substring match (`InteractsWithForms`, `InteractsWithSchemas`) + ancestor walk. Extracted so additional trait rectors can share the detection.
+
+### Fixtures
+
+Added 4 new fixtures under `tests/AddHasFluentValidationTrait/Fixture/`:
+
+- `filament_interacts_with_forms_picks_filament_variant.php.inc` — v3/v4 path.
+- `filament_interacts_with_schemas_picks_filament_variant.php.inc` — v5 path.
+- `ancestor_filament_picks_filament_variant.php.inc` — subclass inherits `InteractsWithForms` from a base class.
+- `swap_plain_trait_on_filament_class.php.inc` — existing `HasFluentValidation` on a Filament class → replaced with `HasFluentValidationForFilament`, orphaned import dropped.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/0.4.14...0.4.15
+
 ## 0.4.14 - 2026-04-15
 
 ### Changed

@@ -4,14 +4,17 @@ namespace SanderMuller\FluentValidationRector\Rector\Concerns;
 
 use PhpParser\Node\Name;
 use PhpParser\Node\Stmt\Class_;
+use PhpParser\Node\Stmt\Namespace_;
 use PhpParser\Node\Stmt\Nop;
 use PhpParser\Node\Stmt\TraitUse;
+use Rector\Rector\AbstractRector;
 
 /**
- * Inserts a TraitUse into a Class_ with a blank-line Nop guard so the trait
- * doesn't sit flush against a docblocked next member. Composes with
- * ManagesNamespaceImports so consumers that add a class-level trait typically
- * also want the matching top-of-file `use` import.
+ * Inserts, removes, and queries `use Trait;` statements inside a class body.
+ * Composes with `ManagesNamespaceImports` so consumers that add a class-level
+ * trait typically also want the matching top-of-file `use` import.
+ *
+ * @phpstan-require-extends AbstractRector
  */
 trait ManagesTraitInsertion
 {
@@ -78,6 +81,84 @@ trait ManagesTraitInsertion
         }
 
         return $first->getLast();
+    }
+
+    private function directlyUsesTrait(Class_ $class, string $traitFqn): bool
+    {
+        foreach ($class->getTraitUses() as $traitUse) {
+            foreach ($traitUse->traits as $trait) {
+                if ($this->getName($trait) === $traitFqn) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Remove a direct-trait reference (by short name or trailing-namespace
+     * match) from the class. Handles both single-trait blocks (whole TraitUse
+     * removed) and multi-trait blocks (only the target name removed from the
+     * list, other traits preserved). No-op when the trait isn't directly used.
+     */
+    private function removeDirectTraitUse(Class_ $class, string $shortName): void
+    {
+        foreach ($class->stmts as $i => $stmt) {
+            if (! $stmt instanceof TraitUse) {
+                continue;
+            }
+
+            $remaining = [];
+            $matched = false;
+
+            foreach ($stmt->traits as $trait) {
+                $name = $this->getName($trait);
+
+                if ($name === $shortName || ($name !== null && str_ends_with($name, '\\' . $shortName))) {
+                    $matched = true;
+
+                    continue;
+                }
+
+                $remaining[] = $trait;
+            }
+
+            if (! $matched) {
+                continue;
+            }
+
+            if ($remaining === []) {
+                unset($class->stmts[$i]);
+
+                continue;
+            }
+
+            $stmt->traits = $remaining;
+        }
+
+        $class->stmts = array_values($class->stmts);
+    }
+
+    private function anyClassInNamespaceUsesTrait(Namespace_ $namespace, string $shortName): bool
+    {
+        foreach ($namespace->stmts as $stmt) {
+            if (! $stmt instanceof Class_) {
+                continue;
+            }
+
+            foreach ($stmt->getTraitUses() as $traitUse) {
+                foreach ($traitUse->traits as $trait) {
+                    $name = $this->getName($trait);
+
+                    if ($name === $shortName || ($name !== null && str_ends_with($name, '\\' . $shortName))) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     private function needsBlankLineAfterTrait(Class_ $class, int $insertPosition): bool

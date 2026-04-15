@@ -11,6 +11,8 @@ use PhpParser\NodeVisitor;
 use Rector\Rector\AbstractRector;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidation\HasFluentValidation;
+use SanderMuller\FluentValidation\HasFluentValidationForFilament;
+use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsFilamentForms;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesTraitInsertion;
@@ -21,13 +23,29 @@ use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
 use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
 
 /**
- * Adds HasFluentValidation trait to Livewire components that use FluentRule.
- * This enables FluentRule support in Livewire's validate() and validateOnly().
+ * Adds the fluent-validation trait to Livewire components that use FluentRule.
+ *
+ * Picks the right variant based on Filament presence:
+ *
+ * - Plain Livewire → `HasFluentValidation` (transparent: overrides validate() /
+ *   validateOnly() so existing call sites keep working with FluentRule objects).
+ * - Livewire + Filament (`InteractsWithForms` v3/v4 or `InteractsWithSchemas`
+ *   v5) → `HasFluentValidationForFilament` (additive: exposes `validateFluent()`
+ *   without overriding any Filament methods, so no trait collision).
+ *
+ * Filament detection walks the ancestor chain via ReflectionClass so subclasses
+ * of a shared Filament base get the Filament variant automatically.
+ *
+ * Swap-on-detect: if the wrong variant is already on a class (e.g. plain
+ * `HasFluentValidation` on a class that turns out to use Filament), the rector
+ * replaces it with the correct variant. Skipping with the wrong variant in
+ * place silently ships a runtime collision.
  *
  * @see AddHasFluentValidationTraitRectorTest
  */
 final class AddHasFluentValidationTraitRector extends AbstractRector implements DocumentedRuleInterface
 {
+    use DetectsFilamentForms;
     use DetectsInheritedTraits;
     use LogsSkipReasons;
     use ManagesTraitInsertion;
@@ -40,7 +58,7 @@ final class AddHasFluentValidationTraitRector extends AbstractRector implements 
     public function getRuleDefinition(): RuleDefinition
     {
         return new RuleDefinition(
-            'Add HasFluentValidation trait to Livewire components that use FluentRule.',
+            'Add HasFluentValidation (or HasFluentValidationForFilament, for Filament components) to Livewire components that use FluentRule.',
             [
                 new CodeSample(
                     <<<'CODE_SAMPLE'
@@ -91,95 +109,149 @@ CODE_SAMPLE
             return null;
         }
 
-        $hasChanged = false;
+        $needsHasFluentImport = false;
+        $needsFilamentImport = false;
+        $droppedHasFluent = false;
+        $droppedFilament = false;
 
         foreach ($node->stmts as $stmt) {
             if (! $stmt instanceof Class_) {
                 continue;
             }
 
-            if ($this->shouldAddTraitToClass($stmt)) {
-                $this->addTraitToClass($stmt);
-                $hasChanged = true;
+            $action = $this->resolveActionForClass($stmt);
+
+            if ($action === null) {
+                continue;
+            }
+
+            $this->applyAction($stmt, $action);
+
+            if ($action['target'] === 'HasFluentValidation') {
+                $needsHasFluentImport = true;
+            } else {
+                $needsFilamentImport = true;
+            }
+
+            if (($action['wrong_trait'] ?? null) === 'HasFluentValidation') {
+                $droppedHasFluent = true;
+            } elseif (($action['wrong_trait'] ?? null) === 'HasFluentValidationForFilament') {
+                $droppedFilament = true;
             }
         }
 
-        if (! $hasChanged) {
+        if (! $needsHasFluentImport && ! $needsFilamentImport) {
             return null;
         }
 
-        // Insert the `use SanderMuller\FluentValidation\HasFluentValidation;` at
-        // the alphabetically-sorted position. See AddHasFluentRulesTraitRector
-        // for the rationale.
-        $this->ensureUseImportInNamespace($node, HasFluentValidation::class);
+        if ($needsHasFluentImport) {
+            $this->ensureUseImportInNamespace($node, HasFluentValidation::class);
+        }
+
+        if ($needsFilamentImport) {
+            $this->ensureUseImportInNamespace($node, HasFluentValidationForFilament::class);
+        }
+
+        // Drop the swapped-out import when no remaining class in this namespace
+        // still uses that trait (directly, on any Class_ stmt). Otherwise leave
+        // the import — another class may still depend on it.
+        if ($droppedHasFluent && ! $this->anyClassInNamespaceUsesTrait($node, 'HasFluentValidation')) {
+            $this->removeUseImportFromNamespace($node, HasFluentValidation::class);
+        }
+
+        if ($droppedFilament && ! $this->anyClassInNamespaceUsesTrait($node, 'HasFluentValidationForFilament')) {
+            $this->removeUseImportFromNamespace($node, HasFluentValidationForFilament::class);
+        }
 
         return $node;
     }
 
-    private function shouldAddTraitToClass(Class_ $class): bool
+    /**
+     * Returns the action to take on this class, or null to skip.
+     *
+     * - `['mode' => 'insert', 'target' => $short]` — no trait currently, insert target
+     * - `['mode' => 'swap', 'target' => $short, 'wrong_trait' => $shortWrong]` —
+     *   wrong variant present, replace with target
+     *
+     * @return array{mode: 'insert'|'swap', target: 'HasFluentValidation'|'HasFluentValidationForFilament', wrong_trait?: string}|null
+     */
+    private function resolveActionForClass(Class_ $class): ?array
     {
-        // Candidacy gate: only log decisions for classes that are plausible
-        // Livewire components. Random Action / Console\Kernel / Collection
-        // classes that happen to have a rules() method aren't candidates for
-        // this trait; skipping them produces no diagnostic value and inflates
-        // the skip log with noise users can't act on.
         if (! $this->isLivewireClass($class)) {
-            return false;
+            return null;
         }
 
         if ($class->isAbstract()) {
             $this->logSkip($class, 'abstract class');
 
-            return false;
+            return null;
         }
 
-        if ($this->alreadyHasTrait($class)) {
-            $this->logSkip($class, 'already has HasFluentValidation trait');
-
-            return false;
+        if (! $this->usesFluentRule($class)) {
+            return null;
         }
 
-        // Auto-detect inherited trait so subclasses of a shared Livewire base
-        // class that already declares HasFluentValidation don't get the trait
-        // re-added redundantly. Complements the existing alreadyHasTrait() check
-        // (which only catches direct declaration on this class).
-        if ($this->anyAncestorUsesTrait($class, HasFluentValidation::class)) {
-            $this->logSkip($class, 'parent class already uses HasFluentValidation (trait inherited)');
+        $isFilamentClass = $this->isFilamentClass($class);
+        $target = $isFilamentClass ? 'HasFluentValidationForFilament' : 'HasFluentValidation';
+        $wrong = $isFilamentClass ? 'HasFluentValidation' : 'HasFluentValidationForFilament';
+        $targetFqn = $isFilamentClass ? HasFluentValidationForFilament::class : HasFluentValidation::class;
+        $wrongFqn = $isFilamentClass ? HasFluentValidation::class : HasFluentValidationForFilament::class;
 
-            return false;
+        if ($this->directlyUsesTrait($class, $targetFqn)) {
+            $this->logSkip($class, sprintf('already has %s trait', $target));
+
+            return null;
         }
 
-        if ($this->hasValidateMethodConflict($class)) {
-            $this->logSkip($class, 'validate() or validateOnly() method conflict (e.g. Filament InteractsWithForms)');
+        if ($this->anyAncestorUsesTrait($class, $targetFqn)) {
+            $this->logSkip($class, sprintf('parent class already uses %s (trait inherited)', $target));
 
-            return false;
+            return null;
         }
 
-        // No FluentRule in rules() means there's nothing to optimize; the
-        // trait would be a no-op. Silent skip — if the user expected the
-        // converter to populate FluentRule usage and it didn't, the converter
-        // rector's own logs explain why, not this one.
-        return $this->usesFluentRule($class);
+        if ($this->conflictsWithExplicitMethodOverride($class, $target)) {
+            $this->logSkip($class, sprintf(
+                'class declares %s — %s insertion would conflict',
+                $target === 'HasFluentValidation'
+                    ? 'validate() or validateOnly() directly'
+                    : 'validateFluent() directly',
+                $target,
+            ));
+
+            return null;
+        }
+
+        if ($this->directlyUsesTrait($class, $wrongFqn)) {
+            return ['mode' => 'swap', 'target' => $target, 'wrong_trait' => $wrong];
+        }
+
+        if ($this->anyAncestorUsesTrait($class, $wrongFqn)) {
+            $this->logSkip($class, sprintf(
+                'parent class uses %s but this class needs %s — manual fix required',
+                $wrong,
+                $target,
+            ));
+
+            return null;
+        }
+
+        return ['mode' => 'insert', 'target' => $target];
     }
 
-    private function alreadyHasTrait(Class_ $class): bool
+    /**
+     * @param  array{mode: 'insert'|'swap', target: 'HasFluentValidation'|'HasFluentValidationForFilament', wrong_trait?: string}  $action
+     */
+    private function applyAction(Class_ $class, array $action): void
     {
-        foreach ($class->getTraitUses() as $traitUse) {
-            foreach ($traitUse->traits as $trait) {
-                $name = $this->getName($trait);
-
-                if ($name === HasFluentValidation::class) {
-                    return true;
-                }
-            }
+        if ($action['mode'] === 'swap' && isset($action['wrong_trait'])) {
+            $this->removeDirectTraitUse($class, $action['wrong_trait']);
         }
 
-        return false;
+        $this->insertTraitUseInClass($class, $action['target']);
     }
 
     private function isLivewireClass(Class_ $class): bool
     {
-        // Direct parent name match
         if ($class->extends instanceof Name) {
             $parentName = $this->getName($class->extends);
 
@@ -188,7 +260,6 @@ CODE_SAMPLE
             }
         }
 
-        // Heuristic: classes with a render() method are Livewire components/forms
         foreach ($class->getMethods() as $method) {
             if ($this->isName($method, 'render')) {
                 return true;
@@ -199,23 +270,20 @@ CODE_SAMPLE
     }
 
     /**
-     * HasFluentValidation defines validate() and validateOnly().
-     * Skip if the class already has these methods or uses traits that define them.
+     * True when the class itself declares a method that would collide with the
+     * trait's public surface. For HasFluentValidation, that's validate() /
+     * validateOnly(). For HasFluentValidationForFilament, it's validateFluent()
+     * (the only method the trait exposes).
      */
-    private function hasValidateMethodConflict(Class_ $class): bool
+    private function conflictsWithExplicitMethodOverride(Class_ $class, string $target): bool
     {
+        $blockingNames = $target === 'HasFluentValidation'
+            ? ['validate', 'validateOnly']
+            : ['validateFluent'];
+
         foreach ($class->getMethods() as $method) {
-            if ($this->isName($method, 'validate') || $this->isName($method, 'validateOnly')) {
-                return true;
-            }
-        }
-
-        // Check for known conflicting traits (e.g., Filament's InteractsWithForms)
-        foreach ($class->getTraitUses() as $traitUse) {
-            foreach ($traitUse->traits as $trait) {
-                $name = $this->getName($trait);
-
-                if ($name !== null && str_contains($name, 'InteractsWithForms')) {
+            foreach ($blockingNames as $name) {
+                if ($this->isName($method, $name)) {
                     return true;
                 }
             }
@@ -249,10 +317,5 @@ CODE_SAMPLE
         }
 
         return $found;
-    }
-
-    private function addTraitToClass(Class_ $class): void
-    {
-        $this->insertTraitUseInClass($class, 'HasFluentValidation');
     }
 }
