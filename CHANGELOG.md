@@ -2,6 +2,90 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 0.4.16 - 2026-04-15
+
+Main package `1.8.1` reworked `HasFluentValidationForFilament` to override the standard `validate()` / `validateOnly()` / `getRules()` / `getValidationAttributes()` — the methods Livewire and Filament both rely on. Users get transparent FluentRule behaviour on standard method names; `insteadof` disambiguation is **required** alongside Filament's `InteractsWithForms` (v3/v4) or `InteractsWithSchemas` (v5). Rector now emits the correct adaptation automatically, and the release ships a standalone migration CLI for consumers upgrading out of the 1.7.x state — where the collision fatals at class-load and locks out every AST-based tool.
+
+**Requires:** `sandermuller/laravel-fluent-validation ^1.8.1`. `^1.8.0` is not supported — that trait shape was replaced within hours of tagging.
+
+### What changed
+
+#### Rector emits the 4-method `insteadof` block automatically
+
+`AddHasFluentValidationTraitRector` on a Livewire component that **directly uses** a Filament form trait now emits:
+
+```php
+use HasFluentValidationForFilament {
+    HasFluentValidationForFilament::validate insteadof InteractsWithForms;
+    HasFluentValidationForFilament::validateOnly insteadof InteractsWithForms;
+    HasFluentValidationForFilament::getRules insteadof InteractsWithForms;
+    HasFluentValidationForFilament::getValidationAttributes insteadof InteractsWithForms;
+}
+use InteractsWithForms;
+
+```
+`getMessages` is intentionally absent from the block — the trait defines it but Filament does not, so no collision to resolve.
+
+The emission uses separate `use` blocks (one for `HasFluentValidationForFilament { … }`, one for the Filament trait) rather than a single combined block. Both forms are valid PHP; the separate-block form is simpler to emit and round-trips through Pint's `ordered_traits` fixer cleanly.
+
+#### Ancestor-only Filament now skip-logs instead of auto-composing
+
+When the Filament trait lives on a parent class and **not** directly on the subclass under conversion, the rector now skip-logs with a pointer to add `HasFluentValidationForFilament` on the concrete subclass manually. The 0.4.15 design tried to handle this shape, but PHP method resolution across trait chains + `parent::` forwarding is too fragile to guarantee — specifically, whether the subclass's `validate()` correctly forwards to the ancestor's Filament form-schema aggregation depends on details of the composition that the rector can't safely reason about.
+
+Log message: *"parent class uses Filament trait — add HasFluentValidationForFilament with insteadof directly on this class if needed (rector cannot safely auto-compose through inheritance)"*.
+
+#### Conflict guard widened for the Filament variant
+
+If a class body declares `validate()` / `validateOnly()` / `getRules()` / `getValidationAttributes()` directly (i.e. a user-authored method on the class itself), the rector now skip-logs and refuses to insert `HasFluentValidationForFilament`. PHP's class-method-over-trait-method resolution would pre-empt the trait entirely, leaving the FluentRule chain inert — inserting the trait in that state is a visible no-op that also produces a confusingly "finished" migration diff. Better to skip-log and leave the user to reconcile.
+
+The plain-Livewire variant's existing guard (blocks on `validate()` / `validateOnly()`) is unchanged.
+
+#### Swap-on-detect preserves adaptations
+
+When a class already has the **wrong** variant directly on it (e.g. plain `HasFluentValidation` on a Filament class), the rector still swaps to the correct variant and drops the orphaned top-level import. For the Filament branch, the insteadof adaptation is now included in the swap.
+
+### New: `vendor/bin/fluent-validation-migrate`
+
+A standalone source-text migrator ships in this release to handle the `1.7.x → 1.8.1` upgrade path. Operates entirely on file bytes — no class autoload, no Rector, no PhpParser.
+
+**Why it exists.** Upgrading from `1.7.x` to `1.8.1` puts any Filament+Livewire class using `HasFluentValidation` into a fatal-at-load state. Rector (and every other AST-based tool) autoloads classes during analysis, so the fatal fires during the tool's own run, aborting it partway through with zero writes persisted. The migration CLI sidesteps this entirely by never touching the autoloader.
+
+**What it does.** For every `.php` file under the given paths (or `app/` by default):
+
+1. Detects BOTH an import of `HasFluentValidation` / `HasFluentValidationForFilament` AND a Filament form trait (`InteractsWithForms` / `InteractsWithSchemas`).
+2. Swaps the import + in-class trait-use line to `HasFluentValidationForFilament` (if it was plain).
+3. Adds the 4-method `insteadof` block if missing.
+4. Leaves `$this->validate(...)` / `$this->validateOnly(...)` call sites alone — the trait overrides those standard names, so existing call sites stay correct.
+
+**Usage:**
+
+```bash
+# preview
+vendor/bin/fluent-validation-migrate --dry-run
+
+# apply in-place (default path: app/)
+vendor/bin/fluent-validation-migrate
+
+# custom paths
+vendor/bin/fluent-validation-migrate app/ src/Livewire/
+
+```
+**Idempotent:** running twice yields the same result as running once. Files that don't match (plain Livewire without Filament, or classes already carrying the correct adaptation) are untouched.
+
+**Standard migration order** for a `1.7.x → 1.8.1` upgrade:
+
+1. `composer require sandermuller/laravel-fluent-validation:^1.8.1`
+2. `vendor/bin/fluent-validation-migrate` — fix the affected classes before the fatal blocks tooling
+3. `vendor/bin/rector process` — regular rector run, now against a clean codebase
+
+### Migration path from 0.4.15
+
+0.4.15 inserted `HasFluentValidationForFilament` without the insteadof block (against main-package 1.8.0's shape, where no adaptation was needed). On `1.8.1`, that state is broken — class will fatal at load.
+
+0.4.16's rector does **not** retrofit those classes in-place. Use `vendor/bin/fluent-validation-migrate` — it detects the partial-migration shape (Filament trait already swapped, insteadof missing) and adds the adaptation block. Unified path, one tool, handles the fresh-upgrade and the 0.4.15-partial cases identically.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/0.4.15...0.4.16
+
 ## 0.4.15 - 2026-04-15
 
 ### Changed
@@ -53,6 +137,7 @@ Added 4 new fixtures under `tests/AddHasFluentValidationTrait/Fixture/`:
  */
 protected function rules(): array { /* … */ }
 
+
 ```
 The annotation imports `Illuminate\Contracts\Validation\ValidationRule` via Rector's import-names pass (the same pass that handles `FluentRule` imports), so the pre-Pint output has a proper `use` statement + short-name reference.
 
@@ -89,6 +174,7 @@ Updated 10 fixtures under `tests/ConvertLivewireRuleAttribute/Fixture/` to match
  * @return array<string, FluentRule|string|array<string, mixed>>
  */
 protected function rules(): array { /* … */ }
+
 
 
 ```
@@ -178,6 +264,7 @@ class MyComponent extends Component {
 
 
 
+
 ```
 Removed from `GroupWildcardRulesToEachRector`:
 
@@ -242,6 +329,7 @@ Users running Rector on codebases with heavy trait-hoisting (abstract bases that
 
 ```
 [fluent-validation] 42 skip entries written to .rector-fluent-validation-skips.log — see for details
+
 
 
 
@@ -336,6 +424,7 @@ class MyRequest {
 
 
 
+
 ```
 Pint's `ordered_traits` continues to resort if a consumer's existing trait list wasn't already alphabetical, but on well-ordered class bodies Pint is typically a no-op now.
 
@@ -400,6 +489,7 @@ protected function rules(): array
         'email' => FluentRule::email()->nullable(),
     ];
 }
+
 
 
 
@@ -561,6 +651,7 @@ protected function rules(): array
 
 
 
+
 ```
 The union accurately describes what the generated array contains:
 
@@ -618,6 +709,7 @@ public string $description = '';
 #[Validate('min:1')]
 public int $count = 0;
 // → 'count' => FluentRule::integer()->min(1)
+
 
 
 
@@ -706,6 +798,7 @@ public int $count = 0;
 
 
 
+
 ```
 Maps:
 
@@ -757,6 +850,7 @@ final class Settings extends Component
         ];
     }
 }
+
 
 
 
@@ -868,6 +962,7 @@ Mirrors the 0.3.0 fix on `GroupWildcardRulesToEachRector`. Now every rector in t
 
 
 
+
 ```
 Reported by hihaho (gap note during 0.3.0 re-verification) and collectiq (Nit A).
 
@@ -918,6 +1013,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 #### Flat wildcard `'items.*'` entries fold into parent `->each(<scalar>)`
 
@@ -931,6 +1027,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
@@ -1014,6 +1111,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 Reported from a run against the hihaho codebase (20+ files).
 
@@ -1029,6 +1127,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
