@@ -40,10 +40,12 @@ trait ExtractsLivewireAttributeLabels
         $attributeLabel = null;
 
         foreach ($attr->args as $arg) {
-            if (! $arg->name instanceof Identifier || ! $arg->value instanceof String_) {
+            if (! $arg->name instanceof Identifier) {
                 continue;
             }
-
+            if (! $arg->value instanceof String_) {
+                continue;
+            }
             $name = $arg->name->toString();
 
             if ($name === 'as' && $asLabel === null) {
@@ -105,10 +107,12 @@ trait ExtractsLivewireAttributeLabels
     private function collectLabelMapFromNamedArg(Attribute $attr, string $argName): array
     {
         foreach ($attr->args as $arg) {
-            if (! $arg->name instanceof Identifier || $arg->name->toString() !== $argName) {
+            if (! $arg->name instanceof Identifier) {
                 continue;
             }
-
+            if ($arg->name->toString() !== $argName) {
+                continue;
+            }
             if (! $arg->value instanceof Array_) {
                 continue;
             }
@@ -119,8 +123,10 @@ trait ExtractsLivewireAttributeLabels
                 if (! $item instanceof ArrayItem) {
                     continue;
                 }
-
-                if (! $item->key instanceof String_ || ! $item->value instanceof String_) {
+                if (! $item->key instanceof String_) {
+                    continue;
+                }
+                if (! $item->value instanceof String_) {
                     continue;
                 }
 

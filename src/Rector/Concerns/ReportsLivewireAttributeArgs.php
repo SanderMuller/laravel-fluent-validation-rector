@@ -3,6 +3,7 @@
 namespace SanderMuller\FluentValidationRector\Rector\Concerns;
 
 use PhpParser\Node\Attribute;
+use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\ConstFetch;
 use PhpParser\Node\Identifier;
@@ -102,12 +103,12 @@ trait ReportsLivewireAttributeArgs
         ];
     }
 
-    private function isFalseConst(\PhpParser\Node\Expr $value): bool
+    private function isFalseConst(Expr $value): bool
     {
         return $value instanceof ConstFetch && $this->isName($value, 'false');
     }
 
-    private function printArgValue(\PhpParser\Node\Expr $value): string
+    private function printArgValue(Expr $value): string
     {
         return (new Standard())->prettyPrint([$value]);
     }
