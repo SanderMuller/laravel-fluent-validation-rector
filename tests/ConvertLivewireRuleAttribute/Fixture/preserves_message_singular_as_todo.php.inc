@@ -21,6 +21,7 @@ final class ReportContentButton extends Component
 namespace SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute\Fixture;
 
 use SanderMuller\FluentValidation\FluentRule;
+use Illuminate\Contracts\Validation\ValidationRule;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
 
@@ -31,7 +32,7 @@ final class ReportContentButton extends Component
     public string $description = '';
 
     /**
-     * @return array<string, FluentRule>
+     * @return array<string, ValidationRule|string|array<mixed>>
      */
     protected function rules(): array
     {

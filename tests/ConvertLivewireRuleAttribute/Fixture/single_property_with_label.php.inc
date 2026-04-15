@@ -20,6 +20,7 @@ final class InventorizationAdminSettings extends Component
 namespace SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute\Fixture;
 
 use SanderMuller\FluentValidation\FluentRule;
+use Illuminate\Contracts\Validation\ValidationRule;
 use Livewire\Attributes\Rule;
 use Livewire\Component;
 
@@ -30,7 +31,7 @@ final class InventorizationAdminSettings extends Component
     public ?string $notification_email = '';
 
     /**
-     * @return array<string, FluentRule>
+     * @return array<string, ValidationRule|string|array<mixed>>
      */
     protected function rules(): array
     {

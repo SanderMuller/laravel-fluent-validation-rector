@@ -19,6 +19,7 @@ final class ArrayPasswordChainAttributeComponent extends Component
 namespace SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute\Fixture;
 
 use SanderMuller\FluentValidation\FluentRule;
+use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Validation\Rules\Password;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
@@ -28,7 +29,7 @@ final class ArrayPasswordChainAttributeComponent extends Component
     public string $password = '';
 
     /**
-     * @return array<string, FluentRule>
+     * @return array<string, ValidationRule|string|array<mixed>>
      */
     protected function rules(): array
     {

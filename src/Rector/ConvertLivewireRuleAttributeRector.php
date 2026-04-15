@@ -444,28 +444,30 @@ CODE_SAMPLE
             ],
         );
 
-        // Every entry on the fresh-emit path is a FluentRule chain — the
-        // collected entries come from either `convertStringToFluentRule()`
-        // or `convertArrayAttributeArg()`, both of which return FluentRule
-        // builder expressions (or null, in which case the entry isn't
-        // appended). Mixed string/array entries only exist on the
-        // merge-into-existing-rules() path, which doesn't touch docblocks.
-        // So the narrowest accurate annotation is `array<string, FluentRule>`.
+        // Annotate against Laravel's `ValidationRule` interface union with
+        // the other rules() entry shapes. Background on why this is the
+        // right supertype:
         //
-        // Pre-empts rector-preset's DocblockReturnArrayFromDirectArrayInstanceRector
-        // (which would add loose `array<string, mixed>`). Since `FluentRule`
-        // is a supertype of specific FluentRule subclasses like `EmailRule`
-        // that PHPStan infers from chains like `FluentRule::email()->...`,
-        // this declared type is covariance-safe and doesn't produce the
-        // over-broad-vs-inferred mismatch that type-perfect flagged on the
-        // previous 3-way union.
+        // `FluentRule` is intentionally a pure static factory (never
+        // instantiated). Its factory methods return concrete rule classes
+        // (`EmailRule`, `StringRule`, `FieldRule`, etc.) that all implement
+        // `Illuminate\Contracts\Validation\ValidationRule`, but don't share
+        // a supertype with `FluentRule` itself. Annotating with `FluentRule`
+        // in a type position — as 0.4.3 through 0.4.13 did — is a lie that
+        // PHPStan correctly flags (FluentRule and EmailRule are disjoint
+        // types).
         //
-        // The short name `FluentRule` is already in-scope via the
-        // queueFluentRuleImport() call in refactor(); emitting the short
-        // alias keeps the pre-Pint output clean (avoids Pint's
-        // fully_qualified_strict_types fixer firing on every converted file).
+        // `ValidationRule` covers every shape the rector emits via
+        // `convertStringToFluentRule()` / `convertArrayAttributeArg()`.
+        // `string` and `array<mixed>` cover the Laravel-native rule forms
+        // a user might add via manual edit to the generated method over
+        // time (raw pipe-delimited strings, array-tuple rules).
+        //
+        // Tighter than `array<string, mixed>` (which type-perfect /
+        // type-coverage flag as "too broad, narrow your type") while
+        // avoiding the disjoint-type lie `FluentRule` introduced.
         $method->setDocComment(new Doc(
-            "/**\n * @return array<string, FluentRule>\n */",
+            "/**\n * @return array<string, \\Illuminate\\Contracts\\Validation\\ValidationRule|string|array<mixed>>\n */",
         ));
 
         // Emit a blank line (Nop) before the appended rules() method so it

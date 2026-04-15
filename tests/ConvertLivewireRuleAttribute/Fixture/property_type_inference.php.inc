@@ -30,6 +30,7 @@ final class TypedPropertyComponent extends Component
 namespace SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute\Fixture;
 
 use SanderMuller\FluentValidation\FluentRule;
+use Illuminate\Contracts\Validation\ValidationRule;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
 
@@ -46,7 +47,7 @@ final class TypedPropertyComponent extends Component
     public string $title = '';
 
     /**
-     * @return array<string, FluentRule>
+     * @return array<string, ValidationRule|string|array<mixed>>
      */
     protected function rules(): array
     {

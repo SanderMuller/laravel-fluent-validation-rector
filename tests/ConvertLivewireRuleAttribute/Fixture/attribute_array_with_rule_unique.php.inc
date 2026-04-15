@@ -20,6 +20,7 @@ namespace SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute
 
 use SanderMuller\FluentValidation\FluentRule;
 use Illuminate\Validation\Rule\Unique;
+use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
@@ -29,7 +30,7 @@ final class ArrayRuleUniqueAttributeComponent extends Component
     public string $email = '';
 
     /**
-     * @return array<string, FluentRule>
+     * @return array<string, ValidationRule|string|array<mixed>>
      */
     protected function rules(): array
     {
