@@ -217,7 +217,7 @@ CODE_SAMPLE
         }
 
         $filamentTrait = $this->findDirectFilamentTrait($class);
-        $ancestorHasFilament = !$filamentTrait instanceof Name && $this->ancestorHasFilamentTrait($class);
+        $ancestorHasFilament = ! $filamentTrait instanceof Name && $this->ancestorHasFilamentTrait($class);
 
         if ($ancestorHasFilament) {
             $this->logSkip($class, 'parent class uses Filament trait — add HasFluentValidationForFilament with insteadof directly on this class if needed (rector cannot safely auto-compose through inheritance)');
