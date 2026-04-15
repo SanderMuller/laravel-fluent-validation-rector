@@ -2,6 +2,48 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 0.4.18 - 2026-04-15
+
+Quality-of-life release. No trait-selection or main-package changes — 0.4.16's Filament `insteadof` emission is unchanged.
+
+### Stale `@return` docblock on mutated `rules()` method
+
+Body-mutation rectors used to rewrite the `rules()` array but leave the surrounding `@return` annotation untouched, producing type-lies like `@return array<string, StringRule>` above a body that returned `array<string, ArrayRule>`.
+
+Four rectors now normalize the annotation: `ConvertLivewireRuleAttributeRector` (merge path), `ValidationArrayToFluentRuleRector`, `ValidationStringToFluentRuleRector`, `GroupWildcardRulesToEachRector`. When the `@return` body references a FluentRule-family concrete type (`StringRule`, `ArrayRule`, `NumericRule`, etc.), the whole tag — including multi-line continuations — is replaced with:
+
+```
+@return array<string, ValidationRule|string|array<mixed>>
+
+```
+This matches the annotation fresh-emitted on newly-generated `rules()` methods, so every `rules()` method this package touches now carries the same `@return` shape.
+
+Broad or unrelated annotations are preserved (`@return array<string, mixed>`, `@return array`, `@return FooBar`). Staleness is evaluated only against the `@return` tag body — a description line elsewhere in the docblock mentioning `StringRule` does not trigger replacement.
+
+### Hybrid-bail silent on non-candidate classes
+
+The `ConvertLivewireRuleAttributeRector` hybrid-bail used to fire on any class with a `$this->validate([...])` call, regardless of whether the class had `#[Rule]` / `#[Validate]` attributes to migrate. On a production app that meant dozens of spurious skip-log entries on Actions, FormRequests, Controllers, and DataObjects with unrelated `validate()` methods.
+
+Now the rector bails silently on any class without Livewire rule attributes. Genuine hybrid cases — attributes AND explicit `$this->validate([...])` — still skip-log as before.
+
+### Removed `vendor/bin/fluent-validation-migrate`
+
+The regex-based migrator shipped in 0.4.16 corrupted multi-trait `use X, Y, Z { … }` blocks: it renamed the top-level import but left short-name references inside the class body pointing at the old name, producing a `Trait "…HasFluentValidation" not found` fatal-at-load. Regex matching can't reliably handle the trait-use block structure.
+
+The CLI is removed entirely. The `bin` entry in `composer.json` is dropped. A safe AST-based replacement was scoped for this release but pruned — the narrow `1.7.x → 1.8.1` upgrade window doesn't justify new migration infrastructure at this point. The edge case is documented in the README's Known Limitations section with a concise hand-fix recipe.
+
+**If you ran 0.4.16's CLI on a codebase:** verify each converted file still loads. The single-trait-block happy path worked correctly; only multi-trait blocks with existing `insteadof` were corrupted.
+
+### Under the hood
+
+Three extracted concerns to keep rector class complexity under the PHPStan cognitive-complexity limit:
+
+- `DetectsLivewireRuleAttributes` — `#[Rule]` / `#[Validate]` detection (FQN + short alias).
+- `IdentifiesLivewireClasses` — parent-class or `render()`-method heuristic.
+- `NormalizesRulesDocblock` — scoped `@return` rewriter with multi-line support.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/0.4.17...0.4.18
+
 ## 0.4.17 - 2026-04-15
 
 Quality-of-life release. No trait-selection or main-package changes — 0.4.16's Filament `insteadof` emission is unchanged.
@@ -14,6 +56,7 @@ Four rectors now normalize the annotation: `ConvertLivewireRuleAttributeRector` 
 
 ```
 @return array<string, ValidationRule|string|array<mixed>>
+
 
 ```
 This matches the annotation fresh-emitted on newly-generated `rules()` methods, so every `rules()` method this package touches now carries the same `@return` shape.
@@ -66,6 +109,7 @@ use HasFluentValidationForFilament {
 use InteractsWithForms;
 
 
+
 ```
 `getMessages` is intentionally absent from the block — the trait defines it but Filament does not, so no collision to resolve.
 
@@ -111,6 +155,7 @@ vendor/bin/fluent-validation-migrate
 
 # custom paths
 vendor/bin/fluent-validation-migrate app/ src/Livewire/
+
 
 
 ```
@@ -183,6 +228,7 @@ protected function rules(): array { /* … */ }
 
 
 
+
 ```
 The annotation imports `Illuminate\Contracts\Validation\ValidationRule` via Rector's import-names pass (the same pass that handles `FluentRule` imports), so the pre-Pint output has a proper `use` statement + short-name reference.
 
@@ -219,6 +265,7 @@ Updated 10 fixtures under `tests/ConvertLivewireRuleAttribute/Fixture/` to match
  * @return array<string, FluentRule|string|array<string, mixed>>
  */
 protected function rules(): array { /* … */ }
+
 
 
 
@@ -312,6 +359,7 @@ class MyComponent extends Component {
 
 
 
+
 ```
 Removed from `GroupWildcardRulesToEachRector`:
 
@@ -376,6 +424,7 @@ Users running Rector on codebases with heavy trait-hoisting (abstract bases that
 
 ```
 [fluent-validation] 42 skip entries written to .rector-fluent-validation-skips.log — see for details
+
 
 
 
@@ -474,6 +523,7 @@ class MyRequest {
 
 
 
+
 ```
 Pint's `ordered_traits` continues to resort if a consumer's existing trait list wasn't already alphabetical, but on well-ordered class bodies Pint is typically a no-op now.
 
@@ -538,6 +588,7 @@ protected function rules(): array
         'email' => FluentRule::email()->nullable(),
     ];
 }
+
 
 
 
@@ -703,6 +754,7 @@ protected function rules(): array
 
 
 
+
 ```
 The union accurately describes what the generated array contains:
 
@@ -760,6 +812,7 @@ public string $description = '';
 #[Validate('min:1')]
 public int $count = 0;
 // → 'count' => FluentRule::integer()->min(1)
+
 
 
 
@@ -852,6 +905,7 @@ public int $count = 0;
 
 
 
+
 ```
 Maps:
 
@@ -903,6 +957,7 @@ final class Settings extends Component
         ];
     }
 }
+
 
 
 
@@ -1018,6 +1073,7 @@ Mirrors the 0.3.0 fix on `GroupWildcardRulesToEachRector`. Now every rector in t
 
 
 
+
 ```
 Reported by hihaho (gap note during 0.3.0 re-verification) and collectiq (Nit A).
 
@@ -1070,6 +1126,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 #### Flat wildcard `'items.*'` entries fold into parent `->each(<scalar>)`
 
@@ -1083,6 +1140,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
@@ -1170,6 +1228,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 Reported from a run against the hihaho codebase (20+ files).
 
@@ -1185,6 +1244,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
