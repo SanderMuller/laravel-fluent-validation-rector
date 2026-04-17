@@ -6,11 +6,9 @@ use Illuminate\Validation\Rules\Password;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
 
-final class KeyedArrayWithRuleObjectValue extends Component
+final class AttributeArrayWithNewPasswordNoArgsComponent extends Component
 {
-    #[Validate([
-        'password' => ['required', new Password(8)],
-    ])]
+    #[Validate(['required', new Password()])]
     public string $password = '';
 }
 
@@ -26,7 +24,7 @@ use Illuminate\Validation\Rules\Password;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
 
-final class KeyedArrayWithRuleObjectValue extends Component
+final class AttributeArrayWithNewPasswordNoArgsComponent extends Component
 {
     #[Validate]
     public string $password = '';
@@ -37,7 +35,7 @@ final class KeyedArrayWithRuleObjectValue extends Component
     protected function rules(): array
     {
         return [
-            'password' => FluentRule::password(8)->required(),
+            'password' => FluentRule::password()->required(),
         ];
     }
 }

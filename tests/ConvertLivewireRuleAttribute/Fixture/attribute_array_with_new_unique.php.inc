@@ -2,16 +2,14 @@
 
 namespace SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute\Fixture;
 
-use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\Rules\Unique;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
 
-final class KeyedArrayWithRuleObjectValue extends Component
+final class AttributeArrayWithNewUniqueComponent extends Component
 {
-    #[Validate([
-        'password' => ['required', new Password(8)],
-    ])]
-    public string $password = '';
+    #[Validate(['required', 'string', new Unique('users', 'email')])]
+    public string $email = '';
 }
 
 ?>
@@ -22,14 +20,14 @@ namespace SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute
 
 use SanderMuller\FluentValidation\FluentRule;
 use Illuminate\Contracts\Validation\ValidationRule;
-use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\Rules\Unique;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
 
-final class KeyedArrayWithRuleObjectValue extends Component
+final class AttributeArrayWithNewUniqueComponent extends Component
 {
     #[Validate]
-    public string $password = '';
+    public string $email = '';
 
     /**
      * @return array<string, ValidationRule|string|array<mixed>>
@@ -37,7 +35,7 @@ final class KeyedArrayWithRuleObjectValue extends Component
     protected function rules(): array
     {
         return [
-            'password' => FluentRule::password(8)->required(),
+            'email' => FluentRule::string()->required()->unique('users', 'email'),
         ];
     }
 }

@@ -419,7 +419,7 @@ CODE_SAMPLE
             return null;
         }
 
-        $fluent = $this->convertArrayToFluentRule($rulesArray);
+        $fluent = $this->convertArrayToFluentRule($rulesArray, inAttributeContext: true);
 
         if (! $fluent instanceof Expr) {
             $this->logSkip($class, sprintf(

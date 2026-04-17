@@ -3,13 +3,20 @@
 namespace SanderMuller\FluentValidationRector;
 
 /**
- * Emits a single STDOUT line at the end of a Rector run pointing users at
- * `.rector-fluent-validation-skips.log` when it contains entries. Users
+ * Emits a single STDOUT line at the end of a Rector run reporting the
+ * number of skip entries from `.rector-fluent-validation-skips.log`. Users
  * running rector against a codebase with heavy trait-hoisting (abstract
  * base classes propagating the performance traits) or hybrid Livewire
  * bail conditions see `[OK] 0 files changed` from Rector itself and
  * assume the rules didn't fire. The skip log has the actual story, but
  * it's invisible until someone tells you to look. One line surfaces it.
+ *
+ * Two output shapes depending on verbose mode (see Diagnostics):
+ *   - Verbose on: log is in cwd, line references the file path.
+ *   - Verbose off (default): log is in sys_get_temp_dir, invisible to the
+ *     consumer. Line reports the skip count and hints at the re-run
+ *     command to get the details. The tmp file is unlinked in the
+ *     shutdown closure after emit so no artifact persists across runs.
  *
  * Registration happens from `config/config.php`, loaded by
  * rector-extension-installer in consumer projects. The shutdown function
@@ -47,30 +54,65 @@ final class RunSummary
             return;
         }
 
+        // Clear stale log + sentinel from a prior abnormally-terminated run.
+        // Normal truncation happens inside workers via sentinel-coordinated
+        // `ensureLogSessionFreshness`, but that path only fires when a
+        // worker actually calls `logSkip`. A zero-skip run leaves any prior
+        // run's file intact, which would make `format()` emit a phantom
+        // hint ("N skips" for entries from the last run, not this one).
+        // Parent-side cleanup runs before workers spawn, so there's no
+        // race. If this run produces skips, the first worker recreates
+        // both files via the normal sentinel path.
+        self::unlinkLogArtifacts();
+
         register_shutdown_function(static function (): void {
             $line = self::format();
 
-            if ($line !== null) {
-                fwrite(STDOUT, $line);
+            if ($line === null) {
+                return;
+            }
+
+            fwrite(STDOUT, $line);
+
+            // Off-mode: cleanup runs after emit so no artifact survives
+            // into the next run. Verbose mode leaves the log in cwd for
+            // the user to inspect.
+            if (! Diagnostics::isVerbose()) {
+                self::unlinkLogArtifacts();
             }
         });
     }
 
     /**
-     * Build the summary line based on the skip log in the current working
-     * directory. Returns null when the log is absent or empty. Exposed
-     * publicly for unit-testing without having to trigger a full PHP
-     * shutdown cycle.
+     * Remove every skip-log artifact the package may have produced across
+     * history or mode toggles — both verbose (cwd) and off-mode (/tmp)
+     * paths. Sweeping both modes means a fresh default-mode run still
+     * clears the legacy `.rector-fluent-validation-skips.log` a consumer
+     * inherited from 0.4.x or from a prior verbose-mode invocation, which
+     * is the whole point of 0.5.0's "zero cwd artifacts" promise.
+     *
+     * Internal helper, shared by parent-init cleanup and off-mode
+     * post-emit cleanup. Public only for unit testing.
+     */
+    public static function unlinkLogArtifacts(): void
+    {
+        foreach (Diagnostics::allSkipLogArtifacts() as $path) {
+            if (is_file($path)) {
+                @unlink($path);
+            }
+        }
+    }
+
+    /**
+     * Build the summary line from the current-mode skip log path (see
+     * `Diagnostics::skipLogPath()`). Returns null when the log is absent
+     * or empty. Pure read — no side effects; cleanup is the shutdown
+     * closure's responsibility. Exposed publicly for unit-testing without
+     * having to trigger a full PHP shutdown cycle.
      */
     public static function format(): ?string
     {
-        $cwd = getcwd();
-
-        if ($cwd === false) {
-            return null;
-        }
-
-        $logPath = $cwd . '/.rector-fluent-validation-skips.log';
+        $logPath = Diagnostics::skipLogPath();
 
         if (! is_file($logPath)) {
             return null;
@@ -94,10 +136,25 @@ final class RunSummary
             return null;
         }
 
+        $noun = $count === 1 ? 'entry' : 'entries';
+
+        if (Diagnostics::isVerbose()) {
+            return sprintf(
+                "\n[fluent-validation] %d skip %s written to %s — see for details\n",
+                $count,
+                $noun,
+                Diagnostics::VERBOSE_LOG_FILENAME,
+            );
+        }
+
+        // `--clear-cache` matters: bail results are cached per file, so a
+        // plain re-run with verbose env set still produces an empty log on
+        // cached files. The hint has to be actionable as-copied.
         return sprintf(
-            "\n[fluent-validation] %d skip %s written to .rector-fluent-validation-skips.log — see for details\n",
+            "\n[fluent-validation] %d skip %s. Re-run with %s=1 and --clear-cache for details.\n",
             $count,
-            $count === 1 ? 'entry' : 'entries',
+            $noun,
+            Diagnostics::VERBOSE_ENV,
         );
     }
 

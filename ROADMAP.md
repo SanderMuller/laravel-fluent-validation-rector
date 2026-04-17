@@ -1,6 +1,12 @@
 # Roadmap
 
-What's coming up. Release history lives in CHANGELOG.md; detailed designs live in `SPEC_*.md` files at the repo root.
+What's coming up. Release history lives in CHANGELOG.md; detailed designs live in `specs/*.md` files and, for historical context, `SPEC_*.md` files at the repo root.
+
+## Queued
+
+Scoped and ready to ship; waiting on a signal (consumer request or bandwidth).
+
+- **Phase 4 of `specs/array-form-rule-attribute-conversion.md`: `message:` → generated `messages(): array` method.** Migrate Livewire's `#[Validate('…', message: '…')]` arg into a companion `messages()` method on the converted class. Design blocked on Phase 1 (shipped in 0.4.19) so the `field.rule` message keys align with the expanded entry names; now unblocked. Spec recommends opt-in via a `migrate_messages` config flag by default, mirroring `preserve_realtime_validation`'s pattern. No consumer has asked yet — queued until someone does.
 
 ## Pre-1.0
 
@@ -13,11 +19,11 @@ Not scoped for 0.4.x; queued for when a 1.0 commitment is on the table.
 Pre-scoped but contingent on external signal. Not doing unless something changes.
 
 - **Trait-split renaming** to tokenizer/builder/installer architecture. Current `ConvertsValidationRuleStrings` + `ConvertsValidationRuleArrays` works fine for two input shapes. If a third shape arrives (YAML config, external rule source, etc.), the refactor becomes "add a tokenizer + reuse builder" — renaming preemptively is speculative generality.
-- **`new Password()` / `new Rule\Unique()` attribute-context detection.** Originally killed on scope-leak-risk grounds. mijntp's follow-up proposed a parent-node-is-`Attribute` gate that eliminates the leak. ~30-minute implementation. Not doing unless a concrete user request materializes — attribute-form codebases are already rare, and the `->rule(new X())` escape-hatch output is runtime-correct.
 - **Concurrent-rector-invocation PID liveness check.** The sentinel design trusts "one rector run per cwd." Rare-but-real failure mode when IDE + pre-push hooks race. `posix_kill(pid, 0)` liveness check against a PID stored alongside PPID would address it. Do if someone files.
 - **`--dry-run-skip-log` flag.** Materialize the skip log without applying transformations, for pre-conversion audit. Currently unclear whether `--dry-run` suppresses the skip-log writes; if not, the behavior exists in spirit already. Investigate if someone files. (hihaho)
-- **`FluentValidationSetList::ONLY_CONVERTERS` set.** For mid-adoption "convert first, insert traits separately" rollouts. Niche; easy to add if demand surfaces. (hihaho)
 - **Hybrid-bail dormant-pattern linter.** Separate project — the rector's hybrid-bail correctly preserves attributes in files where `validate([...])` overrides them, but the source state is already dead code. A sibling `RemoveDeadLivewireAttributesRector` or inspection mode could consume the hybrid-bail log. Not the rector's scope; noting in case it becomes a separate tool later. (collectiq)
+- **`@return array<string, mixed>` on emitted `rules()` methods.** collectiq's ask. Would regress mijntp's strict-mode `rector/type-perfect` + `tomasvotruba/type-coverage` setup, which flags `mixed` as too-broad. Current `array<string, ValidationRule|string|array<mixed>>` union is narrower and valid on both configs. Could become a `return_type_annotation` config flag if demand surfaces; current policy "narrower-is-safer" holds by default. (collectiq)
+- **`@phpstan-ignore method.unused` on emitted `rules()` methods.** collectiq's ask. PHPStan flags `rules()` as unused when no direct caller is visible; framework-called methods are the Livewire PHPStan extension's domain, not the rector's output. Baking PHPStan-specific annotations into emitted Laravel code is unusual and hides real unused-method bugs. A proper fix is consumer-side via a PHPStan Livewire/Laravel extension. (collectiq)
 
 ## Non-issues (won't fix)
 

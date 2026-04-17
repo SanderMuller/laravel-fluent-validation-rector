@@ -5,7 +5,9 @@ namespace SanderMuller\FluentValidationRector\Rector\Concerns;
 use BackedEnum;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Email;
+use Illuminate\Validation\Rules\Exists;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\Rules\Unique;
 use PhpParser\Node\Arg;
 use PhpParser\Node\ArrayItem;
 use PhpParser\Node\Expr;
@@ -47,6 +49,19 @@ use Rector\Rector\AbstractRector;
 trait ConvertsValidationRuleArrays
 {
     use ConvertsValidationRuleStrings;
+
+    /**
+     * Constructor-form rule-object classes whose `new X(...)` shape in
+     * `#[Validate([...])]` attributes maps onto an existing passthrough
+     * chain method (`Rule::unique(...)` → `->unique(...)`). Mapped only
+     * when `inAttributeContext` is true; see `convertNewRuleObjectPassthrough`.
+     *
+     * @var array<string, string>
+     */
+    private const array NEW_RULE_OBJECT_PASSTHROUGH = [
+        Unique::class => 'unique',
+        Exists::class => 'exists',
+    ];
 
     /** @var list<string> */
     private const array RULE_PASSTHROUGH_METHODS = [
@@ -112,8 +127,25 @@ trait ConvertsValidationRuleArrays
         'image' => ['min', 'max', 'between', 'exactly', 'extensions', 'mimes', 'mimetypes', 'allowSvg', 'width', 'height', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight', 'ratio'],
     ];
 
-    private function convertArrayToFluentRule(Array_ $rulesArray): ?Expr
+    /**
+     * Set by `convertArrayToFluentRule` for the duration of one array
+     * conversion. Gates the constructor-form rule-object recognition
+     * (`new Password(...)`, `new Rule\Unique(...)`, `new Rule\Exists(...)`):
+     * those shapes are only used inside `#[Validate([...])]` attributes
+     * because const-expr forbids the static-factory form in attribute args.
+     * Detecting them globally would risk silently rewriting intentionally
+     * constructor-form code in regular `rules()` arrays — scope leak raised
+     * when this conversion was originally parked. The parent rector knows
+     * its own context (attribute vs method), so passing it in as state is
+     * cheaper and more reliable than walking `AttributeKey::PARENT_NODE`
+     * (which Rector 2.x no longer populates by default).
+     */
+    private bool $inAttributeContext = false;
+
+    private function convertArrayToFluentRule(Array_ $rulesArray, bool $inAttributeContext = false): ?Expr
     {
+        $this->inAttributeContext = $inAttributeContext;
+
         // Pass 1: Pre-scan for type token
         $type = null;
         $typeIndex = null;
@@ -245,6 +277,20 @@ trait ConvertsValidationRuleArrays
         }
 
         if ($value instanceof New_) {
+            // Attribute context: `new Rule\Unique(...)` / `new Rule\Exists(...)`
+            // are the ctor-form equivalents of the `Rule::unique(...)` /
+            // `Rule::exists(...)` static calls that `classifyStaticCall`
+            // already folds into `->unique(...)` / `->exists(...)`. Same
+            // scope-leak concern as Password: only convert when we know
+            // the array is inside `#[Validate([...])]`.
+            if ($this->inAttributeContext) {
+                $converted = $this->convertNewRuleObjectPassthrough($expr, $value, $type);
+
+                if ($converted instanceof MethodCall) {
+                    return $converted;
+                }
+            }
+
             return $this->wrapInRuleCall($expr, $value);
         }
 
@@ -460,6 +506,16 @@ trait ConvertsValidationRuleArrays
      */
     private function detectPasswordType(Expr $expr): ?array
     {
+        // `new Password($n)` inside `#[Validate([...])]`: const-expr forbids
+        // `Password::min($n)` in attribute args, so consumers reach for the
+        // constructor. Map it back to the same factory shape we produce for
+        // the static-factory form. Gated on `inAttributeContext` so
+        // `rules()`-array code that uses the constructor form intentionally
+        // isn't silently rewritten.
+        if ($expr instanceof New_ && $this->inAttributeContext) {
+            return $this->detectPasswordNewExpr($expr);
+        }
+
         $unwrapped = $this->unwrapMethodChain($expr);
 
         if ($unwrapped === null) {
@@ -763,6 +819,81 @@ trait ConvertsValidationRuleArrays
     private function wrapInRuleCall(Expr $chain, Expr $ruleExpr): MethodCall
     {
         return new MethodCall($chain, new Identifier('rule'), [new Arg($ruleExpr)]);
+    }
+
+    /**
+     * `new Password($n)` inside `#[Validate([...])]`: extract constructor args
+     * as factory args so the array lowers to `FluentRule::password($n)->…`.
+     * `Password::class` FQN check scopes this tightly — any other `new X()`
+     * hits the escape hatch.
+     *
+     * @return array{chainOps: list<array{name: string, args: list<Arg>}>, factoryArgs: list<Arg>}|null
+     */
+    private function detectPasswordNewExpr(New_ $new): ?array
+    {
+        if (! $new->class instanceof Name) {
+            return null;
+        }
+
+        if ($this->getName($new->class) !== Password::class) {
+            return null;
+        }
+
+        foreach ($new->args as $arg) {
+            if (! $arg instanceof Arg) {
+                return null;
+            }
+
+            if ($arg->value instanceof Closure || $arg->value instanceof ArrowFunction) {
+                return null;
+            }
+        }
+
+        /** @var list<Arg> $factoryArgs */
+        $factoryArgs = $new->args;
+
+        return ['chainOps' => [], 'factoryArgs' => $factoryArgs];
+    }
+
+    /**
+     * `new Rule\Unique(...)` / `new Rule\Exists(...)` in attribute context:
+     * lower to the same `->unique(...)` / `->exists(...)` chain op that
+     * `Rule::unique(...)` / `Rule::exists(...)` already produce via
+     * `convertRulePassthrough`. Returns null when the ctor class isn't in
+     * the mapped set, when the surrounding type doesn't support embedded
+     * rules, or when args carry closures — caller falls back to `->rule()`.
+     */
+    private function convertNewRuleObjectPassthrough(Expr $chain, New_ $new, string $type): ?MethodCall
+    {
+        if (! $new->class instanceof Name) {
+            return null;
+        }
+
+        $className = $this->getName($new->class);
+        $methodName = self::NEW_RULE_OBJECT_PASSTHROUGH[$className] ?? null;
+
+        if ($methodName === null) {
+            return null;
+        }
+
+        if (! in_array($type, self::TYPES_WITH_EMBEDDED_RULES, true)) {
+            return null;
+        }
+
+        foreach ($new->args as $arg) {
+            if (! $arg instanceof Arg) {
+                return null;
+            }
+
+            if ($arg->value instanceof Closure || $arg->value instanceof ArrowFunction) {
+                return null;
+            }
+        }
+
+        /** @var list<Arg> $args */
+        $args = $new->args;
+
+        return new MethodCall($chain, new Identifier($methodName), $args);
     }
 
     /**

@@ -6,12 +6,18 @@ use PhpParser\Node\Identifier;
 use PhpParser\Node\Stmt\Class_;
 use Rector\Rector\AbstractRector;
 use ReflectionClass;
+use SanderMuller\FluentValidationRector\Diagnostics;
 
 /**
- * Writes `[fluent-validation:skip]` entries to
- * `.rector-fluent-validation-skips.log` in the current working directory,
- * and (when `FLUENT_VALIDATION_RECTOR_VERBOSE=1` is set) also mirrors them
- * to STDERR for local, single-process Rector runs.
+ * Writes `[fluent-validation:skip]` entries to a log file. Location depends
+ * on verbose mode (see `Diagnostics::skipLogPath()`):
+ *
+ *   - Verbose on (`FLUENT_VALIDATION_RECTOR_VERBOSE=1`): log appears in the
+ *     consumer's cwd as `.rector-fluent-validation-skips.log`. STDERR mirror
+ *     is enabled for local single-process runs.
+ *   - Verbose off (default as of 0.5.0): log goes to a cwd-hash-scoped path
+ *     under `sys_get_temp_dir()`. Never visible in the repo. RunSummary
+ *     reads it for the end-of-run hint and unlinks it.
  *
  * Purpose: give users visibility into why a given class wasn't converted
  * without requiring them to source-dive into the rule. Only called at
@@ -29,11 +35,8 @@ use ReflectionClass;
  * worker output safe and produces a single inspectable log file after
  * the Rector run finishes.
  *
- * The log lives in the consumer's current working directory (typically
- * the project root). Add `.rector-fluent-validation-skips.log` and
- * `.rector-fluent-validation-skips.log.session` to `.gitignore` if you
- * don't want them tracked. The log is truncated at the start of each
- * Rector invocation so stale entries from previous runs don't leak in.
+ * The log is truncated at the start of each Rector invocation so stale
+ * entries from previous runs don't leak in.
  *
  * Truncation is coordinated via a PPID-keyed sentinel file (`*.session`)
  * with `flock` serialization: the first worker to see a sentinel whose
@@ -96,9 +99,9 @@ trait LogsSkipReasons
 
         self::ensureLogSessionFreshness();
 
-        @file_put_contents(self::skipLogFilePath(), $entry, FILE_APPEND | LOCK_EX);
+        @file_put_contents(Diagnostics::skipLogPath(), $entry, FILE_APPEND | LOCK_EX);
 
-        if (getenv('FLUENT_VALIDATION_RECTOR_VERBOSE') === '1') {
+        if (Diagnostics::isVerbose()) {
             fwrite(STDERR, $entry);
         }
     }
@@ -133,8 +136,8 @@ trait LogsSkipReasons
             return;
         }
 
-        $sentinelPath = self::skipLogSessionSentinelPath();
-        $logPath = self::skipLogFilePath();
+        $sentinelPath = Diagnostics::skipLogSentinelPath();
+        $logPath = Diagnostics::skipLogPath();
         $sessionMarker = self::currentLogSessionMarker();
 
         $handle = @fopen($sentinelPath, 'c+b');
@@ -256,24 +259,5 @@ trait LogsSkipReasons
         }
 
         return 'mtime:' . getmypid();
-    }
-
-    private static function skipLogFilePath(): string
-    {
-        $cwd = getcwd();
-
-        if ($cwd === false) {
-            // getcwd() fails in weird sandboxed environments; fall back to
-            // the system temp dir so we don't crash, even though the file
-            // is less useful there.
-            return sys_get_temp_dir() . '/.rector-fluent-validation-skips.log';
-        }
-
-        return $cwd . '/.rector-fluent-validation-skips.log';
-    }
-
-    private static function skipLogSessionSentinelPath(): string
-    {
-        return self::skipLogFilePath() . '.session';
     }
 }

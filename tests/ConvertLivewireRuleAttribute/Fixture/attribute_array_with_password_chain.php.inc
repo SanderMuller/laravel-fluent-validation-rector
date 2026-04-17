@@ -35,7 +35,7 @@ final class ArrayPasswordChainAttributeComponent extends Component
     protected function rules(): array
     {
         return [
-            'password' => FluentRule::field()->required()->rule(new Password(8)),
+            'password' => FluentRule::password(8)->required(),
         ];
     }
 }

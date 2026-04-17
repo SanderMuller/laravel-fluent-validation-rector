@@ -87,7 +87,7 @@ Grouped by the set that includes them. `FluentValidationSetList::ALL` runs every
 
 - **`ValidationStringToFluentRuleRector`** converts pipe-delimited rule strings (`'required|string|max:255'`) to fluent chains. Works in FormRequest `rules()`, `$request->validate()`, and `Validator::make()`.
 - **`ValidationArrayToFluentRuleRector`** converts array-based rules (`['required', 'string', Rule::unique(...)]`), including `Rule::` objects, `Password::min()` chains, conditional tuples, closures, and custom rule objects.
-- **`ConvertLivewireRuleAttributeRector`** strips Livewire `#[Rule('...')]` / `#[Validate('...')]` property attributes and generates a `rules(): array` method. Handles string, list-array, and keyed-array shapes; `#[Validate(['todos' => 'required', 'todos.*' => '...'])]` expands into one `rules()` entry per key. Maps `as:` / `attribute:` to `->label()` in both string and array forms (when both are present, `attribute:` wins on conflict). For `#[Validate]` properties, it keeps an empty `#[Validate]` marker on the property so `wire:model.live` real-time validation survives conversion. Opt out via the `preserve_realtime_validation => false` config. Bails on edge cases (hybrid `$this->validate([...])` calls, final parent `rules()` methods, unsupported attribute args, numeric keyed-array keys) and logs each one to the skip file — see [Diagnostics](#diagnostics).
+- **`ConvertLivewireRuleAttributeRector`** strips Livewire `#[Rule('...')]` / `#[Validate('...')]` property attributes and generates a `rules(): array` method. Handles string, list-array, and keyed-array shapes; `#[Validate(['todos' => 'required', 'todos.*' => '...'])]` expands into one `rules()` entry per key. Constructor-form rule objects (`new Password(8)`, `new Unique('users')`, `new Exists('roles')`) — which attribute const-expr forces you into instead of the usual `Password::min(8)` / `Rule::unique(...)` shape — lower to `FluentRule::password(8)` / `->unique(...)` / `->exists(...)` the same as their static-factory counterparts. Maps `as:` / `attribute:` to `->label()` in both string and array forms (when both are present, `attribute:` wins on conflict). For `#[Validate]` properties, it keeps an empty `#[Validate]` marker on the property so `wire:model.live` real-time validation survives conversion. Opt out via the `preserve_realtime_validation => false` config. Bails on edge cases (hybrid `$this->validate([...])` calls, final parent `rules()` methods, unsupported attribute args, numeric keyed-array keys) and logs each one to the skip file — see [Diagnostics](#diagnostics).
 
 ### Grouping (set `GROUP`)
 
@@ -185,15 +185,29 @@ All three are in Pint's default Laravel preset, so most Laravel consumers have t
 
 ## Diagnostics
 
-If a file you expected to convert wasn't touched, check `.rector-fluent-validation-skips.log` in your project root. Every bail-capable rule writes a one-line reason there: unsupported attribute args, a hybrid `$this->validate([...])` call, a trait already present on an ancestor class, and so on.
+The skip log is **opt-in** as of 0.5.0. In default runs, bail-capable rules still count skips and the end-of-run summary reports the total, but no file is written to your project root:
 
-The log is a file sink because Rector's `withParallel(...)` executor doesn't forward worker STDERR to the parent. A diagnostic line written via `fwrite(STDERR, ...)` from a worker would vanish on parallel runs (Rector's default). A file sink survives worker death and you can inspect it from the project root after the run finishes. If you're writing your own Rector rule and want similar diagnostics, the same gotcha applies: `withParallel()` + STDERR means silent data loss.
+```
+[fluent-validation] 42 skip entries. Re-run with FLUENT_VALIDATION_RECTOR_VERBOSE=1 and --clear-cache for details.
+```
 
-At the end of each Rector invocation, a single STDOUT line surfaces the log's existence:
+Opt in when you actually want the per-entry breakdown:
+
+```bash
+FLUENT_VALIDATION_RECTOR_VERBOSE=1 vendor/bin/rector process --clear-cache
+```
+
+Env-only is deliberate. The flag has to reach parallel workers (fresh PHP processes spawned via `proc_open`), and shell-exported env inherits automatically — an in-process `putenv()` wrapper would not. Exporting the variable one step above the rector invocation keeps a single source of truth that every worker sees.
+
+Verbose mode writes `.rector-fluent-validation-skips.log` to your project root (plus a `.session` sentinel used to coordinate truncation across parallel workers) and the end-of-run line points at it:
 
 ```
 [fluent-validation] 42 skip entries written to .rector-fluent-validation-skips.log — see for details
 ```
+
+Gitignore both files if you enable verbose persistently — CI auto-fix workflows that commit dirty artifacts will otherwise pick them up on every run.
+
+The log is a file sink because Rector's `withParallel(...)` executor doesn't forward worker STDERR to the parent. A diagnostic line written via `fwrite(STDERR, ...)` from a worker would vanish on parallel runs (Rector's default). A file sink survives worker death and you can inspect it from the project root after the run finishes. If you're writing your own Rector rule and want similar diagnostics, the same gotcha applies: `withParallel()` + STDERR means silent data loss.
 
 > [!TIP]
 > Rector caches per-file results. Files that hit a bail produce no transformation, so the skip entry is written once and the rule is not re-invoked on cached runs. To force every file to be revisited and every bail to be re-logged, run `vendor/bin/rector process --clear-cache` (or delete `.cache/rector*`).
