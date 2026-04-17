@@ -2,6 +2,40 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 0.5.1 - 2026-04-17
+
+Attribute-context `new Password(...)` / `new Rule\Unique(...)` / `new Rule\Exists(...)` now convert to proper FluentRule chains instead of the `->rule(new X(...))` escape hatch.
+
+### Why
+
+Livewire `#[Validate([...])]` attribute args are const-expr, which forbids the static-factory forms (`Password::min(8)`, `Rule::unique(...)`) that the rector already converts cleanly in `rules()` arrays. Consumers using attribute-form validation were stuck with the verbose `->rule()` wrapper even though the same rule in method-form arrays got the nice FluentRule lowering. The gap was parked on scope-leak concerns — detecting `new Password()` globally would rewrite intentional constructor-form code in `rules()` arrays too.
+
+### Behavior
+
+The converter now tracks whether it's running inside an attribute context. When yes:
+
+```php
+// Before
+#[Validate(['required', new Password(8)])]
+public string $password = '';
+
+// After (0.5.1)
+protected function rules(): array
+{
+    return [
+        'password' => FluentRule::password(8)->required(),
+    ];
+}
+
+```
+Same shape for `new Unique(...)` and `new Exists(...)` against `Illuminate\Validation\Rules\Unique` / `Exists`, lowered to `->unique(...)` / `->exists(...)` chain methods (matching the existing `Rule::unique(...)` conversion).
+
+### What's preserved
+
+Non-attribute `rules()` arrays are unchanged — `new Password(8)` stays on the `->rule(new Password(8))` escape hatch. The scope-leak fix is a state flag threaded in from the calling rector (`ConvertLivewireRuleAttributeRector` passes `inAttributeContext: true`; `ValidationArrayToFluentRuleRector` doesn't). No PARENT_NODE walking; Rector 2.x no longer populates it by default, so explicit context is cheaper and more reliable.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/0.5.0...0.5.1
+
 ## 0.5.0 - 2026-04-17
 
 ### 0.5.0
@@ -19,17 +53,20 @@ Default runs still count skips and the end-of-run summary reports the total, but
 ```
 [fluent-validation] 42 skip entries. Re-run with FLUENT_VALIDATION_RECTOR_VERBOSE=1 and --clear-cache for details.
 
+
 ```
 Opt in by exporting the env var before running Rector:
 
 ```bash
 FLUENT_VALIDATION_RECTOR_VERBOSE=1 vendor/bin/rector process --clear-cache
 
+
 ```
 Env-only is deliberate — the flag has to reach parallel workers (fresh PHP processes spawned via `proc_open`) and shell-exported env inherits automatically, while in-process mutation would not. With verbose on, the log lands in the project root as before and the summary references it:
 
 ```
 [fluent-validation] 42 skip entries written to .rector-fluent-validation-skips.log — see for details
+
 
 ```
 #### Migration
@@ -61,6 +98,7 @@ public function rules(): array
 }
 
 
+
 ```
 Flat `.*` entries pass through `GroupWildcardRulesToEachRector` downstream for nested `->each(...)` folding. Fails closed on unconvertible values, numeric-string keys, and mixed keyed/positional shapes with a skip-log entry.
 
@@ -76,6 +114,7 @@ public string $name = '';
 protected function rules(): array { /* ... */ }
 
 
+
 ```
 Deprecated `#[Rule]` (not `#[Validate]`) strips cleanly without a marker — the rector's scope is FluentRule migration, not the `#[Rule]` → `#[Validate]` upgrade. `#[Validate(onUpdate: false)]` also strips cleanly; if any `#[Validate]` on the property opts out of real-time, the marker is suppressed (aggregate veto, not first-wins).
 
@@ -85,6 +124,7 @@ Deprecated `#[Rule]` (not `#[Validate]`) strips cleanly without a marker — the
 ConvertLivewireRuleAttributeRector::class => [
     ConvertLivewireRuleAttributeRector::PRESERVE_REALTIME_VALIDATION => false,
 ]
+
 
 
 ```
@@ -129,6 +169,7 @@ Four rectors now normalize the annotation: `ConvertLivewireRuleAttributeRector` 
 
 
 
+
 ```
 This matches the annotation fresh-emitted on newly-generated `rules()` methods, so every `rules()` method this package touches now carries the same `@return` shape.
 
@@ -170,6 +211,7 @@ Four rectors now normalize the annotation: `ConvertLivewireRuleAttributeRector` 
 
 ```
 @return array<string, ValidationRule|string|array<mixed>>
+
 
 
 
@@ -228,6 +270,7 @@ use InteractsWithForms;
 
 
 
+
 ```
 `getMessages` is intentionally absent from the block — the trait defines it but Filament does not, so no collision to resolve.
 
@@ -273,6 +316,7 @@ vendor/bin/fluent-validation-migrate
 
 # custom paths
 vendor/bin/fluent-validation-migrate app/ src/Livewire/
+
 
 
 
@@ -351,6 +395,7 @@ protected function rules(): array { /* … */ }
 
 
 
+
 ```
 The annotation imports `Illuminate\Contracts\Validation\ValidationRule` via Rector's import-names pass (the same pass that handles `FluentRule` imports), so the pre-Pint output has a proper `use` statement + short-name reference.
 
@@ -387,6 +432,7 @@ Updated 10 fixtures under `tests/ConvertLivewireRuleAttribute/Fixture/` to match
  * @return array<string, FluentRule|string|array<string, mixed>>
  */
 protected function rules(): array { /* … */ }
+
 
 
 
@@ -486,6 +532,7 @@ class MyComponent extends Component {
 
 
 
+
 ```
 Removed from `GroupWildcardRulesToEachRector`:
 
@@ -550,6 +597,7 @@ Users running Rector on codebases with heavy trait-hoisting (abstract bases that
 
 ```
 [fluent-validation] 42 skip entries written to .rector-fluent-validation-skips.log — see for details
+
 
 
 
@@ -654,6 +702,7 @@ class MyRequest {
 
 
 
+
 ```
 Pint's `ordered_traits` continues to resort if a consumer's existing trait list wasn't already alphabetical, but on well-ordered class bodies Pint is typically a no-op now.
 
@@ -718,6 +767,7 @@ protected function rules(): array
         'email' => FluentRule::email()->nullable(),
     ];
 }
+
 
 
 
@@ -889,6 +939,7 @@ protected function rules(): array
 
 
 
+
 ```
 The union accurately describes what the generated array contains:
 
@@ -946,6 +997,7 @@ public string $description = '';
 #[Validate('min:1')]
 public int $count = 0;
 // → 'count' => FluentRule::integer()->min(1)
+
 
 
 
@@ -1044,6 +1096,7 @@ public int $count = 0;
 
 
 
+
 ```
 Maps:
 
@@ -1095,6 +1148,7 @@ final class Settings extends Component
         ];
     }
 }
+
 
 
 
@@ -1216,6 +1270,7 @@ Mirrors the 0.3.0 fix on `GroupWildcardRulesToEachRector`. Now every rector in t
 
 
 
+
 ```
 Reported by hihaho (gap note during 0.3.0 re-verification) and collectiq (Nit A).
 
@@ -1271,6 +1326,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 #### Flat wildcard `'items.*'` entries fold into parent `->each(<scalar>)`
 
@@ -1284,6 +1340,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
@@ -1377,6 +1434,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 Reported from a run against the hihaho codebase (20+ files).
 
@@ -1392,6 +1450,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
