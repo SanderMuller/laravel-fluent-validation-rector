@@ -63,7 +63,7 @@ trait NormalizesRulesDocblock
         'ProhibitedRule',
     ];
 
-    private const string STANDARD_RULES_ANNOTATION_BODY = 'array<string, \\Illuminate\\Contracts\\Validation\\ValidationRule|string|array<mixed>>';
+    protected const string STANDARD_RULES_ANNOTATION_BODY = 'array<string, \\Illuminate\\Contracts\\Validation\\ValidationRule|string|array<mixed>>';
 
     /**
      * Matches a full `@return` tag — including continuation lines that belong
@@ -76,7 +76,7 @@ trait NormalizesRulesDocblock
      * - Group 1: the `@return` token (kept verbatim in the replacement).
      * - Group 2: the annotation body we test for staleness and overwrite.
      */
-    private const string RETURN_TAG_PATTERN = '/(@return)\s+((?:[^\r\n]*(?:\n[ \t]*\*(?!\s*@|\s*\/)[^\r\n]*)*))/';
+    protected const string RETURN_TAG_PATTERN = '/(@return)\s+((?:(?:(?!\s*\*\/)[^\r\n])*(?:\n[ \t]*\*(?!\s*@|\s*\/)(?:(?!\s*\*\/)[^\r\n])*)*))/';
 
     /**
      * Normalize the rules() method's `@return` annotation when it references a
@@ -132,5 +132,51 @@ trait NormalizesRulesDocblock
         }
 
         return false;
+    }
+
+    /**
+     * Decides whether an extracted `@return` annotation body is the canonical
+     * wide-union (optionally followed by pure-prose description) that the
+     * `rules()` polish pass is allowed to narrow, or a user-customized type
+     * that must be left alone.
+     *
+     * Accepts:
+     *   - body exactly equal to `STANDARD_RULES_ANNOTATION_BODY`
+     *   - body starting with `STANDARD_RULES_ANNOTATION_BODY` followed only by
+     *     whitespace and plain-text prose (letters, digits, space, basic
+     *     punctuation)
+     *
+     * Rejects any remainder containing type-syntax characters `|`, `&`, `<`,
+     * `>`, `(`, `)`, `[`, `]`, `@`, or a `\\`-prefixed FQN token. Guards
+     * against silently narrowing user-widened types like
+     * `array<string, \Illuminate\Contracts\Validation\ValidationRule|string|array<mixed>>|\Illuminate\Support\Collection`
+     * whose leading segment matches the standard body but whose trailing
+     * `|\Collection` is a genuine additive union the user authored. See spec
+     * `update-rules-return-type-docblock-rector.md` §4 + Codex finding #3.
+     *
+     * Input should already be whitespace-trimmed and have PHPDoc continuation
+     * lines concatenated into a single string — the continuation-handling
+     * matching is the caller's responsibility (use `RETURN_TAG_PATTERN`).
+     */
+    private function annotationBodyMatchesStandardUnionExactlyOrProse(string $body): bool
+    {
+        $body = trim($body);
+        $standard = self::STANDARD_RULES_ANNOTATION_BODY;
+
+        if ($body === $standard) {
+            return true;
+        }
+
+        if (! str_starts_with($body, $standard)) {
+            return false;
+        }
+
+        $remainder = substr($body, strlen($standard));
+
+        if ($remainder === '') {
+            return true;
+        }
+
+        return preg_match('/^\s+[A-Za-z][A-Za-z0-9 ,.\'\-]*$/', $remainder) === 1;
     }
 }

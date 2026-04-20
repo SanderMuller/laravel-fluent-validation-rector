@@ -25,3 +25,16 @@ it('ALL set does not include SIMPLIFY', function (): void {
         ->toContain('traits.php')
         ->not->toContain('simplify.php');
 });
+
+it('ALL set does not include POLISH', function (): void {
+    $allContent = file_get_contents(FluentValidationSetList::ALL);
+
+    expect($allContent)->not->toContain('polish.php');
+});
+
+it('POLISH set registers only the narrowing rule', function (): void {
+    $polishContent = file_get_contents(FluentValidationSetList::POLISH);
+
+    expect($polishContent)
+        ->toContain('UpdateRulesReturnTypeDocblockRector');
+});

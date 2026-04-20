@@ -1,0 +1,245 @@
+---
+name: pre-release
+description: "Pre-push / pre-release checklist. Runs Rector, Pint, full test suite, PHPStan, audits README + `.ai/` docs for staleness, and runs both benchmark harnesses (benchmark.php + --group=benchmark). Activate before: pushing to remote, tagging a release, writing release notes, or when user mentions: pre-release, pre-push, release checklist, ship, cut release, release notes."
+---
+
+# Pre-Release Checklist
+
+Run this full gauntlet before pushing commits that may be tagged as a release or before drafting release notes. It catches regressions the two-tier `backend-quality` skill skips — Rector drift, stale docs shipped to downstream projects, and performance regressions in both validation hot paths and DB-batching paths.
+
+## When to Use This Skill
+
+Activate when:
+- About to push commits that will land in a release
+- About to write or update release notes
+- User says "ship it", "cut a release", "pre-push", "release checklist"
+- A feature/fix is fully implemented and quality-gated
+
+Do NOT use mid-development — this is a completion-level skill.
+
+**The user cuts the tag, not you.** This skill's job ends with "release notes drafted + CI green on the pushed commit." The user runs `git tag` and creates the GitHub release themselves — tagging is irreversible-ish and a release-visibility decision that the user owns. Do NOT suggest, demonstrate, or execute tag/release-create commands. State that the release is ready to tag and leave the next step to the user.
+
+## Workflow
+
+Run the checks **in this order**. Each must pass before moving to the next. Fix issues as they surface; do not batch.
+
+Always append `|| true` to verification commands so output is captured even on failure (per repo `CLAUDE.md` rule). Pass/fail is determined from the captured output, not the exit status alone.
+
+**The order is 1 → 2 → 3 → 4 → 5 → 6 → commit → push → 7 → 8 (draft notes).** Do not jump from step 6 straight to drafting release notes. The release-notes file is the **last** artefact produced by this skill, written only after the changes have been committed, pushed, and CI is green on that exact SHA. Writing notes earlier claims facts ("tests pass on CI matrix", "2,092 tests / 2,941 assertions") that are not yet proven. If you find yourself about to `Write` a file under `internal/release-notes-<version>.md` and the last thing you did was run benchmarks, stop — you skipped commit/push/CI.
+
+### 1. Rector
+
+```bash
+vendor/bin/rector process || true
+```
+
+Must report **0 files changed**. If Rector modifies files, review the diff, commit the changes, and re-run until clean.
+
+### 2. Pint
+
+```bash
+vendor/bin/pint --dirty --format agent || true
+```
+
+Must be clean. Re-run after Rector — Rector fixes can introduce style drift.
+
+### 3. Full Test Suite
+
+```bash
+vendor/bin/pest || true
+```
+
+Must show 0 failures. Includes the parity suite (`FastCheckParityTest`) which guards Laravel behavioral equivalence. `benchmark`-group tests are excluded from the default run — they are covered in step 6b below.
+
+### 4. PHPStan
+
+```bash
+vendor/bin/phpstan analyse --memory-limit=2G || true
+```
+
+Must show 0 errors. Fix real issues — do not pad the baseline. See `backend-quality` skill for baseline rules.
+
+### 5. Documentation freshness audit
+
+Release-worthy features change user-visible behavior, so `README.md` and the `.ai/` files we ship to downstream projects (via `package-boost:sync`) can drift silently. Every release must audit both.
+
+**Rule:** add or edit docs only where they reflect a real change. Do not bloat the README or skills. Delete stale content aggressively.
+
+#### 5a. README
+
+Scan `README.md` against the commits in this release (`git log <last-tag>..HEAD`). Update these sections when relevant:
+
+- **Benchmark table** (roughly line ~450) — if any scenario's numbers, speedup, or `Optimizations` label changed.
+- **Fast-check closures section** — if the list of supported rules changed (new rule family, new operator, new field-ref form).
+- **Scenario narratives** — if a scenario's comments (`// field ref → Laravel` vs `// → fast-checked`) no longer match reality.
+- **"When this won't help" / limitations** — every new fast-checkable rule reduces this list; keep it honest.
+- **Public API signatures** — if a method gained a parameter, a new public method was added, or behavior changed.
+
+If unsure whether a change warrants a README update: check whether a user reading the README after the release would see outdated advice. If yes, update.
+
+#### 5b. Laravel Boost skills + guidelines
+
+The `.ai/skills/` and `.ai/guidelines/` directories are synced by Laravel Boost (`vendor/bin/testbench package-boost:sync`) to `CLAUDE.md`, `AGENTS.md`, `.claude/skills/`, and `.github/skills/`. Those generated files ship with the package and are read by downstream projects' AI tooling.
+
+Check each edited-or-eligible doc:
+
+- **Accuracy** — every command, path, rule name, and API example must still work against current `main`.
+- **Scope** — skills describe *when* to activate and *what steps* to run. Guidelines describe *conventions that persist*. Don't mix.
+- **Non-bloat** — prefer tables and bullets over prose. One skill = one clear workflow. Add a new skill rather than overloading an existing one. Delete steps that are no longer load-bearing.
+- **Trigger words in frontmatter `description`** — if a new workflow exists, make sure someone typing the natural-language ask can discover the skill.
+
+If any `.ai/` file changed, sync and verify:
+
+```bash
+vendor/bin/testbench package-boost:sync || true
+git status --short .claude/ .github/ CLAUDE.md AGENTS.md
+```
+
+All generated files must be committed together with their `.ai/` sources (per the `ai-guidelines` skill).
+
+### 6. Benchmarks — regression detection
+
+Two benchmark harnesses. Both protect different surfaces and both must be run.
+
+#### 6a. `benchmark.php` — validation hot-path scenarios
+
+`benchmark.php --ci` only emits a `Δ vs base` column when `benchmark-snapshot.json` exists in the working tree. To get a delta locally, mirror `.github/workflows/benchmark.yml`:
+
+```bash
+# 1. Capture baseline from the comparison ref (usually the last release tag or main)
+BASE_REF="$(gh release list --limit 1 --json tagName -q '.[0].tagName')"  # or 'main'
+git stash push -u -m 'pre-release-baseline' || true
+git checkout "$BASE_REF"
+composer install --no-interaction --prefer-dist --no-progress || true
+php benchmark.php --snapshot || true           # writes benchmark-snapshot.json
+cp benchmark-snapshot.json /tmp/benchmark-snapshot.json
+
+# 2. Return to the working tree and run --ci against the saved snapshot
+git checkout -
+composer install --no-interaction --prefer-dist --no-progress || true
+cp /tmp/benchmark-snapshot.json benchmark-snapshot.json
+git stash pop || true
+php benchmark.php --ci || true
+php benchmark.php --ci || true                  # run at least twice — single runs have variance
+```
+
+If you cannot prepare a baseline (detached state, dirty checkout), run `php benchmark.php --ci || true` for absolute numbers and compare visually against the last release's benchmark table via `gh release view <tag>`.
+
+#### 6b. `vendor/bin/pest --group=benchmark` — DB batching + slow-path scenarios
+
+```bash
+vendor/bin/pest --group=benchmark || true
+```
+
+These tests (in `tests/ImportBenchTest.php`, `tests/SlowPathBenchTest.php`, `tests/RuleSetTest.php`) measure DB query-amplification paths for wildcard `exists`/`unique` rules and slow-path fallbacks. A release can pass `benchmark.php` while silently regressing these.
+
+#### Regression criteria
+
+Flag any of:
+- A `benchmark.php` scenario's optimized time increased by **>10%** vs the baseline snapshot (or vs the last release's table, if no local snapshot).
+- The speedup multiplier decreased by more than one notch (e.g. ~60x → ~45x).
+- A `--group=benchmark` test's reported timing increased noticeably vs prior runs in the conversation or last release.
+- Any scenario switched from a fast-check path to a slower path unintentionally.
+
+If any regression is detected:
+1. Identify the commit/change that introduced it (`git log -p` on hot-path files: `FastCheckCompiler`, `OptimizedValidator`, `RuleSet`, `WildcardExpander`, `HasFluentRules`, DB batching code).
+2. Fix or revert.
+3. Re-run the affected harness to confirm recovery.
+4. Re-run tests (fix may change semantics).
+
+Run `benchmark.php --ci` **at least twice** — single runs have variance. If the two runs disagree on regression, run a third.
+
+### 7. CI green-light gate (after push, before release notes + tag)
+
+Local green ≠ CI green. The matrix job runs against a Testbench-bootstrapped app in a clean env that usually differs from the dev machine — missing `APP_KEY`, no cached auth user, different PHP/Laravel combos. Local passes frequently, CI fails. A green tag on a red CI is a broken release (see 1.13.1: every Livewire test failed in CI with "No application encryption key has been specified" while 2,081 tests passed locally).
+
+**Scope is per-commit, not per-run.** This repo has multiple workflows with different triggers — `gh run watch` follows a single run and will silently skip other workflows that also have opinions about the same SHA. Enumerate by commit SHA and wait for every matching run:
+
+```bash
+git push
+SHA=$(git rev-parse HEAD)
+
+# List every workflow run tied to this SHA, across all workflows/triggers
+gh run list --commit "$SHA" --json databaseId,name,event,status,conclusion
+
+# Wait for every run to reach a terminal state, then assert all success
+while true; do
+    running=$(gh run list --commit "$SHA" --json status -q '[.[] | select(.status != "completed")] | length')
+    [ "$running" -eq 0 ] && break
+    sleep 15
+done
+
+failed=$(gh run list --commit "$SHA" --json conclusion,name -q '[.[] | select(.conclusion != "success" and .conclusion != "skipped")] | length')
+[ "$failed" -eq 0 ] || { echo "CI red on $SHA"; gh run list --commit "$SHA"; exit 1; }
+```
+
+Pass criteria: every run for this commit has `conclusion` in `{success, skipped}`. Skipped is fine — path-filtered workflows (e.g. `on: push: paths: ['**.php']`) are expected to skip when the release commit touches docs only.
+
+**Don't rely on a "latest run" heuristic.** `gh run list --branch main --limit 1` may pick a run from a completely different push — the commit-SHA filter is the only reliable anchor.
+
+On failure:
+
+1. Pull the failure log via `gh run view <id> --log-failed` (or via API if `--log-failed` is empty: `gh api /repos/<owner>/<repo>/actions/jobs/<job-id>/logs`).
+2. Reproduce locally — often requires the same env shape as CI (blank APP_KEY, clean composer.lock install, specific PHP/Laravel combo).
+3. Fix with a new commit on the same branch.
+4. Push and re-run step 7 against the new HEAD.
+
+**Do NOT write release notes until CI is green.** Release notes claim "tests pass on X/Y/Z"; CI is the evidence. Skipping this step reduces downstream trust. (The user handles tag creation — once release notes are drafted against a green CI, the skill's job is done.)
+
+**Workflows only triggered by PR (e.g. `benchmark.yml` with `on: pull_request`)** won't appear in the commit-SHA enumeration for a direct push-to-main. That's intentional — those workflows guarded the merge, not the release. If a workflow is release-critical (not pre-merge-critical), change its trigger to `push` + `pull_request` so it runs on both.
+
+**Workflows triggered by `release` (e.g. `release-benchmark`, `update-changelog`)** run AFTER tag creation, not before. They're outside this gate by design — their job is to decorate the release after it ships, not to gate whether it ships.
+
+### 8. Release notes (ONLY after step 7 CI-green)
+
+This is where agents most commonly slip: running the local gauntlet (steps 1-6), then jumping straight to `Write internal/release-notes-<version>.md` without committing, pushing, or watching CI. **Do not do that.** Notes claim CI-matrix facts; CI must have produced those facts first.
+
+**Preflight — run these three commands and confirm all three before you create the release-notes file.** If any fail, you are not ready to draft notes; go back to whichever earlier step is incomplete.
+
+```bash
+# 1. Working tree must be clean — the commit landed, nothing is uncommitted
+git status --short || true
+
+# 2. HEAD must be pushed — local SHA == origin/main SHA
+[ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] && echo "pushed" || echo "NOT pushed"
+
+# 3. Every CI run for this SHA must be terminal + {success, skipped} — same query as step 7
+SHA=$(git rev-parse HEAD)
+gh run list --commit "$SHA" --json name,status,conclusion
+```
+
+Only when (1) status is empty, (2) echoes `pushed`, and (3) every run is `completed` + `{success, skipped}` may you `Write` to `internal/release-notes-<version>.md`.
+
+Draft into `internal/release-notes-<version>.md`. The user reads the draft, creates the tag, and publishes the release themselves — do not cut the tag, do not run `gh release create`, do not push tags. Once the release-notes file exists and CI is green, report "ready to tag" and stop.
+
+For release notes that claim a performance improvement or regression fix, cite the before/after benchmark numbers explicitly.
+
+**CI handles two things automatically — do not do them manually:**
+
+- **Benchmark table** is appended between `<!-- benchmark-start -->` / `<!-- benchmark-end -->` markers in the release body by `.github/workflows/release-benchmark.yml`. Verify via `gh release view <tag>`.
+- **`CHANGELOG.md`** is prepended with the release body by `.github/workflows/update-changelog.yml` on release publish. Do not edit `CHANGELOG.md` manually as part of the release PR. See the `release-automation` guideline for details.
+
+## Quick Reference
+
+| Step               | Command                                                                                  | Pass criteria                                 |
+|--------------------|------------------------------------------------------------------------------------------|-----------------------------------------------|
+| 1. Rector          | `vendor/bin/rector process \|\| true`                                                    | 0 files changed                               |
+| 2. Pint            | `vendor/bin/pint --dirty --format agent \|\| true`                                       | clean                                         |
+| 3. Tests           | `vendor/bin/pest \|\| true`                                                              | 0 failures                                    |
+| 4. PHPStan         | `vendor/bin/phpstan analyse --memory-limit=2G \|\| true`                                 | 0 errors                                      |
+| 5a. README         | manual scan vs `git log <last-tag>..HEAD`                                                | no stale claims; all changed rules listed     |
+| 5b. Boost docs     | `vendor/bin/testbench package-boost:sync \|\| true`                                      | `.ai/` ↔ generated files in sync              |
+| 6a. Hot-path bench | snapshot baseline → `php benchmark.php --ci \|\| true` (2+ runs)                         | no >10% regression / speedup-notch drop       |
+| 6b. DB-batch bench | `vendor/bin/pest --group=benchmark \|\| true`                                            | no timing regression vs last release          |
+| **commit + push**  | user confirms changes + `git push`                                                       | HEAD pushed to `origin/main`                  |
+| 7. CI green-light  | `gh run list --commit "$(git rev-parse HEAD)"` all complete + no failure                 | every run for the SHA in `{success, skipped}` |
+| 8. Release notes   | preflight (clean tree + pushed + CI green) → `Write internal/release-notes-<version>.md` | file exists only after steps 1-7 all passed   |
+
+## Important
+
+- Run every step, in order, even if nothing "perf-sensitive" looks changed. Seemingly unrelated refactors (e.g. closure shape, helper method dispatch) have historically introduced 20-40% regressions in the hot path.
+- Do not push if any step fails. Fix, then restart the checklist from step 1 — earlier steps may re-break after a later fix.
+- Step 5a and 5b are the most common source of silent drift — the README and shipped skills are read by downstream users, and bloat accumulates fast. Delete stale content before adding new.
+- Step 6a and 6b are complementary, not redundant: 6a covers validation closure performance, 6b covers DB query amplification. Skipping either leaves a real blind spot.
+- Step 7 is the non-skippable gate: CI runs against a clean env (no ambient APP_KEY, no cached auth user, fresh composer install) and frequently catches env-shape bugs that local dev never sees. If the push+watch feels slow, that's the point — waiting 2 minutes for CI green is cheaper than tagging a broken release.
+- Step 8 (release notes) is gated by step 7 — **the release-notes file must not exist on disk until CI is green on the pushed commit.** If you catch yourself about to `Write` a release-notes file after running benchmarks locally, stop: you are about to fabricate facts that the CI matrix has not yet established. Run the step-8 preflight commands first; if any of the three conditions is not satisfied, the draft is premature.

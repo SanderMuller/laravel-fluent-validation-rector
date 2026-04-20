@@ -57,7 +57,7 @@ public function rules(): array
 composer require --dev sandermuller/laravel-fluent-validation-rector
 ```
 
-Requires PHP 8.2+, Rector 2.4+, and [sandermuller/laravel-fluent-validation](https://github.com/sandermuller/laravel-fluent-validation) ^1.8.1. The 1.8.1 constraint matters if you have Filament+Livewire components: the `HasFluentValidationForFilament` trait overrides four methods that also exist on Filament's `InteractsWithForms` / `InteractsWithSchemas`, so an `insteadof` adaptation is required. Rector emits the adaptation for you on direct Filament compositions.
+Requires PHP 8.2+, Rector 2.4+, and [sandermuller/laravel-fluent-validation](https://github.com/sandermuller/laravel-fluent-validation) ^1.17. 1.17 is the version that shipped the `FluentRuleContract` interface the `POLISH` set narrows to. If you're not running `POLISH`, the rest of the pipeline (CONVERT / GROUP / TRAITS / SIMPLIFY) has no direct 1.17 surface dependency — but keeping the floor at 1.17 matches this rector's supported matrix. The 1.8.1+ constraint also matters if you have Filament+Livewire components: the `HasFluentValidationForFilament` trait overrides four methods that also exist on Filament's `InteractsWithForms` / `InteractsWithSchemas`, so an `insteadof` adaptation is required. Rector emits the adaptation for you on direct Filament compositions.
 
 ## Quick start
 
@@ -105,6 +105,14 @@ Grouped by the set that includes them. `FluentValidationSetList::ALL` runs every
 
 - **`SimplifyFluentRuleRector`** cleans up FluentRule chains after migration: factory shortcuts (`string()->url()` → `url()`), `->label()` folded into the factory arg, `min()` + `max()` → `between()`, redundant type removal. Run it as a separate pass after you've verified the initial conversion. It's not included in `ALL` by default.
 
+### Docblock polish (set `POLISH`)
+
+- **`UpdateRulesReturnTypeDocblockRector`** narrows the `@return` PHPDoc annotation on `rules()` methods from the wide `array<string, ValidationRule|string|array<mixed>>` union down to `array<string, \SanderMuller\FluentValidation\Contracts\FluentRuleContract>` when every value in the returned array is a `FluentRule::*()` call chain. Cosmetic — runtime behavior is untouched — but gives PHPStan and editors a narrower type to reason about. Opt-in via the `POLISH` set; not in `ALL`.
+  - **Qualifying classes**: `FormRequest` subclasses (anywhere in the ancestor chain, aliased imports included) and classes using `HasFluentRules` / `HasFluentValidation` / `HasFluentValidationForFilament` directly or via ancestors.
+  - **Narrowed only**: methods with no existing `@return`, `@return array`, or the wide-union annotation this package's converters emit. User-customized annotations, `@inheritDoc`, widened unions/intersections, and any non-prose suffix are respected.
+  - **Skipped** when the returned array isn't a single literal `Array_` (multi-return, builder variants, `RuleSet::from(...)`, collection pipelines), when any value isn't a FluentRule chain (`Rule::in(...)`, `new Custom()`, closures, string rules, ternary/match), or when the method has `): ?array` / unkeyed items.
+  - Run it as a **separate pass after CONVERT stabilizes**. Rector's multi-pass convergence means it eventually fires on the final shape, but a single-invocation rector run that mixes CONVERT + POLISH may require a second invocation if any file had string-rule items mid-convert.
+
 ## Sets
 
 | Set        | Includes                                                 |
@@ -114,6 +122,7 @@ Grouped by the set that includes them. `FluentValidationSetList::ALL` runs every
 | `GROUP`    | Wildcard/dotted-key grouping into `each()`               |
 | `TRAITS`   | Performance trait insertion for FormRequest and Livewire |
 | `SIMPLIFY` | Post-migration chain cleanup                             |
+| `POLISH`   | Narrow `@return` docblocks to `FluentRuleContract`       |
 
 ```php
 // Just conversion, no grouping or traits
@@ -127,6 +136,9 @@ Grouped by the set that includes them. `FluentValidationSetList::ALL` runs every
 
 // Post-migration cleanup (run separately after verifying)
 ->withSets([FluentValidationSetList::SIMPLIFY])
+
+// Docblock polish (run separately after CONVERT stabilizes)
+->withSets([FluentValidationSetList::POLISH])
 ```
 
 ## Individual rules

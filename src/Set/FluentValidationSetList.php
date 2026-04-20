@@ -15,4 +15,6 @@ final class FluentValidationSetList
     public const string TRAITS = self::SETS_DIR . 'traits.php';
 
     public const string SIMPLIFY = self::SETS_DIR . 'simplify.php';
+
+    public const string POLISH = self::SETS_DIR . 'polish.php';
 }

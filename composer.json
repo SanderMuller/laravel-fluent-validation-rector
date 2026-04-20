@@ -15,7 +15,7 @@
     "require": {
         "php": "^8.2",
         "rector/rector": "^2.4.1",
-        "sandermuller/laravel-fluent-validation": "^1.8.1",
+        "sandermuller/laravel-fluent-validation": "^1.17",
         "symplify/rule-doc-generator-contracts": "^11.2"
     },
     "require-dev": {
@@ -65,6 +65,7 @@
         "rector": "vendor/bin/rector process",
         "test": "vendor/bin/pest",
         "test-coverage": "vendor/bin/pest --coverage",
+        "sync-ai": "vendor/bin/testbench package-boost:sync",
         "qa": [
             "@format",
             "@rector",
