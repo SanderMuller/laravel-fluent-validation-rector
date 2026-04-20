@@ -36,6 +36,13 @@ final class RunSummaryTest extends TestCase
 
         chdir($this->tempDir);
 
+        // Canonicalize via `getcwd()` so the separator style matches what
+        // `Diagnostics::skipLogPath()` emits. On Windows `getcwd()` returns a
+        // backslash-joined path while `sys_get_temp_dir() . '/...'` keeps the
+        // forward-slash we assembled — the mismatch broke the verbose-mode
+        // path-contains assertions on windows-latest before this.
+        $this->tempDir = (string) getcwd();
+
         $env = getenv(Diagnostics::VERBOSE_ENV);
         $this->originalVerbose = $env === false ? null : $env;
         putenv(Diagnostics::VERBOSE_ENV);
