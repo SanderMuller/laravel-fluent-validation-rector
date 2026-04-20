@@ -8,7 +8,7 @@ use SanderMuller\FluentValidation\FluentRule;
 class SkipUserAnnotation extends FormRequest
 {
     /**
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule>
+     * @return array<string, \App\Validation\DomainRuleContract>
      */
     public function rules(): array
     {

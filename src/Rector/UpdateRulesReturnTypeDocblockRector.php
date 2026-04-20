@@ -8,6 +8,7 @@ use PhpParser\Node;
 use PhpParser\Node\ArrayItem;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Array_;
+use PhpParser\Node\Expr\BinaryOp\Concat;
 use PhpParser\Node\Expr\ClassConstFetch;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
@@ -250,13 +251,24 @@ CODE_SAMPLE
     {
         foreach ($arrayNode->items as $index => $item) {
             if (! $item instanceof ArrayItem) {
-                $this->logSkip($class, sprintf('ArrayItem at index %d is not a plain ArrayItem (spread or malformed)', $index));
+                $this->logSkip($class, sprintf('ArrayItem at index %d is malformed', $index));
 
                 return false;
             }
 
-            if (! $item->key instanceof Expr || (! $item->key instanceof String_ && ! $item->key instanceof ClassConstFetch)) {
-                $this->logSkip($class, sprintf('ArrayItem key at index %d is not String_ / ClassConstFetch', $index));
+            // php-parser 5.x represents `...$foo` inside an array as an
+            // `ArrayItem` with `unpack=true` and `key=null`. Without this
+            // branch, the null-key check below fires and logs a misleading
+            // "key is not String_ / ClassConstFetch" reason — the real issue
+            // is spread semantics (keys can't be determined statically).
+            if ($item->unpack) {
+                $this->logSkip($class, sprintf('encountered spread at index %d — cannot determine keys statically', $index));
+
+                return false;
+            }
+
+            if (! $this->isStaticallyKnownStringKey($item->key)) {
+                $this->logSkip($class, sprintf('ArrayItem key at index %d is not a statically-known string', $index));
 
                 return false;
             }
@@ -271,6 +283,32 @@ CODE_SAMPLE
         }
 
         return true;
+    }
+
+    /**
+     * Accepts keys whose value is knowable at compile time and produces a
+     * string: `String_`, `ClassConstFetch`, or a `Concat` tree whose every
+     * leaf is one of those. Covers the Livewire nested-field idiom
+     * `'prefix.' . Class::CONST => ...` which php-parser represents as a
+     * `BinaryOp\Concat` — functionally a static string but not a single
+     * `String_` node. Recurses through arbitrary Concat nesting.
+     */
+    private function isStaticallyKnownStringKey(?Expr $key): bool
+    {
+        if (! $key instanceof Expr) {
+            return false;
+        }
+
+        if ($key instanceof String_ || $key instanceof ClassConstFetch) {
+            return true;
+        }
+
+        if ($key instanceof Concat) {
+            return $this->isStaticallyKnownStringKey($key->left)
+                && $this->isStaticallyKnownStringKey($key->right);
+        }
+
+        return false;
     }
 
     private function docblockIsNarrowable(Class_ $class, ClassMethod $method): bool
@@ -345,6 +383,26 @@ CODE_SAMPLE
         return (string) preg_replace('/^\s*\*\s*/', '', $body);
     }
 
+    /**
+     * Laravel validation contracts whose `array<string, X>` or `X[]` docblock
+     * shape is safe to narrow from when every array item has already been
+     * proven to be a FluentRule chain (condition 3). Fluent rule classes
+     * implement all four contracts (see
+     * `SanderMuller\FluentValidation\Rules\StringRule` etc.), so narrowing
+     * from any of them to `FluentRuleContract` drops no valid type.
+     *
+     * @var list<string>
+     */
+    private const array LARAVEL_NARROWABLE_CONTRACT_SHORT_NAMES = [
+        'ValidationRule',
+        'DataAwareRule',
+        'ValidatorAwareRule',
+        'ImplicitRule',
+        'Rule',
+    ];
+
+    private const string LARAVEL_CONTRACTS_NAMESPACE = 'Illuminate\\Contracts\\Validation\\';
+
     private function canNarrowExistingBody(string $body): bool
     {
         $trimmed = trim($body);
@@ -353,7 +411,70 @@ CODE_SAMPLE
             return true;
         }
 
-        return $this->annotationBodyMatchesStandardUnionExactlyOrProse($body);
+        if ($this->annotationBodyMatchesStandardUnionExactlyOrProse($body)) {
+            return true;
+        }
+
+        return $this->annotationBodyIsLaravelContractNarrowable($body);
+    }
+
+    /**
+     * Matches `@return` bodies whose type is one of Laravel's validation
+     * contracts keyed by string, in any of these idiomatic shapes:
+     *
+     *     array<string, ValidationRule>
+     *     array<string, \Illuminate\Contracts\Validation\DataAwareRule>
+     *     DataAwareRule[]
+     *     \Illuminate\Contracts\Validation\ValidationRule[]
+     *
+     * Pure-prose trailing description accepted via the standard-body rules
+     * (letters / punctuation only — no `|`, `&`, `<`, etc.).
+     *
+     * Pre-condition for this matcher to be called: the polish rule's
+     * condition 3 has proven every array-item value is a FluentRule call
+     * chain. Fluent rule classes implement all four listed contracts, so
+     * narrowing from any of them to `FluentRuleContract` is strict.
+     */
+    private function annotationBodyIsLaravelContractNarrowable(string $body): bool
+    {
+        $trimmed = trim($body);
+
+        foreach (self::LARAVEL_NARROWABLE_CONTRACT_SHORT_NAMES as $shortName) {
+            foreach (["array<string, {$shortName}>", 'array<string, \\' . self::LARAVEL_CONTRACTS_NAMESPACE . "{$shortName}>"] as $generic) {
+                if ($this->bodyExactOrProseTail($trimmed, $generic)) {
+                    return true;
+                }
+            }
+
+            // `DataAwareRule[]` shorthand — older PHPStan `T[]` form that
+            // pre-dates generic array syntax. Semantically `array<int|string, T>`,
+            // but our condition-3 check already guarantees string keys so
+            // narrowing to `array<string, FluentRuleContract>` tightens the
+            // key type legitimately. Real-world shape flagged by mijntp peer
+            // dry-run against ~43 rules() methods.
+            foreach (["{$shortName}[]", '\\' . self::LARAVEL_CONTRACTS_NAMESPACE . "{$shortName}[]"] as $shorthand) {
+                if ($this->bodyExactOrProseTail($trimmed, $shorthand)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function bodyExactOrProseTail(string $body, string $prefix): bool
+    {
+        if ($body === $prefix) {
+            return true;
+        }
+
+        if (! str_starts_with($body, $prefix)) {
+            return false;
+        }
+
+        $remainder = substr($body, strlen($prefix));
+
+        return preg_match('/^\s+[A-Za-z][A-Za-z0-9 ,.\'\-]*$/', $remainder) === 1;
     }
 
     private function emitContractAnnotation(ClassMethod $method): bool
