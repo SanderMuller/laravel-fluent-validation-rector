@@ -156,6 +156,19 @@ return RectorConfig::configure()
     ]);
 ```
 
+The full rule list — any of these can be registered individually without pulling the whole set:
+
+| Rule                                   | Set (opt-in)                          | Purpose                                                                 |
+|----------------------------------------|---------------------------------------|-------------------------------------------------------------------------|
+| `ValidationStringToFluentRuleRector`   | `CONVERT` (included in `ALL`)         | pipe-delimited rule strings → FluentRule chains                         |
+| `ValidationArrayToFluentRuleRector`    | `CONVERT` (included in `ALL`)         | array-based rules + `Rule::`/`Password::` objects → FluentRule chains   |
+| `ConvertLivewireRuleAttributeRector`   | `CONVERT` (included in `ALL`)         | Livewire `#[Rule]` / `#[Validate]` → generated `rules()` method         |
+| `GroupWildcardRulesToEachRector`       | `GROUP` (included in `ALL`)           | flat wildcard/dotted keys → nested `each()` / `children()`              |
+| `AddHasFluentRulesTraitRector`         | `TRAITS` (included in `ALL`)          | adds `use HasFluentRules;` to FormRequests that use FluentRule          |
+| `AddHasFluentValidationTraitRector`    | `TRAITS` (included in `ALL`)          | adds Livewire trait (plain or Filament variant) to Livewire components  |
+| `SimplifyFluentRuleRector`             | `SIMPLIFY` (**not** in `ALL`)         | factory shortcuts, `->between()`, redundant-type cleanup                |
+| `UpdateRulesReturnTypeDocblockRector`  | `POLISH` (**not** in `ALL`)           | narrow `@return` on pure-fluent `rules()` to `FluentRuleContract`       |
+
 ### Configurable rules
 
 Two rules accept configuration via `withConfiguredRule()`:
