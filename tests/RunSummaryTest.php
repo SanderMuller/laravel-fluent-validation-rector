@@ -36,16 +36,15 @@ final class RunSummaryTest extends TestCase
 
         chdir($this->tempDir);
 
-        // Canonicalize via `realpath()` so the separator style matches what
-        // `Diagnostics::verboseLogPath()` emits via its own `getcwd()` call.
-        // `getcwd()` on Windows can return a mixed-separator path (the prefix
-        // normalized to backslashes by the OS, the uniqid suffix retained
-        // with the forward slash we passed to `chdir()`), while a later
-        // `getcwd()` in `Diagnostics` returns the fully backslashed form —
-        // the drift broke the verbose-mode path-contains assertions on
-        // windows-latest. `realpath()` forces one canonical form.
-        $real = realpath($this->tempDir);
-        $this->tempDir = $real !== false ? $real : (string) getcwd();
+        // Canonicalize via `getcwd()` (NOT `realpath()`) so the path
+        // matches what `Diagnostics::skipLogPath()` emits when it calls
+        // `getcwd()` itself. On Windows-CI runners the temp dir is under
+        // `RUNNER~1` (8.3 short name); `realpath()` would resolve that to
+        // the long-form `runneradmin`, but `getcwd()` keeps the short
+        // form — the two would diverge and break the path-contains
+        // assertions. Stick with `getcwd()` so both call sites produce
+        // identical strings.
+        $this->tempDir = (string) getcwd();
 
         $env = getenv(Diagnostics::VERBOSE_ENV);
         $this->originalVerbose = $env === false ? null : $env;
