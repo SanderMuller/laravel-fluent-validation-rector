@@ -82,9 +82,25 @@ trait LogsSkipReasons
 
     private function logSkip(Class_ $class, string $reason): void
     {
-        $file = $this->getFile()->getFilePath();
         $className = $class->namespacedName?->toString()
             ?? ($class->name instanceof Identifier ? $class->name->toString() : 'anonymous');
+
+        $this->writeSkipEntry($className, $reason);
+    }
+
+    /**
+     * Variant for callers that have a class name string but no `Class_`
+     * AST node — e.g. `MethodCall`-driven rectors that resolve the
+     * enclosing class via PHPStan scope rather than parent-walking.
+     */
+    private function logSkipByName(string $className, string $reason): void
+    {
+        $this->writeSkipEntry($className, $reason);
+    }
+
+    private function writeSkipEntry(string $className, string $reason): void
+    {
+        $file = $this->getFile()->getFilePath();
         $rule = (new ReflectionClass($this))->getShortName();
 
         $key = $rule . '|' . $file . '|' . $className . '|' . $reason;
