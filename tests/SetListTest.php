@@ -38,3 +38,18 @@ it('POLISH set registers only the narrowing rule', function (): void {
     expect($polishContent)
         ->toContain('UpdateRulesReturnTypeDocblockRector');
 });
+
+it('SIMPLIFY set registers SimplifyRuleWrappers after SimplifyFluentRule', function (): void {
+    $simplifyContent = file_get_contents(FluentValidationSetList::SIMPLIFY);
+
+    expect($simplifyContent)
+        ->toContain('SimplifyFluentRuleRector')
+        ->toContain('SimplifyRuleWrappersRector');
+
+    $simplifyPos = strpos($simplifyContent, 'SimplifyFluentRuleRector::class');
+    $wrappersPos = strpos($simplifyContent, 'SimplifyRuleWrappersRector::class');
+
+    expect($simplifyPos)->toBeInt()
+        ->and($wrappersPos)->toBeInt()
+        ->and($wrappersPos)->toBeGreaterThan($simplifyPos);
+});

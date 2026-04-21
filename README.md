@@ -104,6 +104,7 @@ Grouped by the set that includes them. `FluentValidationSetList::ALL` runs every
 ### Post-migration (set `SIMPLIFY`)
 
 - **`SimplifyFluentRuleRector`** cleans up FluentRule chains after migration: factory shortcuts (`string()->url()` → `url()`), `->label()` folded into the factory arg, `min()` + `max()` → `between()`, redundant type removal. Run it as a separate pass after you've verified the initial conversion. It's not included in `ALL` by default.
+- **`SimplifyRuleWrappersRector`** rewrites escape-hatch `->rule(...)` calls into native typed-rule methods. Covers `in`/`notIn` (on `String`/`Numeric`/`Email`/`Field`/`Date` rules — the `HasEmbeddedRules` consumers), `min`/`max`/`between` (per-class allowlist; `EmailRule` has only `max`), `regex` (StringRule only), and `size` → `exactly` (Laravel's `size:` rule renamed in fluent-validation per `TypedBuilderHint`; rewrites on `String`/`Numeric`/`Array`/`File`). Receiver-type inference walks the chain back to the `FluentRule::*()` factory; bails on variable receivers, `Conditionable` proxy hops (`->when(...)`/`->unless(...)`/`->whenInput(...)`), and methods absent from the resolved typed-rule class. Runs after `SimplifyFluentRuleRector` so factory shortcuts apply first.
 
 ### Docblock polish (set `POLISH`)
 
@@ -167,6 +168,7 @@ The full rule list — any of these can be registered individually without pulli
 | `AddHasFluentRulesTraitRector`         | `TRAITS` (included in `ALL`)          | adds `use HasFluentRules;` to FormRequests that use FluentRule          |
 | `AddHasFluentValidationTraitRector`    | `TRAITS` (included in `ALL`)          | adds Livewire trait (plain or Filament variant) to Livewire components  |
 | `SimplifyFluentRuleRector`             | `SIMPLIFY` (**not** in `ALL`)         | factory shortcuts, `->between()`, redundant-type cleanup                |
+| `SimplifyRuleWrappersRector`           | `SIMPLIFY` (**not** in `ALL`)         | `->rule('in:a,b')` / `->rule(Rule::in([...]))` / `->rule('size:N')` → native typed-rule methods (`->in([...])`, `->exactly(N)`, etc.) |
 | `UpdateRulesReturnTypeDocblockRector`  | `POLISH` (**not** in `ALL`)           | narrow `@return` on pure-fluent `rules()` to `FluentRuleContract`       |
 
 ### Configurable rules
