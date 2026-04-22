@@ -1,3 +1,8 @@
+---
+name: rector-developer
+description: Build Rector PHP rules that transform PHP code via AST. Use when asked to create, modify, or explain Rector rules for PHP code transformations. Rector rules use the PHP-Parser AST and PHPStan type analysis. Triggers on requests like "write a Rector rule to...", "create a Rector rule that...", "add a Rector rule for...", or when working in a rector-src or rector-based project and asked to implement code transformation logic.
+---
+
 # Rector PHP Rule Builder
 
 Rector transforms PHP code by traversing the PHP-Parser AST, matching node types, and returning modified nodes from `refactor()`.
@@ -101,7 +106,77 @@ $this->mirrorComments($newNode, $oldNode);    // copy comments
 
 ## Creating Class Name Nodes
 
-Always use `Node\Name\FullyQualified` for class references in AST nodes — never `Node\Name`. The string must not have a leading backslash.
+Always use `Node\Name\FullyQualified` for class references in AST nodes — never `Node\Name`. The string must not have a leading backslash. See **references/node-types.md** (Creating Class Name Nodes) for the full list of affected node properties.
+
+## Preventing Duplicate Attributes
+
+When adding PHP attributes, use `PhpAttributeAnalyzer` (inject via constructor) to check if the attribute is already present. Guard non-repeatable attributes with an early `return null`; for repeatable attributes, only guard when the specific instance you'd add is already there. Always add a `skip_attribute_already_present.php.inc` fixture for non-repeatable attributes.
+
+See **references/helpers.md** (PhpAttributeAnalyzer section) for injection, method signatures, and repeatability guidance.
+
+## Reducing Rule Risk
+
+Before transforming a class or its members, consider whether the change is safe in an inheritance context. Rector rules run against arbitrary codebases, so a transformation that looks correct on a standalone class may break subclasses or consumers.
+
+### Non-final classes
+
+If the class being transformed is not `final`, it may be extended. A rule that adds, removes, or changes a method/property/constant on a non-final class could silently break subclasses (e.g. method signature change, new abstract requirement, changed return type).
+
+**Ask: could subclasses be affected by this transformation?**
+
+- If yes and the risk is real, guard with `isFinal()` and skip non-final classes. Add a `skip_non_final_class.php.inc` fixture.
+- If the rule is intentionally broad and the risk is accepted, document that reasoning in the rule's `getRuleDefinition()` description.
+- Some rules legitimately target non-final classes (e.g. adding a type declaration to a public method) — in those cases consider whether it's safe to apply on `public`/`protected` members (see below).
+
+```php
+// Skip if class is not final
+$classNode = $this->betterNodeFinder->findParentType($node, Class_::class);
+if (! $classNode instanceof Class_) {
+    return null;
+}
+if (! $classNode->isFinal()) {
+    return null;
+}
+```
+
+### Public and protected members
+
+Public and protected methods, properties, and constants form the class's API contract — both for external callers and for subclasses. Changing them (renaming, adding/removing parameters, changing types, adding attributes) carries more risk than changing private members.
+
+**Ask: is this member `public` or `protected`?**
+
+- `private` members — safe to transform; no external or inheritance contract.
+- `protected` members — subclasses may override or depend on the original signature. Consider skipping, or at minimum add skip fixtures for protected cases.
+- `public` members — broadest risk. Weigh whether the rule should be limited to `private`, opt-in via configuration, or require the class to be `final`.
+
+```php
+// Example: only transform private methods
+if (! $node->isPrivate()) {
+    return null;
+}
+
+// Example: skip public/protected properties
+if ($node->isPublic() || $node->isProtected()) {
+    return null;
+}
+```
+
+
+## Injected Services
+
+Inject via constructor (autowired by DI container):
+
+```php
+public function __construct(
+    private readonly BetterNodeFinder $betterNodeFinder,
+    // ... other services
+) {}
+```
+
+- **`$this->nodeFactory`** — create nodes (see references/helpers.md)
+- **`$this->nodeComparator`** — compare nodes structurally
+- **`$this->betterNodeFinder`** — search within nodes (inject via constructor)
+- PHPDoc manipulation: inject `PhpDocInfoFactory` + `DocBlockUpdater`
 
 ## Configurable Rules
 
@@ -142,6 +217,8 @@ final class MyRector extends AbstractRector implements MinPhpVersionInterface
 }
 ```
 
+See references/php-versions.md for all `PhpVersionFeature` constants.
+
 ## rector.php Registration
 
 ```php
@@ -153,6 +230,13 @@ return RectorConfig::configure()
     ->withConfiguredRule(MyConfigurableRector::class, ['key' => 'value']);
 ```
 
+## Namespace Convention
+
+Rules live at: `rules/[Category]/Rector/[NodeType]/[RuleName]Rector.php`
+Tests live at: `rules-tests/[Category]/Rector/[NodeType]/[RuleName]Rector/`
+
+Categories: `CodeQuality`, `CodingStyle`, `DeadCode`, `EarlyReturn`, `Naming`, `Php52`–`Php85`, `Privatization`, `Removing`, `Renaming`, `Strict`, `Transform`, `TypeDeclaration`
+
 ## Writing Tests
 
 Every rule needs a test class extending `AbstractRectorTestCase` with fixtures in a `Fixture/` directory and a config in `config/configured_rule.php`.
@@ -161,10 +245,12 @@ Every rule needs a test class extending `AbstractRectorTestCase` with fixtures i
 
 **Skip fixtures:** One `skip_*.php.inc` file per no-change scenario — single section, no `-----` separator.
 
-## Reducing Rule Risk
-
-Before transforming a class or its members, consider whether the change is safe in an inheritance context. Rules that add, remove, or change methods/properties on non-final classes could break subclasses. Guard with `isFinal()` when appropriate.
+See **references/testing.md** for the full test class template, fixture format, config file formats, configurable rule variants, and special cases.
 
 ## Reference Files
 
 - **references/configurable-rules.md** — All built-in configurable rules with config examples (check this before writing a custom rule)
+- **references/node-types.md** — PhpParser node type quick reference (FuncCall, MethodCall, Class_, etc.)
+- **references/helpers.md** — NodeFactory methods, BetterNodeFinder, NodeComparator, PhpDocInfo
+- **references/php-versions.md** — PhpVersionFeature constants by PHP version
+- **references/testing.md** — Full test structure, fixture format, configurable rule testing, special cases
