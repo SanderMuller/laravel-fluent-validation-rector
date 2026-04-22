@@ -113,6 +113,40 @@ trait ConvertsValidationRuleStrings
         'ulid' => 'ulid',
         'ip' => 'ip',
         'password' => 'password',
+        // 1.19.0 additions — direct factory shortcuts. When these
+        // appear as the standalone token (`'ipv4'` rather than
+        // `'string|ipv4'`), map straight to the factory; sibling-
+        // token merging in `convertStringToFluentRule` handles the
+        // `'string|ipv4'` → `FluentRule::ipv4()` promotion.
+        'ipv4' => 'ipv4',
+        'ipv6' => 'ipv6',
+        'macAddress' => 'macAddress',
+        'json' => 'json',
+        'timezone' => 'timezone',
+        'hexColor' => 'hexColor',
+        'activeUrl' => 'activeUrl',
+        'list' => 'list',
+        'declined' => 'declined',
+    ];
+
+    /**
+     * Tokens that promote a parent type to a more specific factory when
+     * paired in the same rule string. `'string|ipv4'` becomes
+     * `FluentRule::ipv4()` instead of `FluentRule::string()->ipv4()`,
+     * so the converters emit the final factory form directly without
+     * relying on `SimplifyFluentRuleRector` (which isn't part of the
+     * default `ALL` set).
+     *
+     * Keyed by the parent type name; the value list enumerates the
+     * promoting modifier names. Tokens listed here must also exist
+     * in `TYPE_MAP` so the standalone case (token without parent
+     * type) still produces the right factory.
+     *
+     * @var array<string, list<string>>
+     */
+    private const array TYPE_PROMOTING_MODIFIERS = [
+        'string' => ['ipv4', 'ipv6', 'macAddress', 'json', 'timezone', 'hexColor', 'activeUrl'],
+        'array' => ['list'],
     ];
 
     /** @var list<string> */
@@ -915,6 +949,24 @@ trait ConvertsValidationRuleStrings
         // through to the ->rule('max:2000') escape hatch.
         if ($type === null && $propertyTypeHint !== null && isset(self::TYPE_MAP[$propertyTypeHint])) {
             $type = self::TYPE_MAP[$propertyTypeHint];
+        }
+
+        // 1.19.0 sibling-token promotion: `'string|ipv4'` → `ipv4` factory
+        // (not `string()->ipv4()`). Run before resolveType + buildFactory
+        // so the converter emits the final form directly. SimplifyFluentRule
+        // would also do this, but it's not in the default `ALL` set, so the
+        // converters can't depend on it for correctness.
+        if ($type !== null && isset(self::TYPE_PROMOTING_MODIFIERS[$type])) {
+            $promoters = self::TYPE_PROMOTING_MODIFIERS[$type];
+
+            foreach ($modifiers as $i => $modifier) {
+                if (in_array($modifier['name'], $promoters, true) && $modifier['args'] === null) {
+                    $type = $modifier['name'];
+                    unset($modifiers[$i]);
+                    $modifiers = array_values($modifiers);
+                    break;
+                }
+            }
         }
 
         $resolvedType = $type ?? 'field';

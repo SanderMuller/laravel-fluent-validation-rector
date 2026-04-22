@@ -37,12 +37,6 @@ parameters:
 			path: src/Rector/GroupWildcardRulesToEachRector.php
 
 		-
-			rawMessage: 'Cognitive complexity for "SanderMuller\FluentValidationRector\Rector\SimplifyFluentRuleRector::simplifyChain()" is 38, keep it under 20'
-			identifier: complexity.functionLike
-			count: 1
-			path: src/Rector/SimplifyFluentRuleRector.php
-
-		-
 			rawMessage: Access to an undefined property PhpParser\Node\Stmt::$stmts.
 			identifier: property.notFound
 			count: 1

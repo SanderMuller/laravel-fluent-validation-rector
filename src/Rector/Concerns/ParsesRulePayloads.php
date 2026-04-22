@@ -84,6 +84,15 @@ trait ParsesRulePayloads
             return null;
         }
 
+        // `Rule::enum(string $type, ?Closure $cb = null)` — arity 2 in
+        // Laravel but only the type-arg form (`Rule::enum(X::class)`)
+        // is migrate-safe. The optional callback can't be statically
+        // threaded through `->enum(...)` without losing semantics, so
+        // multi-arg facade calls bail.
+        if ($name === 'enum' && count($args) !== 1) {
+            return null;
+        }
+
         return [$name, $args];
     }
 
@@ -144,7 +153,33 @@ trait ParsesRulePayloads
             return $tail === '' ? null : [new Arg(new String_($tail))];
         }
 
+        if (in_array($name, ['gt', 'gte', 'lt', 'lte'], true)) {
+            // 1.19.0 sign helpers — only fire when the arg is the
+            // literal zero (string-form spelling: `'0'` or `'0.0'`).
+            // Gate on the RAW token text BEFORE numeric coercion;
+            // `literalForToken` would map `'00'` and `'-0'` to the
+            // same `Int_(0)` node, broadening the match beyond the
+            // intended exact-zero spelling. Result is a zero-arg call
+            // (`->positive()`, not `->positive(0)`).
+            return $this->isLiteralZeroToken($tail) ? [] : null;
+        }
+
+        // `enum` deliberately has no string-form support in v1 — the
+        // class-string would need backslash-escape handling that's out
+        // of scope. Returning null lets the rector silently no-op; the
+        // user keeps the `->rule('enum:...')` escape hatch.
         return null;
+    }
+
+    /**
+     * Whether the raw token text represents an exact literal zero in
+     * Laravel rule-string spelling. Acceptable: `'0'`, `'0.0'`. Refused:
+     * `'00'`, `'-0'`, `'+0'`, `'0.00'` — accepting them would broaden
+     * the sign-helper rewrite beyond the documented exact-zero match.
+     */
+    private function isLiteralZeroToken(string $token): bool
+    {
+        return $token === '0' || $token === '0.0';
     }
 
     /** @return list<Arg>|null */
@@ -276,8 +311,25 @@ trait ParsesRulePayloads
      */
     private function buildArityArgsFromArrayItems(string $name, array $tailItems): ?array
     {
+        // Sign helpers: arity 1, but the single arg must be a literal
+        // zero. Result is a zero-arg call (`->positive()`), so we
+        // gate first then return `[]` args on success.
+        if (in_array($name, ['gt', 'gte', 'lt', 'lte'], true)) {
+            if (count($tailItems) !== 1) {
+                return null;
+            }
+
+            $item = $tailItems[0];
+
+            if ($item->key instanceof Expr || $item->byRef || $item->unpack) {
+                return null;
+            }
+
+            return $this->isLiteralZeroArrayValue($item->value) ? [$name, []] : null;
+        }
+
         $expectedArity = match ($name) {
-            'min', 'max', 'size', 'regex' => 1,
+            'min', 'max', 'size', 'regex', 'enum' => 1,
             'between' => 2,
             default => null,
         };
@@ -297,5 +349,30 @@ trait ParsesRulePayloads
         }
 
         return [$name, $args];
+    }
+
+    /**
+     * Whether the array-form arg literal represents an exact zero for
+     * the sign-helper rewrite. Same exact-spelling policy as
+     * `isLiteralZeroToken` for string-form: refuses `Int_(0)` produced
+     * by coercion of `'00'` / `'-0'` is moot because we receive raw
+     * AST nodes here, not coerced values. Accept `Int_(0)`,
+     * `Float_(0.0)`, `String_('0')`, `String_('0.0')`.
+     */
+    private function isLiteralZeroArrayValue(Expr $value): bool
+    {
+        if ($value instanceof Int_) {
+            return $value->value === 0;
+        }
+
+        if ($value instanceof Float_) {
+            return $value->value === 0.0;
+        }
+
+        if ($value instanceof String_) {
+            return $value->value === '0' || $value->value === '0.0';
+        }
+
+        return false;
     }
 }

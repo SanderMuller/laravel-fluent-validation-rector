@@ -29,18 +29,60 @@ use WeakMap;
 final class SimplifyFluentRuleRector extends AbstractRector implements DocumentedRuleInterface
 {
     private const array FACTORY_SHORTCUTS = [
-        'string' => ['url' => 'url', 'uuid' => 'uuid', 'ulid' => 'ulid', 'ip' => 'ip'],
+        'string' => [
+            'url' => 'url',
+            'uuid' => 'uuid',
+            'ulid' => 'ulid',
+            'ip' => 'ip',
+            // 1.19.0 additions — zero-arg StringRule shortcuts.
+            'ipv4' => 'ipv4',
+            'ipv6' => 'ipv6',
+            'macAddress' => 'macAddress',
+            'json' => 'json',
+            'timezone' => 'timezone',
+            'hexColor' => 'hexColor',
+            'activeUrl' => 'activeUrl',
+        ],
         'numeric' => ['integer' => 'integer'],
+        // 1.19.0 addition — zero-arg ArrayRule shortcut.
+        'array' => ['list' => 'list'],
+    ];
+
+    /**
+     * Factory shortcuts where the chained method carries args that must
+     * promote to the new factory's args. `FluentRule::string()->regex($p)`
+     * → `FluentRule::regex($p)` and `FluentRule::field()->enum($t)` →
+     * `FluentRule::enum($t)`. Distinct from `FACTORY_SHORTCUTS` because
+     * the existing transform gates on `$method['args'] === []`.
+     *
+     * Conservative gate: fires only when the source factory is arg-less
+     * AND the chain has no `label()` call. Both conditions prevent silent
+     * label loss; positional-slot threading (`regex($pattern, $label)`,
+     * `enum($type, $cb, $label)`) is out of v1 scope, so when a label is
+     * present we leave the chain alone and let the user collapse manually.
+     */
+    private const array FACTORY_SHORTCUTS_WITH_ARGS = [
+        'string' => ['regex' => 'regex'],
+        'field' => ['enum' => 'enum'],
     ];
 
     private const array REDUNDANT_ON_FACTORY = [
         'url' => ['url'], 'uuid' => ['uuid'], 'ulid' => ['ulid'],
         'ip' => ['ip'], 'integer' => ['integer'],
+        // 1.19.0 additions — redundant zero-arg type calls on the new factories.
+        'ipv4' => ['ipv4'], 'ipv6' => ['ipv6'], 'macAddress' => ['macAddress'],
+        'json' => ['json'], 'timezone' => ['timezone'], 'hexColor' => ['hexColor'],
+        'activeUrl' => ['activeUrl'], 'list' => ['list'],
     ];
 
     private const array LABEL_FIRST_FACTORIES = [
         'string', 'numeric', 'integer', 'date', 'dateTime', 'boolean',
         'file', 'image', 'field', 'url', 'uuid', 'ulid', 'ip',
+        // 1.19.0 additions — all accept `?string $label` as last positional arg.
+        // `enum` excluded — its label is the THIRD positional, so the
+        // single-positional-arg label-promotion path doesn't fit.
+        'ipv4', 'ipv6', 'macAddress', 'json', 'timezone', 'hexColor',
+        'activeUrl', 'regex', 'list', 'declined',
     ];
 
     /** @var WeakMap<MethodCall, true> */
@@ -173,76 +215,240 @@ CODE_SAMPLE
         $methods = $chain['methods'];
 
         // Pattern 1: Factory shortcuts — string()->url() → url()
-        if (isset(self::FACTORY_SHORTCUTS[$factory['name']])) {
-            $shortcuts = self::FACTORY_SHORTCUTS[$factory['name']];
+        $shortcutResult = $this->tryFactoryShortcuts($factory, $methods);
 
-            foreach ($methods as $i => $method) {
-                if (isset($shortcuts[$method['name']]) && $method['args'] === []) {
-                    $factory = ['name' => $shortcuts[$method['name']], 'args' => $factory['args']];
-                    unset($methods[$i]);
-                    $methods = array_values($methods);
-                    $changed = true;
-                    break;
-                }
-            }
+        if ($shortcutResult !== null) {
+            $factory = $shortcutResult['factory'];
+            $methods = $shortcutResult['methods'];
+            $changed = true;
+        }
+
+        // Pattern 1b: Arg-carrying factory shortcuts (1.19.0).
+        $argCarryingResult = $this->tryFactoryShortcutsWithArgs($factory, $methods);
+
+        if ($argCarryingResult !== null) {
+            $factory = $argCarryingResult['factory'];
+            $methods = $argCarryingResult['methods'];
+            $changed = true;
         }
 
         // Pattern 13: Remove redundant type calls
-        if (isset(self::REDUNDANT_ON_FACTORY[$factory['name']])) {
-            foreach ($methods as $i => $method) {
-                if (in_array($method['name'], self::REDUNDANT_ON_FACTORY[$factory['name']], true) && $method['args'] === []) {
-                    unset($methods[$i]);
-                    $methods = array_values($methods);
-                    $changed = true;
-                }
-            }
+        $redundantResult = $this->tryRemoveRedundantTypeCalls($factory, $methods);
+
+        if ($redundantResult !== null) {
+            $methods = $redundantResult;
+            $changed = true;
         }
 
         // Pattern 2: label() → factory arg
-        if ($factory['args'] === [] && in_array($factory['name'], self::LABEL_FIRST_FACTORIES, true)) {
-            foreach ($methods as $i => $method) {
-                if ($method['name'] === 'label' && count($method['args']) === 1) {
-                    $factory['args'] = $method['args'];
-                    unset($methods[$i]);
-                    $methods = array_values($methods);
-                    $changed = true;
-                    break;
-                }
+        $labelResult = $this->tryPromoteLabelToFactoryArg($factory, $methods);
+
+        if ($labelResult !== null) {
+            $factory = $labelResult['factory'];
+            $methods = $labelResult['methods'];
+            $changed = true;
+        }
+
+        // Pattern 11: min(x)->max(y) → between(x, y).
+        $betweenResult = $this->tryFoldMinMaxIntoBetween($methods);
+
+        if ($betweenResult !== null) {
+            $methods = $betweenResult;
+            $changed = true;
+        }
+
+        return $changed ? ['factory' => $factory, 'methods' => $methods] : null;
+    }
+
+    /**
+     * Try Pattern 11: collapse adjacent `min(x)` + `max(y)` calls into
+     * a single `between(x, y)`. Bails when either method carries
+     * messages (`messageFor('min'/'max')` or positional `message()`
+     * adjacent to min/max), since the message keys would rebind from
+     * min/max to between.
+     *
+     * @param  list<array{name: string, args: list<Arg>}>  $methods
+     * @return list<array{name: string, args: list<Arg>}>|null
+     */
+    private function tryFoldMinMaxIntoBetween(array $methods): ?array
+    {
+        if ($this->hasMinMaxMessages($methods) || $this->hasPositionalMessageNearMinMax($methods)) {
+            return null;
+        }
+
+        $minIdx = null;
+        $maxIdx = null;
+
+        foreach ($methods as $i => $method) {
+            if ($method['name'] === 'min' && count($method['args']) === 1) {
+                $minIdx = $i;
+            }
+
+            if ($method['name'] === 'max' && count($method['args']) === 1) {
+                $maxIdx = $i;
             }
         }
 
-        // Pattern 11: min(x)->max(y) → between(x, y)
-        // Skip when messageFor('min'/'max') exists OR positional message() is
-        // adjacent to min/max (would rebind from min/max to between key).
-        if (! $this->hasMinMaxMessages($methods) && ! $this->hasPositionalMessageNearMinMax($methods)) {
-            $minIdx = null;
-            $maxIdx = null;
+        if ($minIdx === null || $maxIdx === null) {
+            return null;
+        }
 
-            foreach ($methods as $i => $method) {
-                if ($method['name'] === 'min' && count($method['args']) === 1) {
-                    $minIdx = $i;
-                }
+        $minArg = $methods[$minIdx]['args'][0];
+        $maxArg = $methods[$maxIdx]['args'][0];
 
-                if ($method['name'] === 'max' && count($method['args']) === 1) {
-                    $maxIdx = $i;
-                }
-            }
+        $methods[$minIdx < $maxIdx ? $minIdx : $maxIdx] = [
+            'name' => 'between',
+            'args' => [$minArg, $maxArg],
+        ];
+        unset($methods[max($maxIdx, $minIdx)]);
 
-            if ($minIdx !== null && $maxIdx !== null) {
-                $minArg = $methods[$minIdx]['args'][0];
-                $maxArg = $methods[$maxIdx]['args'][0];
+        return array_values($methods);
+    }
 
-                $methods[$minIdx < $maxIdx ? $minIdx : $maxIdx] = [
-                    'name' => 'between',
-                    'args' => [$minArg, $maxArg],
+    /**
+     * Pattern 1: zero-arg factory shortcuts (`string()->url()` → `url()`).
+     * Existing factory args carry through to the new factory. Returns
+     * null when no shortcut applies.
+     *
+     * @param  array{name: string, args: list<Arg>}  $factory
+     * @param  list<array{name: string, args: list<Arg>}>  $methods
+     * @return array{factory: array{name: string, args: list<Arg>}, methods: list<array{name: string, args: list<Arg>}>}|null
+     */
+    private function tryFactoryShortcuts(array $factory, array $methods): ?array
+    {
+        if (! isset(self::FACTORY_SHORTCUTS[$factory['name']])) {
+            return null;
+        }
+
+        $shortcuts = self::FACTORY_SHORTCUTS[$factory['name']];
+
+        foreach ($methods as $i => $method) {
+            if (isset($shortcuts[$method['name']]) && $method['args'] === []) {
+                unset($methods[$i]);
+
+                return [
+                    'factory' => ['name' => $shortcuts[$method['name']], 'args' => $factory['args']],
+                    'methods' => array_values($methods),
                 ];
-                unset($methods[max($maxIdx, $minIdx)]);
-                $methods = array_values($methods);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Pattern 13: drop redundant zero-arg type calls (`url()->url()` →
+     * `url()`). Returns the modified methods list when at least one
+     * call was removed; null when no change.
+     *
+     * @param  array{name: string, args: list<Arg>}  $factory
+     * @param  list<array{name: string, args: list<Arg>}>  $methods
+     * @return list<array{name: string, args: list<Arg>}>|null
+     */
+    private function tryRemoveRedundantTypeCalls(array $factory, array $methods): ?array
+    {
+        if (! isset(self::REDUNDANT_ON_FACTORY[$factory['name']])) {
+            return null;
+        }
+
+        $redundant = self::REDUNDANT_ON_FACTORY[$factory['name']];
+        $changed = false;
+
+        foreach ($methods as $i => $method) {
+            if (in_array($method['name'], $redundant, true) && $method['args'] === []) {
+                unset($methods[$i]);
                 $changed = true;
             }
         }
 
-        return $changed ? ['factory' => $factory, 'methods' => $methods] : null;
+        return $changed ? array_values($methods) : null;
+    }
+
+    /**
+     * Pattern 2: promote `->label('X')` to factory arg
+     * (`string()->label('X')` → `string('X')`). Only fires when the
+     * factory is arg-less AND in the label-first list. Returns null
+     * when no promotion applies.
+     *
+     * @param  array{name: string, args: list<Arg>}  $factory
+     * @param  list<array{name: string, args: list<Arg>}>  $methods
+     * @return array{factory: array{name: string, args: list<Arg>}, methods: list<array{name: string, args: list<Arg>}>}|null
+     */
+    private function tryPromoteLabelToFactoryArg(array $factory, array $methods): ?array
+    {
+        if ($factory['args'] !== [] || ! in_array($factory['name'], self::LABEL_FIRST_FACTORIES, true)) {
+            return null;
+        }
+
+        foreach ($methods as $i => $method) {
+            if ($method['name'] === 'label' && count($method['args']) === 1) {
+                unset($methods[$i]);
+
+                return [
+                    'factory' => ['name' => $factory['name'], 'args' => $method['args']],
+                    'methods' => array_values($methods),
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Try the 1.19.0 arg-carrying factory shortcuts: `string()->regex($p)`
+     * → `regex($p)`, `field()->enum($t)` → `enum($t)`. Promotes the
+     * chained method's args to the new factory's args. Conservative
+     * gate: only fires when the source factory is arg-less AND the
+     * chain has no `label()` call (positional-slot threading is out of
+     * v1 scope per the 1.19.0 surface spec). Returns null when no
+     * promotion applies.
+     *
+     * @param  array{name: string, args: list<Arg>}  $factory
+     * @param  list<array{name: string, args: list<Arg>}>  $methods
+     * @return array{factory: array{name: string, args: list<Arg>}, methods: list<array{name: string, args: list<Arg>}>}|null
+     */
+    private function tryFactoryShortcutsWithArgs(array $factory, array $methods): ?array
+    {
+        if ($factory['args'] !== []
+            || ! isset(self::FACTORY_SHORTCUTS_WITH_ARGS[$factory['name']])
+            || $this->chainHasLabelCall($methods)) {
+            return null;
+        }
+
+        $shortcuts = self::FACTORY_SHORTCUTS_WITH_ARGS[$factory['name']];
+
+        foreach ($methods as $i => $method) {
+            if (isset($shortcuts[$method['name']]) && $method['args'] !== []) {
+                unset($methods[$i]);
+
+                return [
+                    'factory' => ['name' => $shortcuts[$method['name']], 'args' => $method['args']],
+                    'methods' => array_values($methods),
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Whether the chain contains a `label(...)` call. Used by the
+     * arg-carrying factory-shortcut gate to prevent silent label loss
+     * when `regex`/`enum` would otherwise consume the chained method's
+     * args without threading the label into the new factory's
+     * positional slot.
+     *
+     * @param  list<array{name: string, args: list<Arg>}>  $methods
+     */
+    private function chainHasLabelCall(array $methods): bool
+    {
+        foreach ($methods as $method) {
+            if ($method['name'] === 'label') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

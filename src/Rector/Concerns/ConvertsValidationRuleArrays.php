@@ -142,13 +142,69 @@ trait ConvertsValidationRuleArrays
      */
     private bool $inAttributeContext = false;
 
-    private function convertArrayToFluentRule(Array_ $rulesArray, bool $inAttributeContext = false): ?Expr
+    /**
+     * 1.19.0 sibling-token promotion (array-form): if the resolved type
+     * has any promoting modifier siblings (`['string', 'ipv4']` →
+     * `ipv4` factory), return the new type + the promoter's index.
+     * Returns null when no promotion applies.
+     *
+     * @return array{type: string, index: int|string}|null
+     */
+    private function tryPromoteToSiblingFactory(string $type, Array_ $rulesArray): ?array
     {
-        $this->inAttributeContext = $inAttributeContext;
+        if (! isset(self::TYPE_PROMOTING_MODIFIERS[$type])) {
+            return null;
+        }
 
-        // Pass 1: Pre-scan for type token
+        $promoters = self::TYPE_PROMOTING_MODIFIERS[$type];
+
+        foreach ($rulesArray->items as $index => $arrayItem) {
+            if (! $arrayItem instanceof ArrayItem) {
+                continue;
+            }
+
+            if (! $arrayItem->value instanceof String_) {
+                continue;
+            }
+
+            $parsed = $this->parseRulePart($arrayItem->value->value);
+            $normalized = $this->normalizeRuleName($parsed['name']);
+
+            if (in_array($normalized, $promoters, true) && $parsed['args'] === null) {
+                return ['type' => $normalized, 'index' => $index];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Pass 1: Pre-scan a rules array for the FIRST item that resolves
+     * to a typed factory. Returns the resolved type + the position so
+     * Pass 2 can fold the type item into the factory call. Returns
+     * null when an item is malformed (non-ArrayItem, spread).
+     *
+     * Type detection order, first match wins:
+     * 1. String token (`'string'`, `'email'`, …) → `TYPE_MAP` lookup.
+     * 2. Password new/static call chain.
+     * 3. `Rule::` factory chain.
+     * 4. Email rule object (`Email::default()`, `new Email()` …).
+     *
+     * Subsequent items are processed in Pass 2 by `classifyAndChain`.
+     *
+     * Sibling-token promotion only applies to types resolved via plain
+     * string token — `typeKind` carries that source so the promotion
+     * pass can refuse to fire on chain-derived types (Password / Rule::
+     * factory / Email rule object), which would otherwise lose the
+     * extracted chain ops when their source item is superseded.
+     *
+     * @return array{type: ?string, typeIndex: int|string|null, typeKind: ?string, typeChainOps: list<array{name: string, args: list<Arg>}>, typeFactoryArgs: list<Arg>}|null
+     */
+    private function detectArrayRuleType(Array_ $rulesArray): ?array
+    {
         $type = null;
         $typeIndex = null;
+        $typeKind = null;
 
         /** @var list<array{name: string, args: list<Arg>}> */
         $typeChainOps = [];
@@ -157,16 +213,10 @@ trait ConvertsValidationRuleArrays
         $typeFactoryArgs = [];
 
         foreach ($rulesArray->items as $index => $arrayItem) {
-            if (! $arrayItem instanceof ArrayItem) {
+            if (! $arrayItem instanceof ArrayItem || $arrayItem->unpack) {
                 return null;
             }
 
-            // Spread operator (...$expr) unpacks into multiple rules — bail
-            if ($arrayItem->unpack) {
-                return null;
-            }
-
-            // String type token
             if ($arrayItem->value instanceof String_) {
                 $parsed = $this->parseRulePart($arrayItem->value->value);
                 $normalized = $this->normalizeRuleName($parsed['name']);
@@ -174,41 +224,92 @@ trait ConvertsValidationRuleArrays
                 if (isset(self::TYPE_MAP[$normalized])) {
                     $type = self::TYPE_MAP[$normalized];
                     $typeIndex = $index;
+                    $typeKind = 'string_token';
                     break;
                 }
 
                 continue;
             }
 
-            // Password chain type detection
             $passwordResult = $this->detectPasswordType($arrayItem->value);
 
             if ($passwordResult !== null) {
                 $type = 'password';
                 $typeIndex = $index;
+                $typeKind = 'chain';
                 $typeChainOps = $passwordResult['chainOps'];
                 $typeFactoryArgs = $passwordResult['factoryArgs'];
                 break;
             }
 
-            // Rule:: factory chain type detection
             $factoryResult = $this->detectRuleFactoryType($arrayItem->value);
 
             if ($factoryResult !== null) {
                 $type = $factoryResult['type'];
                 $typeIndex = $index;
+                $typeKind = 'chain';
                 $typeChainOps = $factoryResult['chainOps'];
                 break;
             }
 
-            // Email rule object detection: Email::default(), new Email(), (new Email())->strict()
             $emailResult = $this->detectEmailType($arrayItem->value);
 
             if ($emailResult !== null) {
                 $type = 'email';
                 $typeIndex = $index;
+                $typeKind = 'chain';
                 $typeChainOps = $emailResult['chainOps'];
                 break;
+            }
+        }
+
+        return [
+            'type' => $type,
+            'typeIndex' => $typeIndex,
+            'typeKind' => $typeKind,
+            'typeChainOps' => $typeChainOps,
+            'typeFactoryArgs' => $typeFactoryArgs,
+        ];
+    }
+
+    private function convertArrayToFluentRule(Array_ $rulesArray, bool $inAttributeContext = false): ?Expr
+    {
+        $this->inAttributeContext = $inAttributeContext;
+
+        $detection = $this->detectArrayRuleType($rulesArray);
+
+        if ($detection === null) {
+            return null;
+        }
+
+        $type = $detection['type'];
+        $typeIndex = $detection['typeIndex'];
+        $typeKind = $detection['typeKind'];
+        $typeChainOps = $detection['typeChainOps'];
+        $typeFactoryArgs = $detection['typeFactoryArgs'];
+
+        // 1.19.0 sibling-token promotion (array-form): if the resolved
+        // type has any promoting modifier siblings (`['string', 'ipv4']`
+        // → `ipv4` factory), swap before the factory build. Same rationale
+        // as the string-form promotion in `convertStringToFluentRule`:
+        // converters must emit the final factory form directly because
+        // SIMPLIFY isn't in the default set list. Only fires when type
+        // came from a string-token match (chain-derived types like
+        // `password`/`email` aren't in `TYPE_PROMOTING_MODIFIERS`).
+        $supersededTypeIndex = null;
+
+        // Promotion only fires when the type came from a plain string
+        // token (`'string'` / `'array'`) — chain-derived types
+        // (`Rule::string()->alpha()`, `new Password(...)`, `Email::default()`)
+        // carry typeChainOps that get applied at typeIndex in Pass 2;
+        // superseding that index would silently drop the chain ops.
+        if ($type !== null && $typeKind === 'string_token') {
+            $promoted = $this->tryPromoteToSiblingFactory($type, $rulesArray);
+
+            if ($promoted !== null) {
+                $supersededTypeIndex = $typeIndex;
+                $type = $promoted['type'];
+                $typeIndex = $promoted['index'];
             }
         }
 
@@ -220,6 +321,14 @@ trait ConvertsValidationRuleArrays
         foreach ($rulesArray->items as $index => $arrayItem) {
             if (! $arrayItem instanceof ArrayItem) {
                 return null;
+            }
+
+            // The original type token (now superseded by a promoter)
+            // is dropped from the chain — its semantic role is owned
+            // by the promoted factory. Skip without invoking
+            // classifyAndChain to avoid the escape-hatch fallback.
+            if ($index === $supersededTypeIndex) {
+                continue;
             }
 
             // At the type element's position, apply its chain ops (from Password/Rule factory)

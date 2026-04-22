@@ -86,12 +86,20 @@ final class SimplifyRuleWrappersRector extends AbstractRector implements Documen
     /** Methods the rector may rewrite to. Bounds the reflection allowlist. */
     private const array V1_REWRITE_TARGETS = [
         'in', 'notIn', 'min', 'max', 'between', 'regex', 'exactly',
+        // 1.19.0 additions:
+        'enum',
+        'positive', 'negative', 'nonNegative', 'nonPositive',
     ];
 
     /**
      * Map Laravel rule-token names to fluent-validation native method names.
      * Most map identity; `size` is renamed to `exactly` per
      * `vendor/sandermuller/laravel-fluent-validation/src/Exceptions/TypedBuilderHint.php:24-25`.
+     *
+     * Sign helpers (`gt:0` → `positive` family) only fire when the arg is
+     * a literal zero — gating happens in the per-family parsing branch
+     * because the AST literal is built before the rule-name-to-method
+     * resolution runs.
      */
     private const array RULE_NAME_TO_METHOD = [
         'in' => 'in',
@@ -102,6 +110,12 @@ final class SimplifyRuleWrappersRector extends AbstractRector implements Documen
         'between' => 'between',
         'regex' => 'regex',
         'size' => 'exactly',
+        // 1.19.0 additions:
+        'enum' => 'enum',
+        'gt' => 'positive',
+        'gte' => 'nonNegative',
+        'lt' => 'negative',
+        'lte' => 'nonPositive',
     ];
 
     /**
