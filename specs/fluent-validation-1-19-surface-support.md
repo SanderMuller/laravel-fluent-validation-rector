@@ -370,14 +370,14 @@ reflection allowlist handle the receiver gate naturally — `positive`
       (`gt:5`, `gte:other_field`, `gt:00`, `gt:-0`, array-form
       non-zero, `string()->rule('gt:0')`)
 
-### Phase 4: Release notes + README (Priority: MEDIUM) — partial; composer bump deferred
+### Phase 4: Release notes + README (Priority: MEDIUM) — ✅ shipped
 
-- [ ] **DEFERRED — composer.json bump to `^1.19`.** Blocking on the
-      coordinated `laravel-fluent-validation` 1.19.0 tag. Peer
-      `91mf9wnj` confirmed (2026-04-21) the tag is not cut and the
-      surface lives uncommitted in their working tree. Bumping the
-      floor before the tag exists would fail `composer install` on
-      CI. Tracker entry below — flip when the upstream tag lands
+- [x] **composer.json bump to `^1.19`** — landed once the upstream
+      1.19.0 tag was cut. Sign-helper transform fixture
+      (`tests/SimplifyRuleWrappers/Fixture/sign_helpers_on_numeric.php.inc`)
+      flipped from no-change pin to transform shape; reflection-based
+      method-availability check in `SimplifyRuleWrappersRector::bootResolutionTables`
+      now finds the new methods on the resolved typed-rule subclass
 - [ ] **DEFERRED — `RELEASE_NOTES_<next>.md`.** Per pre-release skill:
       release notes are written after the implementation commit is
       pushed AND CI is green AND any composer-coordination commit
@@ -394,15 +394,14 @@ reflection allowlist handle the receiver gate naturally — `positive`
       vendored 1.17.x except the sign-helper transform pin (which
       is intentionally a no-change pin until the floor bump)
 
-### Phase 5: CI matrix validation (Priority: LOW) — deferred with Phase 4 composer bump
+### Phase 5: CI matrix validation (Priority: LOW) — verified post-bump
 
-- [ ] **DEFERRED** — pairs with Phase 4 composer bump. After
-      `^1.19` lands in `composer.json`, verify the
-      `.github/workflows/run-tests.yml` `--prefer-lowest` matrix
-      cell resolves to fluent-validation 1.19.0. No changes
-      expected to the workflow file itself — `--prefer-lowest`
-      reads from composer.json's floor
-- [ ] Tests — N/A (CI configuration only)
+- [x] CI run on the coordination commit (composer floor bump) confirms
+      the `--prefer-lowest` matrix cell resolves to fluent-validation
+      1.19.0 cleanly. No `.github/workflows/run-tests.yml` changes
+      were needed — `--prefer-lowest` reads from `composer.json`'s
+      floor automatically
+- [x] Tests — N/A (CI configuration only)
 
 ---
 
