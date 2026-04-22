@@ -41,17 +41,34 @@ trait ReportsLivewireAttributeArgs
         $classification = $this->classifyAttributeArgs($attr);
         $propertyName = $this->firstPropertyName($property);
 
-        if ($classification['dropped'] !== []) {
+        // When `migrate_messages` is on AND this specific attribute's
+        // message: arg was successfully migrated by MigratesAttributeMessages,
+        // suppress the legacy "dropped" / "deferred" log lines so users
+        // don't see misleading "manual migration needed" hints. Per-attribute
+        // granularity matters: a non-literal/mixed message: shape doesn't
+        // migrate, and the legacy log MUST still fire for those so the
+        // user has a trail to debug. The host rector composes both this
+        // concern and MigratesAttributeMessages.
+        $messageMigrated = $this->migrateMessages && $this->attributeMessageWasMigrated($attr);
+
+        $droppedFiltered = $messageMigrated
+            ? array_values(array_filter(
+                $classification['dropped'],
+                static fn (string $entry): bool => ! str_starts_with($entry, 'message:'),
+            ))
+            : $classification['dropped'];
+
+        if ($droppedFiltered !== []) {
             $this->logSkip($class, sprintf(
                 '#[Rule] attribute on property $%s dropped unsupported args (%s); migrate to messages() / hooks manually',
                 $propertyName,
-                implode(', ', $classification['dropped']),
+                implode(', ', $droppedFiltered),
             ));
         }
 
-        if ($classification['hasArrayMessage']) {
+        if ($classification['hasArrayMessage'] && ! $messageMigrated) {
             $this->logSkip($class, sprintf(
-                '#[Rule] attribute on property $%s uses array-form message: — deferred to a future release (messages() method generation not yet implemented); migrate manually for now',
+                '#[Rule] attribute on property $%s uses array-form message: — deferred or unsupported shape (mixed/non-literal items); migrate manually',
                 $propertyName,
             ));
         }

@@ -32,6 +32,7 @@ use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsLivewireRuleAttri
 use SanderMuller\FluentValidationRector\Rector\Concerns\ExpandsKeyedAttributeArrays;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ExtractsLivewireAttributeLabels;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
+use SanderMuller\FluentValidationRector\Rector\Concerns\MigratesAttributeMessages;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ReportsLivewireAttributeArgs;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ResolvesInheritedRulesVisibility;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ResolvesRealtimeValidationMarker;
@@ -81,11 +82,29 @@ final class ConvertLivewireRuleAttributeRector extends AbstractRector implements
 {
     public const string PRESERVE_REALTIME_VALIDATION = 'preserve_realtime_validation';
 
+    /**
+     * Opt-in flag controlling `message:` attribute-arg migration into a
+     * generated `messages(): array` method. Default `false` (legacy
+     * behavior — `message:` args are skip-logged and the user migrates
+     * manually). When `true`, the rector collects `message:` values per
+     * property and installs a `messages()` method alongside `rules()`.
+     *
+     * Opt-in rather than default-on because `messages()` generation
+     * expands the class surface (a second framework-called method) and
+     * some consumers centralize messages in `lang/en/validation.php`
+     * files where the rector's inline `messages()` output would be
+     * unwanted duplication.
+     */
+    public const string MIGRATE_MESSAGES = 'migrate_messages';
+
+    private bool $migrateMessages = false;
+
     use ConvertsValidationRuleArrays;
     use DetectsLivewireRuleAttributes;
     use ExpandsKeyedAttributeArrays;
     use ExtractsLivewireAttributeLabels;
     use LogsSkipReasons;
+    use MigratesAttributeMessages;
     use ReportsLivewireAttributeArgs;
     use ResolvesInheritedRulesVisibility;
     use ResolvesRealtimeValidationMarker;
@@ -101,6 +120,12 @@ final class ConvertLivewireRuleAttributeRector extends AbstractRector implements
 
         if (is_bool($value)) {
             $this->preserveRealtimeValidation = $value;
+        }
+
+        $messagesFlag = $configuration[self::MIGRATE_MESSAGES] ?? null;
+
+        if (is_bool($messagesFlag)) {
+            $this->migrateMessages = $messagesFlag;
         }
     }
 
@@ -157,6 +182,29 @@ CODE_SAMPLE
             return null;
         }
 
+        // Collect message entries BEFORE collectRuleEntries — the
+        // latter strips attributes via extractAndStripRuleAttribute,
+        // which would leave the message walk with nothing to read.
+        // The walk reads attributes without mutation; the
+        // installMessagesMethod call below is gated on $migrateMessages
+        // (returns [] when off, so no-op on the install).
+        $messageEntries = $this->collectMessageEntries($node);
+
+        // Preflight: if migration produced entries but the install would
+        // fail (existing non-trivial messages() body, etc.), bail the
+        // entire conversion. Stripping attributes + failed messages()
+        // install would lose the user's message: data silently. Logging
+        // here keeps the source intact.
+        if ($messageEntries !== [] && ! $this->canInstallMessagesMethod($node)) {
+            $this->logSkip($node, sprintf(
+                'migrate_messages: %d migrated message %s cannot be installed (existing messages() method is not a simple `return [...]`); leaving #[Validate] attributes intact',
+                count($messageEntries),
+                count($messageEntries) === 1 ? 'entry' : 'entries',
+            ));
+
+            return null;
+        }
+
         $collected = $this->collectRuleEntries($node);
 
         if ($collected === []) {
@@ -166,6 +214,8 @@ CODE_SAMPLE
         if (! $this->installRulesMethod($node, $collected)) {
             return null;
         }
+
+        $this->installMessagesMethod($node, $messageEntries);
 
         $this->queueFluentRuleImport();
 

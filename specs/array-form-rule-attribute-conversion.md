@@ -177,21 +177,44 @@ just syntactically plausible code. Three correctness pillars:
 - [x] Tests — fixtures for each recognized arg + a fixture pinning array-form
       `as:` / `attribute:` expansion across wildcard keys
 
-### Phase 4: `message:` migration to `messages(): array` (Priority: LOW)
+### Phase 4: `message:` migration to `messages(): array` (Priority: LOW) — ✅ shipped
 
-- [ ] Only after Phase 1-3 are shipped and stable. Design depends on the
-      keyed-array expansion landing first because the `field.rule` message
-      keys need the expanded entry names
-- [ ] Decide: always-on, or opt-in behind `migrate_messages` config
-      (mirrors `AddHasFluentValidationTraitRector::FILAMENT_CONFLICT_RESOLUTION`
-      pattern)
-- [ ] Implement for the two documented shapes: string `message:` in list
-      form (attaches to the single attribute's rules) and array `message:`
-      in array form (keyed by rule name or `key.rule`)
-- [ ] Generalize `resolveGeneratedRulesVisibility()` to resolve visibility
-      for any generated method name (`rules`, `messages`, `validationAttributes`)
-- [ ] Tests — fixtures for each `message:` shape + a merge-into-existing-
-      `messages()`-method path
+- [x] Opt-in via `MIGRATE_MESSAGES = 'migrate_messages'` config flag
+      (default `false`). Mirrors `PRESERVE_REALTIME_VALIDATION` pattern;
+      keeps legacy skip-log behaviour intact for consumers who centralize
+      messages in lang files
+- [x] String `message: 'X'` migrates to a whole-attribute key (`'<prop>'
+      => 'X'`) per Livewire's documented behaviour — Laravel matches the
+      attribute-only key against any rule failing on that attribute
+- [x] Array `message: ['rule' => 'X']` migrates per-rule
+      (`'<prop>.<rule>' => 'X'`); keys already containing `.` (full-path
+      forms used with keyed-array first-arg attributes) pass through
+      verbatim
+- [x] `resolveGeneratedRulesVisibility()` reused via composing
+      `ResolvesInheritedRulesVisibility` into the new
+      `MigratesAttributeMessages` concern — same parent-final-method
+      guard fires for both `rules()` and `messages()` generation
+- [x] Merge into existing `messages(): array` via Array_ replacement
+      (mutating items in place would preserve original printer-token
+      positions and collapse merged entries onto a single line; rebuilding
+      the Array_ with `NEWLINED_ARRAY_PRINT` keeps multi-line emission)
+- [x] `ReportsLivewireAttributeArgs` suppresses the legacy "dropped /
+      deferred message:" skip-log lines when the config flag is on, so
+      users don't see misleading "manual migration needed" hints for
+      entries the rector handled
+- [x] Tests — 7 fixtures (codex review surfaced 3 hardening cases on
+      top of the original 4): string-message → attribute key, array-
+      message → per-rule keys, array-message with full-path keys
+      preserved, merge-into-existing path, multi-attribute-first-wins
+      (only first attribute's message contributes — matches rule-
+      extraction's first-wins contract), non-literal-message keeps
+      legacy skip-log (per-attribute granularity via
+      `attributeMessageWasMigrated` set), preflight-bail when existing
+      `messages()` body isn't a simple `return [...]` (whole-conversion
+      aborts so `message:` data isn't lost). New test class
+      `ConvertLivewireRuleAttributeMessageMigrationTest.php` + dedicated
+      config so the opt-in path runs alongside the default off-path
+      coverage in `ConvertLivewireRuleAttributeRectorTest`
 
 ---
 

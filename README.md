@@ -175,7 +175,9 @@ The full rule list — any of these can be registered individually without pulli
 
 Two rules accept configuration via `withConfiguredRule()`:
 
-- **`ConvertLivewireRuleAttributeRector`** — `PRESERVE_REALTIME_VALIDATION` (bool, default `true`). When true, converted `#[Validate]` properties retain an empty `#[Validate]` marker so `wire:model.live` real-time validation survives conversion. Opt out with `false` on codebases that don't use `wire:model.live` and find the marker noisy in converted diffs.
+- **`ConvertLivewireRuleAttributeRector`**
+  - `PRESERVE_REALTIME_VALIDATION` (bool, default `true`). When true, converted `#[Validate]` properties retain an empty `#[Validate]` marker so `wire:model.live` real-time validation survives conversion. Opt out with `false` on codebases that don't use `wire:model.live` and find the marker noisy in converted diffs.
+  - `MIGRATE_MESSAGES` (bool, default `false`). When true, `message:` attribute args migrate into a generated `messages(): array` method alongside `rules()`. String `message: 'X'` becomes `'<prop>' => 'X'`; array `message: ['rule' => 'X']` becomes `'<prop>.<rule>' => 'X'` (or full-path keys passthrough verbatim for keyed-array first-arg attributes). Opt-in because the generated method expands the class surface and some consumers centralize messages in lang files. The whole conversion bails (leaving `#[Validate]` intact) when an existing non-trivial `messages()` method can't be safely merged — preflight check prevents silent message loss.
 - **`AddHasFluentRulesTraitRector`** — `BASE_CLASSES` (list of strings). Opt-in list of FormRequest base class names that should receive the trait. Leave empty to skip the trait-insertion path entirely; set to a class list to target shared bases.
 
 ```php
