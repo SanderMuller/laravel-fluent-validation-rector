@@ -2,13 +2,20 @@
 
 namespace SanderMuller\FluentValidationRector\Rector\Concerns;
 
+use BackedEnum;
 use Illuminate\Validation\Rule;
 use PhpParser\Node\Arg;
 use PhpParser\Node\ArrayItem;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Array_;
+use PhpParser\Node\Expr\BinaryOp\Concat;
+use PhpParser\Node\Expr\ClassConstFetch;
+use PhpParser\Node\Expr\ConstFetch;
+use PhpParser\Node\Expr\PropertyFetch;
 use PhpParser\Node\Expr\StaticCall;
+use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
+use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\Float_;
 use PhpParser\Node\Scalar\Int_;
 use PhpParser\Node\Scalar\String_;
@@ -26,6 +33,39 @@ use Rector\Rector\AbstractRector;
  */
 trait ParsesRulePayloads
 {
+    /**
+     * Laravel rule-token names that lower to FluentRule conditional methods
+     * with variadic-safe signatures. Split into two arity tiers:
+     *
+     * - Category A (`string $field, ...$values`): require tail arity >= 2
+     *   so the `$field` slot is statically present and the rewrite can't
+     *   arity-fail on an empty value list.
+     * - Category B (`string ...$fields`): require tail arity >= 1.
+     *
+     * Excluded:
+     * - Category C (`string $field, ?string $message`) — rewriting would
+     *   reinterpret arg 2 as the error message instead of a value.
+     * - Category D (`string $field`) — single-arg signature; extra tail
+     *   args would TypeError after rewrite.
+     *
+     * @var list<string>
+     */
+    private const array COMMA_SEPARATED_FIELD_VALUES_RULES = [
+        'required_if', 'required_unless',
+        'exclude_if', 'exclude_unless',
+        'prohibited_if', 'prohibited_unless',
+        'present_if', 'present_unless',
+        'missing_if', 'missing_unless',
+    ];
+
+    /** @var list<string> */
+    private const array COMMA_SEPARATED_PURE_FIELDS_RULES = [
+        'required_with', 'required_with_all', 'required_without', 'required_without_all',
+        'present_with', 'present_with_all',
+        'missing_with', 'missing_with_all',
+        'prohibits',
+    ];
+
     /**
      * Parse a `->rule(...)` payload into `[ruleName, list<Arg>]` if it
      * matches one of the recognised shapes. Returns `null` for anything
@@ -279,7 +319,124 @@ trait ParsesRulePayloads
             return $this->buildInArgsFromArrayItems($name, $tailItems);
         }
 
+        if (in_array($name, self::COMMA_SEPARATED_FIELD_VALUES_RULES, true)) {
+            return $this->buildCommaSeparatedArgsFromArrayItems($name, $tailItems, minTailArity: 2);
+        }
+
+        if (in_array($name, self::COMMA_SEPARATED_PURE_FIELDS_RULES, true)) {
+            return $this->buildCommaSeparatedArgsFromArrayItems($name, $tailItems, minTailArity: 1);
+        }
+
         return $this->buildArityArgsFromArrayItems($name, $tailItems);
+    }
+
+    /**
+     * Build the arg list for a COMMA_SEPARATED conditional-rule rewrite
+     * (e.g. `['required_if', 'field', 'value']` → `->requiredIf('field',
+     * 'value')`). Every tail item must pass the strict static-safety
+     * whitelist — overloaded fluent signatures (`Closure|bool|string
+     * $field`) mean a dynamic expression could silently switch branches
+     * after rewrite. BackedEnum cases in tail positions are auto-wrapped
+     * with `->value` to match the fluent variadic signature
+     * (`string|int|bool|BackedEnum ...$values`).
+     *
+     * @param  list<ArrayItem>  $tailItems
+     * @return array{0: string, 1: list<Arg>}|null
+     */
+    private function buildCommaSeparatedArgsFromArrayItems(string $name, array $tailItems, int $minTailArity): ?array
+    {
+        if (count($tailItems) < $minTailArity) {
+            return null;
+        }
+
+        $args = [];
+
+        foreach ($tailItems as $item) {
+            if ($item->key instanceof Expr || $item->byRef || $item->unpack) {
+                return null;
+            }
+
+            if (! $this->isSafeCommaSeparatedArg($item->value)) {
+                return null;
+            }
+
+            $args[] = new Arg($this->adaptEnumCaseArg($item->value));
+        }
+
+        return [$name, $args];
+    }
+
+    /**
+     * Strict whitelist — statically-scalar expressions only. Mirrors the
+     * `isSafeTupleArg` gate in `ConvertsValidationRuleArrays` used for the
+     * array-form COMMA_SEPARATED lowering path. Kept in sync because both
+     * rectors emit identical fluent-method calls for equivalent array shapes.
+     */
+    private function isSafeCommaSeparatedArg(Expr $expr): bool
+    {
+        if ($expr instanceof String_ || $expr instanceof Int_) {
+            return true;
+        }
+
+        // Float_ rejected — fluent COMMA_SEPARATED value union is
+        // `string|int|bool|BackedEnum`; `->requiredIf('field', 1.5)` would
+        // TypeError after rewrite. `null` rejected for the same reason.
+        if ($expr instanceof ConstFetch && $this->isNames($expr, ['true', 'false'])) {
+            return true;
+        }
+
+        if ($expr instanceof Variable) {
+            return true;
+        }
+
+        if ($expr instanceof Concat) {
+            return $this->isSafeCommaSeparatedArg($expr->left) && $this->isSafeCommaSeparatedArg($expr->right);
+        }
+
+        if ($expr instanceof ClassConstFetch) {
+            return true;
+        }
+
+        // `Enum::CASE->value` — PropertyFetch on a ClassConstFetch.
+        return $expr instanceof PropertyFetch
+            && $expr->var instanceof ClassConstFetch
+            && $expr->name instanceof Identifier
+            && $expr->name->toString() === 'value';
+    }
+
+    /**
+     * Wrap bare BackedEnum cases in `->value` so the emitted call matches
+     * the fluent variadic signature. Mirrors `adaptEnumArg` in
+     * `ConvertsValidationRuleArrays`. Non-ClassConstFetch expressions pass
+     * through unchanged; `self`/`static`/`parent` and `::class` stay as-is.
+     */
+    private function adaptEnumCaseArg(Expr $expr): Expr
+    {
+        if (! $expr instanceof ClassConstFetch) {
+            return $expr;
+        }
+
+        if (! $expr->class instanceof Name) {
+            return $expr;
+        }
+
+        $className = $expr->class->toString();
+
+        if (in_array(strtolower($className), ['self', 'static', 'parent'], true)) {
+            return $expr;
+        }
+
+        if ($expr->name instanceof Identifier && $expr->name->toString() === 'class') {
+            return $expr;
+        }
+
+        // If the class is autoloadable and NOT a BackedEnum, don't wrap —
+        // the constant is already a scalar.
+        if (class_exists($className) && ! is_subclass_of($className, BackedEnum::class)) {
+            return $expr;
+        }
+
+        return new PropertyFetch($expr, 'value');
     }
 
     /**

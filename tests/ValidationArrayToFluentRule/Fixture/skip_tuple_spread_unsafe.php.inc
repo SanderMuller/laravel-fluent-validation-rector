@@ -2,7 +2,6 @@
 
 namespace SanderMuller\FluentValidationRector\Tests\ValidationArrayToFluentRule\Fixture;
 
-use App\Enums\InteractionType;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UnsafeTupleSpreadFormRequest extends FormRequest
@@ -13,7 +12,6 @@ class UnsafeTupleSpreadFormRequest extends FormRequest
         $args = [];
         $fields = [];
         $tuple = ['required_if', 'role', 'admin'];
-        $dynamic = 'value';
 
         return [
             // Category A all-args spread: $field is inside the spread — bail.
@@ -40,16 +38,6 @@ class UnsafeTupleSpreadFormRequest extends FormRequest
             // First-item spread: rule-name position can never be spread — bail.
             'e' => [
                 [...$tuple],
-                'string',
-            ],
-            // PropertyFetch narrowness: only `->value` is accepted as a safe
-            // enum-value arg. `->name` and dynamic `->$x` must bail.
-            'f' => [
-                ['required_if', 'role', InteractionType::PAUSE->name],
-                'string',
-            ],
-            'g' => [
-                ['required_if', 'role', InteractionType::PAUSE->$dynamic],
                 'string',
             ],
         ];

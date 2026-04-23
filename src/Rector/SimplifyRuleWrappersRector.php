@@ -89,6 +89,20 @@ final class SimplifyRuleWrappersRector extends AbstractRector implements Documen
         // 1.19.0 additions:
         'enum',
         'positive', 'negative', 'nonNegative', 'nonPositive',
+        // COMMA_SEPARATED conditional rules (0.10.1 additions) — array-form
+        // rewrite only. Scoped to variadic-compatible fluent signatures:
+        // Category A (field + ...values) and Category B (...fields). Rules
+        // with overloaded `Closure|bool|string $field` signatures are safe
+        // here because the strict-arg whitelist in
+        // `buildCommaSeparatedArgsFromArrayItems` rejects shapes that could
+        // evaluate to closure/bool/object at runtime.
+        'requiredIf', 'requiredUnless', 'excludeIf', 'excludeUnless',
+        'prohibitedIf', 'prohibitedUnless',
+        'presentIf', 'presentUnless', 'missingIf', 'missingUnless',
+        'requiredWith', 'requiredWithAll', 'requiredWithout', 'requiredWithoutAll',
+        'presentWith', 'presentWithAll',
+        'missingWith', 'missingWithAll',
+        'prohibits',
     ];
 
     /**
@@ -116,6 +130,29 @@ final class SimplifyRuleWrappersRector extends AbstractRector implements Documen
         'gte' => 'nonNegative',
         'lt' => 'negative',
         'lte' => 'nonPositive',
+        // COMMA_SEPARATED conditional rules (0.10.1 additions). Array-form
+        // `->rule(['required_if', $field, $value])` → `->requiredIf($field, $value)`.
+        // Category A — field + variadic values:
+        'required_if' => 'requiredIf',
+        'required_unless' => 'requiredUnless',
+        'exclude_if' => 'excludeIf',
+        'exclude_unless' => 'excludeUnless',
+        'prohibited_if' => 'prohibitedIf',
+        'prohibited_unless' => 'prohibitedUnless',
+        'present_if' => 'presentIf',
+        'present_unless' => 'presentUnless',
+        'missing_if' => 'missingIf',
+        'missing_unless' => 'missingUnless',
+        // Category B — pure variadic fields:
+        'required_with' => 'requiredWith',
+        'required_with_all' => 'requiredWithAll',
+        'required_without' => 'requiredWithout',
+        'required_without_all' => 'requiredWithoutAll',
+        'present_with' => 'presentWith',
+        'present_with_all' => 'presentWithAll',
+        'missing_with' => 'missingWith',
+        'missing_with_all' => 'missingWithAll',
+        'prohibits' => 'prohibits',
     ];
 
     /**

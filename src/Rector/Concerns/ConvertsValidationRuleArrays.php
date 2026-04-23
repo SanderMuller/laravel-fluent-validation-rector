@@ -13,19 +13,30 @@ use PhpParser\Node\ArrayItem;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\ArrowFunction;
+use PhpParser\Node\Expr\Assign;
+use PhpParser\Node\Expr\AssignOp;
 use PhpParser\Node\Expr\BinaryOp\Concat;
 use PhpParser\Node\Expr\ClassConstFetch;
+use PhpParser\Node\Expr\Clone_;
 use PhpParser\Node\Expr\Closure;
 use PhpParser\Node\Expr\ConstFetch;
+use PhpParser\Node\Expr\Eval_;
+use PhpParser\Node\Expr\Include_;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\New_;
+use PhpParser\Node\Expr\PostDec;
+use PhpParser\Node\Expr\PostInc;
+use PhpParser\Node\Expr\PreDec;
+use PhpParser\Node\Expr\PreInc;
 use PhpParser\Node\Expr\PropertyFetch;
 use PhpParser\Node\Expr\StaticCall;
+use PhpParser\Node\Expr\Throw_;
 use PhpParser\Node\Expr\Variable;
+use PhpParser\Node\Expr\Yield_;
+use PhpParser\Node\Expr\YieldFrom;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Param;
-use PhpParser\Node\Scalar\Float_;
 use PhpParser\Node\Scalar\Int_;
 use PhpParser\Node\Scalar\String_;
 use Rector\Rector\AbstractRector;
@@ -485,16 +496,15 @@ trait ConvertsValidationRuleArrays
 
         $hasSpread = $spreadResult['hasSpread'];
 
-        // Check if all args are safe for conversion (strings, variables, concatenations)
-        // Tuples with enum constants, method calls, etc. can't be safely serialized
-        // by either the fluent API or ->rule() — bail on the entire rule array.
-        if (! $this->allTupleArgsSafe($tuple)) {
-            return null;
-        }
-
-        // Conditional rules: ['required_if', $field, $value] → ->requiredIf($field, $value)
+        // COMMA_SEPARATED conditional rules (requiredIf/excludeUnless/…) have
+        // overloaded fluent signatures (`Closure|bool|string $field`, etc.),
+        // so args must pass the strict whitelist to avoid silently switching
+        // between the field-comparison and closure/bool branches. A strict
+        // fail here falls through to the permissive paths below, where a
+        // non-COMMA lowering or the ->rule() escape hatch may still apply.
         if (in_array($ruleName, self::COMMA_SEPARATED_ARGS_RULES, true)
-            && $this->isModifierValidForType($type, $ruleName)) {
+            && $this->isModifierValidForType($type, $ruleName)
+            && $this->allTupleArgsSafe($tuple)) {
             $args = [];
 
             for ($i = 1, $count = count($tuple->items); $i < $count; ++$i) {
@@ -526,11 +536,27 @@ trait ConvertsValidationRuleArrays
             return null;
         }
 
+        // Permissive arg check for fluent-method lowering and the ->rule()
+        // escape hatch: accepts any scalar-capable Expr (Ternary, MethodCall,
+        // FuncCall, PropertyFetch, Match_, etc.) while still rejecting
+        // object/callable/array producers and side-effectful mutators.
+        if (! $this->allTupleArgsEmittable($tuple)) {
+            return null;
+        }
+
         // Try to lower the tuple directly to a fluent method call
         // (['max', 65535] → ->max(65535), ['between', 3, 100] → ->between(3, 100)).
         // Only proceed when the rule is valid for the factory type; otherwise
         // the tuple falls through to the ->rule() escape hatch below.
-        if ($this->isModifierValidForType($type, $ruleName)) {
+        //
+        // COMMA_SEPARATED rules skip the fluent-lowering path: if we reached
+        // here with a COMMA_SEPARATED rule name, the strict whitelist failed
+        // earlier. Emitting `->requiredIf($dynamicArg)` via this generic path
+        // would bypass the overload-ambiguity guard (`Closure|bool|string
+        // $field`), producing different runtime semantics than the source
+        // array-tuple. Fall through to `->rule([...])` escape hatch instead.
+        if ($this->isModifierValidForType($type, $ruleName)
+            && ! in_array($ruleName, self::COMMA_SEPARATED_ARGS_RULES, true)) {
             $argExprs = [];
 
             for ($i = 1, $count = count($tuple->items); $i < $count; ++$i) {
@@ -1129,6 +1155,76 @@ trait ConvertsValidationRuleArrays
         return true;
     }
 
+    /**
+     * Check if all tuple arguments (index 1+) are emittable via the
+     * permissive predicate. Used on the fluent-lowering and `->rule([...])`
+     * escape-hatch paths, which tolerate any scalar-capable Expr.
+     */
+    private function allTupleArgsEmittable(Array_ $tuple): bool
+    {
+        for ($i = 1, $count = count($tuple->items); $i < $count; ++$i) {
+            $item = $tuple->items[$i];
+
+            if (! $item instanceof ArrayItem) {
+                return false;
+            }
+
+            // Spread items carry runtime-only values — the signature-aware
+            // spread gate already confirmed they target a variadic param.
+            if ($item->unpack) {
+                continue;
+            }
+
+            if (! $this->isEmittableTupleArg($item->value)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Permissive safety check for tuple args that will be emitted as-is
+     * into a fluent method call or `->rule([...])` escape hatch. Rejects
+     * shapes that can't plausibly evaluate to a scalar/BackedEnum rule
+     * param — object/callable/array producers, non-returning expressions,
+     * and side-effectful mutators. Concat is recursive so a blacklisted
+     * sub-expression at any depth bails.
+     *
+     * Distinct from `isSafeTupleArg`: the strict whitelist there also
+     * gates COMMA_SEPARATED conditional rules (`requiredIf`/`excludeUnless`/…)
+     * where the fluent signature is overloaded (`Closure|bool|string $field`)
+     * and a dynamic expression could silently switch branches. The
+     * permissive path has no such overload ambiguity.
+     */
+    private function isEmittableTupleArg(Expr $expr): bool
+    {
+        if ($expr instanceof New_
+            || $expr instanceof Clone_
+            || $expr instanceof Closure
+            || $expr instanceof ArrowFunction
+            || $expr instanceof Array_
+            || $expr instanceof Yield_
+            || $expr instanceof YieldFrom
+            || $expr instanceof Throw_
+            || $expr instanceof Include_
+            || $expr instanceof Eval_
+            || $expr instanceof Assign
+            || $expr instanceof AssignOp
+            || $expr instanceof PreInc
+            || $expr instanceof PostInc
+            || $expr instanceof PreDec
+            || $expr instanceof PostDec) {
+            return false;
+        }
+
+        if ($expr instanceof Concat) {
+            return $this->isEmittableTupleArg($expr->left) && $this->isEmittableTupleArg($expr->right);
+        }
+
+        return true;
+    }
+
     private function isSafeTupleArg(Expr $expr): bool
     {
         // String literals: 'value'
@@ -1136,13 +1232,18 @@ trait ConvertsValidationRuleArrays
             return true;
         }
 
-        // Integer/float literals: 1, 0.5 — safely stringify via implode
-        if ($expr instanceof Int_ || $expr instanceof Float_) {
+        // Integer literals: 1. Float_ is rejected here because the fluent
+        // COMMA_SEPARATED value union is `string|int|bool|BackedEnum` —
+        // `->requiredIf('field', 1.5)` would TypeError at runtime even
+        // though the array form would stringify through implode().
+        if ($expr instanceof Int_) {
             return true;
         }
 
-        // Boolean constants: true, false, null
-        if ($expr instanceof ConstFetch && $this->isNames($expr, ['true', 'false', 'null'])) {
+        // Boolean constants only. `null` is rejected: the fluent variadic
+        // value union doesn't include null, so `->requiredIf('field', null)`
+        // would TypeError vs. the array form's implode to an empty-tail rule.
+        if ($expr instanceof ConstFetch && $this->isNames($expr, ['true', 'false'])) {
             return true;
         }
 
