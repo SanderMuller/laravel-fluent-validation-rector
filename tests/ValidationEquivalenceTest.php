@@ -643,6 +643,84 @@ final class ValidationEquivalenceTest extends TestCase
             'expectedMessageCount' => 1,
         ];
 
+        // --- Array-form tuple coverage: enum-value arg + in-tuple spread ---
+        // Pins runtime equivalence between nested-tuple array rules and the
+        // variadic fluent calls they lower to. If the rector's tuple
+        // conversion ever re-orders args or drops the spread, these rows
+        // surface the behavioral drift instead of just a text-fixture diff.
+
+        yield 'array-form tuple — exclude_unless excludes field when condition unmet' => [
+            'data' => ['type' => 'admin', 'label' => 123],
+            'stringRules' => [
+                'type' => 'required|string',
+                'label' => [['exclude_unless', 'type', 'pause'], 'string'],
+            ],
+            'fluentRules' => [
+                'type' => FluentRule::string()->required(),
+                'label' => FluentRule::string()->excludeUnless('type', 'pause'),
+            ],
+            'attributeNames' => [],
+            'customMessages' => [],
+            'expectedMessagesContain' => null,
+            'langLines' => [],
+            'expectedErrorKeys' => [],
+            'expectedMessageCount' => 0,
+        ];
+
+        yield 'array-form tuple — exclude_unless keeps field when condition met (invalid fires)' => [
+            'data' => ['type' => 'pause', 'label' => 123],
+            'stringRules' => [
+                'type' => 'required|string',
+                'label' => [['exclude_unless', 'type', 'pause'], 'string'],
+            ],
+            'fluentRules' => [
+                'type' => FluentRule::string()->required(),
+                'label' => FluentRule::string()->excludeUnless('type', 'pause'),
+            ],
+            'attributeNames' => [],
+            'customMessages' => [],
+            'expectedMessagesContain' => null,
+            'langLines' => [],
+            'expectedErrorKeys' => ['label'],
+            'expectedMessageCount' => 1,
+        ];
+
+        yield 'array-form tuple — required_unless with in-tuple spread' => [
+            'data' => ['type' => 'frame'],
+            'stringRules' => [
+                'type' => 'required|string',
+                'duration' => [['required_unless', 'type', ...['pause', 'text']], 'numeric'],
+            ],
+            'fluentRules' => [
+                'type' => FluentRule::string()->required(),
+                'duration' => FluentRule::numeric()->requiredUnless('type', ...['pause', 'text']),
+            ],
+            'attributeNames' => [],
+            'customMessages' => [],
+            'expectedMessagesContain' => null,
+            'langLines' => [],
+            'expectedErrorKeys' => ['duration'],
+            'expectedMessageCount' => 1,
+        ];
+
+        yield 'array-form tuple — required_unless spread matches (no error)' => [
+            'data' => ['type' => 'pause'],
+            'stringRules' => [
+                'type' => 'required|string',
+                'duration' => [['required_unless', 'type', ...['pause', 'text']], 'numeric'],
+            ],
+            'fluentRules' => [
+                'type' => FluentRule::string()->required(),
+                'duration' => FluentRule::numeric()->requiredUnless('type', ...['pause', 'text']),
+            ],
+            'attributeNames' => [],
+            'customMessages' => [],
+            'expectedMessagesContain' => null,
+            'langLines' => [],
+            'expectedErrorKeys' => [],
+            'expectedMessageCount' => 0,
+        ];
+
         yield 'deep wildcard + custom-message lookup — users.*.tags.*.required' => [
             'data' => ['users' => [
                 ['tags' => ['', 'ok']],

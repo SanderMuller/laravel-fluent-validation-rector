@@ -114,6 +114,35 @@ trait ConvertsValidationRuleArrays
     ];
 
     /**
+     * Rules whose fluent signature is `string $field, ...$values`. Spread is
+     * preservable only at position >= 2 — the `$field` parameter must be
+     * statically present so the converted call can never arity-fail at
+     * rules() construction when the runtime spread yields an empty list.
+     *
+     * @var list<string>
+     */
+    private const array FIELD_VALUES_VARIADIC_RULES = [
+        'requiredIf', 'requiredUnless',
+        'excludeIf', 'excludeUnless',
+        'prohibitedIf', 'prohibitedUnless',
+        'presentIf', 'presentUnless',
+        'missingIf', 'missingUnless',
+    ];
+
+    /**
+     * Rules whose fluent signature is `string ...$fields`. Spread is
+     * preservable at any position >= 1 — entire parameter list is variadic.
+     *
+     * @var list<string>
+     */
+    private const array PURE_FIELDS_VARIADIC_RULES = [
+        'requiredWith', 'requiredWithAll', 'requiredWithout', 'requiredWithoutAll',
+        'presentWith', 'presentWithAll',
+        'missingWith', 'missingWithAll',
+        'prohibits',
+    ];
+
+    /**
      * Per-type whitelists of methods safe to pass through from Rule:: factory chains.
      *
      * @var array<string, list<string>>
@@ -447,16 +476,14 @@ trait ConvertsValidationRuleArrays
             return null; // Bail — can't determine rule name
         }
 
-        // Bail on tuples with spread elements
-        foreach ($tuple->items as $item) {
-            if (! $item instanceof ArrayItem) {
-                return null;
-            }
+        $ruleName = $this->normalizeRuleName($firstItem->value->value);
+        $spreadResult = $this->classifyTupleSpread($tuple, $ruleName);
 
-            if ($item->unpack) {
-                return null; // Bail — spread unpacks at runtime
-            }
+        if ($spreadResult === null) {
+            return null;
         }
+
+        $hasSpread = $spreadResult['hasSpread'];
 
         // Check if all args are safe for conversion (strings, variables, concatenations)
         // Tuples with enum constants, method calls, etc. can't be safely serialized
@@ -464,8 +491,6 @@ trait ConvertsValidationRuleArrays
         if (! $this->allTupleArgsSafe($tuple)) {
             return null;
         }
-
-        $ruleName = $this->normalizeRuleName($firstItem->value->value);
 
         // Conditional rules: ['required_if', $field, $value] → ->requiredIf($field, $value)
         if (in_array($ruleName, self::COMMA_SEPARATED_ARGS_RULES, true)
@@ -475,10 +500,23 @@ trait ConvertsValidationRuleArrays
             for ($i = 1, $count = count($tuple->items); $i < $count; ++$i) {
                 /** @var ArrayItem $item */
                 $item = $tuple->items[$i];
-                $args[] = new Arg($this->adaptEnumArg($item->value));
+                // Skip adaptEnumArg on spread targets: a spread-target
+                // ClassConstFetch (e.g. `Class::ARRAY_CONST`) must be an
+                // iterable constant, not a BackedEnum case — wrapping it
+                // in ->value would break the emitted code.
+                $value = $item->unpack ? $item->value : $this->adaptEnumArg($item->value);
+                $args[] = new Arg($value, byRef: false, unpack: $item->unpack);
             }
 
             return new MethodCall($expr, new Identifier($ruleName), $args);
+        }
+
+        // Defense-in-depth: spread only survives the COMMA_SEPARATED emit
+        // arm. If we reach here with $hasSpread, the escape-hatch paths
+        // below (->rule() rebuild, single-modifier lowering) cannot safely
+        // reconstruct the spread, so bail.
+        if ($hasSpread) {
+            return null;
         }
 
         // Other tuples with safe args: ['max', '50'] → ->rule(['max', '50'])
@@ -1006,6 +1044,62 @@ trait ConvertsValidationRuleArrays
     }
 
     /**
+     * Walk tuple items once, validating shape and classifying spread
+     * against the target rule's fluent signature. Returns null to signal
+     * "bail"; otherwise returns whether the tuple carries any spread that
+     * the COMMA_SEPARATED emit arm must preserve.
+     *
+     * Signature categories and spread rules: see FIELD_VALUES_VARIADIC_RULES
+     * and PURE_FIELDS_VARIADIC_RULES declarations above.
+     *
+     * @return array{hasSpread: bool}|null
+     */
+    private function classifyTupleSpread(Array_ $tuple, string $ruleName): ?array
+    {
+        $hasSpread = false;
+        $firstSpreadIndex = null;
+
+        foreach ($tuple->items as $index => $item) {
+            if (! $item instanceof ArrayItem) {
+                return null;
+            }
+
+            if (! $item->unpack) {
+                continue;
+            }
+
+            // Rule-name position can never be spread — we need a String_ to
+            // identify the rule.
+            if ($index === 0) {
+                return null;
+            }
+
+            $hasSpread = true;
+            $firstSpreadIndex ??= $index;
+        }
+
+        if (! $hasSpread) {
+            return ['hasSpread' => false];
+        }
+
+        if (in_array($ruleName, self::FIELD_VALUES_VARIADIC_RULES, true)) {
+            // Category A: `string $field, ...$values` — $field must be
+            // statically present. All-args spread risks an empty-list
+            // PHP TypeError at rules() construction, diverging from the
+            // array form's later Laravel ValidationException. Bail.
+            return $firstSpreadIndex === 1 ? null : ['hasSpread' => true];
+        }
+
+        if (in_array($ruleName, self::PURE_FIELDS_VARIADIC_RULES, true)) {
+            // Category B: `string ...$fields` — entire signature variadic.
+            return ['hasSpread' => true];
+        }
+
+        // Categories C, D, and everything non-variadic: spread unsafe.
+        return null;
+    }
+
+    /**
      * Check if all tuple arguments (index 1+) are safe for fluent method conversion.
      * Safe types: string literals, variables, and string concatenation (BinaryOp\Concat).
      * Unsafe: class constants (enums), method calls, ternaries, etc.
@@ -1017,6 +1111,14 @@ trait ConvertsValidationRuleArrays
 
             if (! $item instanceof ArrayItem) {
                 return false;
+            }
+
+            // Spread items carry runtime-only values — no static safety claim
+            // possible. The signature-aware gate in classifyArrayTuple has
+            // already confirmed the spread targets a variadic parameter that
+            // accepts arbitrary values.
+            if ($item->unpack) {
+                continue;
             }
 
             if (! $this->isSafeTupleArg($item->value)) {
@@ -1056,8 +1158,18 @@ trait ConvertsValidationRuleArrays
 
         // Class constants: `self::FIELD` (string constants) and `OtherClass::CASE` (BackedEnum cases)
         // We allow both — adaptEnumArg() wraps foreign-class constants in ->value at conversion time.
-        // Anything else (method calls, ternaries, etc.) → unsafe
-        return $expr instanceof ClassConstFetch;
+        if ($expr instanceof ClassConstFetch) {
+            return true;
+        }
+
+        // Enum value access written explicitly: `Enum::CASE->value`. PHP-Parser
+        // models PropertyFetch::$name as `Identifier|Expr` so dynamic access
+        // (`$obj->$var`) can be represented — narrow to Identifier to keep the
+        // match static.
+        return $expr instanceof PropertyFetch
+            && $expr->var instanceof ClassConstFetch
+            && $expr->name instanceof Identifier
+            && $expr->name->toString() === 'value';
     }
 
     /**
