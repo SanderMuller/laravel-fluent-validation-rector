@@ -57,9 +57,17 @@ Intermediate chain modifiers (`required`, `nullable`, `same`, `different`, `conf
 
 Reject promotion when:
 
-1. **Source factory has ANY positional args.** `FluentRule::password(?int $min = null, ?string $label = null, bool $defaults = true)` and `FluentRule::email(?string $label = null, bool $defaults = true, ?string $message = null)` do **not** share a signature with `FluentRule::string(?string $label = null)`. A source like `FluentRule::string('Password')->rule(Password::default())` naïvely promoted would become `password('Password')`, silently rebinding `'Password'` from `$label` to `$min`. Worse: `string('Email', 'msg')` (hypothetical 2-arg) → `password('Email', 'msg')` would misbind the second arg to `bool $defaults`. **Only promote zero-arg source factories in v1.** Structural arg-rebinding (`string($label)` → `password(null, $label)`) deferred until a real demand case surfaces. Caught by codex review 2026-04-24.
-2. The chain has any `->rule(...)` call whose payload is *not* the single `Password::default()` / `Email::default()` we're rewriting. Extra wrappers would bind to the typed factory unpredictably (the password factory already bakes in its own ruleset).
-3. Intermediate modifiers include a method that doesn't exist on the target typed class. E.g. a `->length(...)` call (if it existed on `StringRule` but not on `PasswordRule`) would lose validity on promotion.
+1. **Source factory has ANY positional args.** `FluentRule::password(?int $min = null, ?string $label = null, bool $defaults = true)` and `FluentRule::email(?string $label = null, bool $defaults = true, ?string $message = null)` do **not** share a signature with `FluentRule::string(?string $label = null)`. A source like `FluentRule::string('Password')->rule(Password::default())` naïvely promoted would become `password('Password')`, silently rebinding `'Password'` from `$label` to `$min`. **Only promote zero-arg source factories in v1.** Structural arg-rebinding deferred. Caught by codex review 2026-04-24.
+
+2. **Method-subset check (Safety Gate #2).** `PasswordRule` does **not** extend `FieldRule`. It uses `HasFieldModifiers` trait, but `same()`, `different()`, `confirmed()` (beyond the built-in password `confirmed` modifier) are declared per-rule on `FieldRule`, `StringRule`, `DateRule`, `EmailRule`, `NumericRule` — **not on PasswordRule**. Naïve promotion of `FluentRule::string()->required()->same('passwordConfirmation')->rule(Password::default())` → `FluentRule::password()->required()->same(...)` triggers `BadMethodCallException` at runtime (collectiq peer review 2026-04-24 verified against `vendor/sandermuller/laravel-fluent-validation/src/Rules/PasswordRule.php`).
+
+   Before promoting, verify that every non-terminal modifier in the source chain resolves to a method available on the target rule class. Implementation:
+
+   - **Option α (preferred, ship v1)**: hardcoded allowlist per target class. Enumerate `PasswordRule` / `EmailRule` public methods at spec-write time; chain method not in the list → bail. Add a snapshot test comparing `get_class_methods()` against the hardcoded allowlist so fluent-validation version bumps that add methods fail loudly instead of silently expanding the promotion surface.
+   - **Option β (robust, defer)**: runtime reflection of the target class. Auto-tracks fluent-validation releases. Adds boot-time cost.
+
+3. The chain has any `->rule(...)` call whose payload is *not* the single `Password::default()` / `Email::default()` we're rewriting. Extra wrappers would bind to the typed factory unpredictably (the password factory already bakes in its own ruleset).
+
 4. Conditionable hops (`->when`, `->unless`, `->whenInput`) are in the chain and the closure body references the original receiver type. Defer like `PromoteFieldFactoryRector`.
 
 ### 2c. Config
@@ -107,6 +115,8 @@ Under `tests/PromoteFieldFactory/Fixture/` (extending existing):
 - `skip_string_factory_with_label_arg.php.inc` — `FluentRule::string('Password')->rule(Password::default())` skips (source factory has positional args — would rebind label to `?int $min` on promotion).
 - `skip_chained_password_config.php.inc` — `FluentRule::string()->rule(Password::min(8)->letters()->numbers())` skips (chained password config, not a plain `Password::default()` / `Password::min($n)`).
 - `skip_password_min_with_class_const_literal.php.inc` — covers `Password::min(self::MIN)` emit (positive case).
+- `skip_string_to_password_with_same_modifier.php.inc` — `FluentRule::string()->required()->same('x')->rule(Password::default())` → **skip** (Safety Gate #2: `same()` absent from `PasswordRule`'s method set). Collectiq must-have.
+- `allowlist_snapshot_test.php` — snapshot comparing `get_class_methods(PasswordRule::class)` against the hardcoded allowlist. Fails loudly when a fluent-validation release adds methods.
 
 ---
 

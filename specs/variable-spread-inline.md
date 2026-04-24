@@ -4,7 +4,9 @@
 
 Extend `InlineResolvableParentRulesRector` to resolve `...$base` spread when `$base` is statically traceable to a variable assignment whose value is a literal `Array_`. Current rector handles only `...parent::rules()`.
 
-Source: mijntp 0.12.0 dogfood, 2 hits under "encountered spread at index N" (`RemoteInputRequest`, `StoreCompanySubscriptionRequest`). Both cases are `...collect(...)->mapWithKeys(...)->all()` — dynamic spread, NOT what this spec handles. But a subset with static variable assignment is tractable and appears in adjacent FormRequests.
+**Status: speculative, hold until multi-repo demand signal surfaces.**
+
+mijntp peer review (ynu0t0kb) 2026-04-24 grepped mijntp: zero files match the top-level `$base = [...]` + `return [...$base, ...]` pattern. Mijntp's 2 observed hits are `...collect(...)->mapWithKeys(...)->all()` — dynamic, NOT what this spec handles. Ship only if collectiq or hihaho grep turns up real cases. Until then, this is a design-complete doc so the implementation is trivially scaffoldable when demand arrives.
 
 ---
 

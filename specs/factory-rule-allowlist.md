@@ -134,10 +134,13 @@ When `true`, the innermost-receiver walk recurses as before. Consumer explicitly
 Glob support on class names via a restricted syntax (**not** fnmatch — backslashes in class names conflict with fnmatch's escape semantics). Accepted patterns:
 
 - Exact match: `App\Models\Question`.
-- Trailing wildcard: `App\Models\*` — matches any class directly under `App\Models`, not deeper.
-- Prefix wildcard: `*\Requests\BaseRequest` — matches any class at that suffix.
+- Single-segment wildcard `*`: matches one namespace segment (no backslashes). `App\Models\*` matches `App\Models\Foo` but not `App\Models\Sub\Bar`.
+- Recursive wildcard `**`: matches any depth including zero segments. `App\Models\**` matches `App\Models\Foo` AND `App\Models\Sub\Bar` AND `App\Models\A\B\C`.
+- Prefix wildcard: `*\Requests\BaseRequest` — matches any class at that suffix (single segment).
 
-Implementation: compile pattern to a PHP regex (`preg_quote` + `\*` → `[^\\\\]+`, anchor with `^`/`$`). No `?` / `[a-z]` / brace-expansion support.
+Recursive `**` addition driven by peer review — mijntp's `existsRule()` callees span `App\Models\SuperAdmin\*` and `App\Models\Credit\*` subnamespaces; hihaho's span `App\Models\Playlist\*` and `App\Models\Billing\*`. A recursive `App\Models\**::existsRule` single entry covers both patterns.
+
+Implementation: compile pattern to a PHP regex. Match `**` before `*` greedily (double-star emits `.+`; single-star emits `[^\\\\]+`). `preg_quote` literals; anchor `^`/`$`. No `?` / `[a-z]` / brace-expansion support.
 
 Document syntax explicitly so consumers don't assume full fnmatch.
 

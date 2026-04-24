@@ -72,8 +72,9 @@ Extend `SimplifyRuleWrappersRector::RULE_NAME_TO_METHOD` with single-token rules
 'required' => 'required',
 'required_array_keys' => 'requiredArrayKeys',  // already queued in ROADMAP
 'filled' => 'filled',
-'bail' => 'bail',
 ```
+
+`'bail'` dropped — hihaho peer review (yw6d2sll) confirmed zero wild usage. Always written as pipe-prefix string (`'bail|required|...'`) or bare `->bail()` chain call. `->rule('bail')` is not an idiom.
 
 Extend the string-rule parser to treat `'<token>'` (no colon) as `['<token>']` tuple, then run through the existing tuple dispatch. Zero-arg tuples collapse to `->method()` naturally.
 
@@ -81,14 +82,16 @@ Extend the string-rule parser to treat `'<token>'` (no colon) as `['<token>']` t
 
 **Codex-review blocker (2026-04-24).** Original spec proposed "Path A" stepping through `when`/`unless`/`whenInput` as neutral hops on the assumption that the closure returns the receiver unchanged. That contradicts Laravel's `Conditionable` contract: `when(mixed $value, ?callable $callback = null, ?callable $default = null)` returns `$this|TWhenReturnType`, and when a callback is provided its **return value** propagates. A chain like `FluentRule::string()->when($c, fn () => FluentRule::array())->rule('max:255')` would analyze as `StringRule` under Path A but at runtime the receiver becomes `ArrayRule`. Silent miscompile.
 
-**Revised design — Path B with restricted closure invariant.** Step through the hop only when the closure body provably returns `$this`-equivalent:
+**Revised design — Path B with restricted closure invariant.** Step through the hop only when **every** callback body provably returns `$this`-equivalent:
 
-1. Closure's body is a single `Return_` statement (or arrow-fn expression).
+1. Every callback is a closure or arrow-fn whose body is a single `Return_` statement (or arrow-fn expression).
 2. The return expression is either:
    - The closure parameter variable (`fn ($r) => $r`, `fn ($r) => $r->url()`), where the param walks back through chained `MethodCall`s to the original `$r` — common case.
    - A `MethodCall` chain rooted in the closure parameter variable (same receiver, method tail doesn't matter since `->url()` etc. return `$this`).
 3. Reject if the return is a `StaticCall`, `New_`, a different `Variable`, a `Ternary`, `Match_`, function call, or a reference to anything other than the closure's own parameter.
-4. If no callback is passed (`->when($c)` returning proxy), bail — the proxy's dispatch is dynamic.
+4. **Conditionable supports a 3-arg form `when($value, $callback, $default)` (and the same for `unless`).** Invariant check must apply to **both** `$callback` AND `$default` when present. If either violates the invariant, bail. Single-callback form (no `$default`) only checks `$callback`. A `$default` that returns a different rule type (`fn () => FluentRule::string()`) would otherwise miscompile the entire chain's receiver analysis — hihaho peer (yw6d2sll) flagged this during spec review.
+5. **Named args** (`->when(value: $c, callback: $fn, default: $elseFn)`) must be resolved by `Arg::$name` before invariant check. PhpParser 5 exposes this. Straight positional + named-args fixtures both ship.
+6. If no callback is passed (`->when($c)` returning proxy), bail — the proxy's dispatch is dynamic.
 
 Anything failing these invariants falls back to the current bail (`"receiver type unknown — Conditionable proxy in chain"`).
 
@@ -124,6 +127,8 @@ Add to `tests/SimplifyRuleWrappers/Fixture/`:
 - `skip_conditionable_closure_returns_different_rule.php.inc` — `->when($c, fn () => FluentRule::array())->rule(...)` skips (closure returns a distinct rule; step-through would miscompile). Codex-review must-have.
 - `skip_conditionable_proxy_without_callback.php.inc` — `->when($c)->rule(...)` skips (proxy dispatch is dynamic).
 - `skip_conditionable_closure_returns_ternary.php.inc` — `->when($c, fn ($r) => $cond ? $r->url() : FluentRule::array())->rule(...)` skips.
+- `skip_conditionable_default_callback_returns_different_rule.php.inc` — 3-arg `->when($c, fn ($r) => $r->url(), fn () => FluentRule::array())->rule(...)` — callback valid, default violates invariant. Skip. Hihaho peer must-have.
+- `conditionable_named_args.php.inc` — `->when(value: $c, callback: fn ($r) => $r->url(), default: fn ($r) => $r->nullable())->rule(...)` — both callbacks valid, named args resolved by `Arg::$name`. Emit.
 - `skip_nested_fluent_string_factory.php.inc` — `->rule(FluentRule::string())` inside a chain stays wrapped (string factory shouldn't unwrap onto a typed receiver).
 
 ---
