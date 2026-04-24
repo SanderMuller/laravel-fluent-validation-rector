@@ -55,15 +55,15 @@ final class AddHasFluentRulesTraitRector extends AbstractRector implements Confi
         RunSummary::registerShutdownHandler();
     }
 
-    /** @param  array<string, list<string>>|list<string>  $configuration */
     public function configure(array $configuration): void
     {
-        /** @var list<string>|null $baseClasses */
         $baseClasses = $configuration[self::BASE_CLASSES] ?? $configuration;
 
-        if (is_array($baseClasses)) {
-            $this->baseClasses = array_values($baseClasses);
+        if (! is_array($baseClasses)) {
+            return;
         }
+
+        $this->baseClasses = array_values(array_filter($baseClasses, is_string(...)));
     }
 
     public function getRuleDefinition(): RuleDefinition
@@ -149,9 +149,14 @@ CODE_SAMPLE
 
     private function shouldAddTraitToClass(Class_ $class): bool
     {
-        // Skip Livewire classes — they use HasFluentValidation, not HasFluentRules
+        // Skip Livewire classes — they use HasFluentValidation, not HasFluentRules.
+        // Downgraded to verboseOnly: on Livewire/Filament-heavy codebases this fires
+        // on every component (84/118 log lines in collectiq, 72/336 in hihaho, 125/261
+        // in mijntp — all reports converge on this being the dominant noise source).
+        // Users debugging "why didn't the trait get added?" can still see it with
+        // FLUENT_VALIDATION_RECTOR_VERBOSE=1.
         if ($this->isLivewireClass($class)) {
-            $this->logSkip($class, 'detected as Livewire (uses HasFluentValidation instead)');
+            $this->logSkip($class, 'detected as Livewire (uses HasFluentValidation instead)', verboseOnly: true);
 
             return false;
         }

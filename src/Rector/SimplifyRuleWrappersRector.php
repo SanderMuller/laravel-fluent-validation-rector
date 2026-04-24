@@ -175,6 +175,21 @@ final class SimplifyRuleWrappersRector extends AbstractRector implements Documen
     private const array CONDITIONABLE_HOPS = ['when', 'unless', 'whenInput'];
 
     /**
+     * Verbs that live on multiple typed rule classes (string/numeric/array/file)
+     * with per-class semantics. When a `FluentRule::field()->rule('<verb>:...')`
+     * chain uses one of these verbs, `PromoteFieldFactoryRector` correctly
+     * declines to auto-promote — the intersection isn't a singleton, and
+     * picking one would change validation behavior (string-length vs.
+     * numeric-min vs. array-count, etc.). The skip log enriches with candidate
+     * factories so verbose triage points users at the right explicit choice.
+     *
+     * @var list<string>
+     */
+    private const array POLYMORPHIC_TYPED_VERBS = [
+        'min', 'max', 'between', 'exactly', 'gt', 'gte', 'lt', 'lte',
+    ];
+
+    /**
      * Receiver classes where a target method exists natively but its
      * semantics differ from Laravel's like-named rule token. The native
      * method must NOT be considered an equivalent rewrite target.
@@ -317,12 +332,25 @@ CODE_SAMPLE
 
         if (! $this->isMethodAvailable($resolution['class'], $targetMethod)) {
             $shortClass = (new ReflectionClass($resolution['class']))->getShortName();
+            $reason = sprintf('%s() not on %s', $targetMethod, $shortClass);
 
-            // FieldRule missing typed methods (min/max/regex) is a UX
-            // opportunity — users could switch to FluentRule::string() /
-            // ::numeric() — but not actionable from the skip log directly.
-            // Verbose-only so the default log stays signal-heavy.
-            $this->logSkipForCall($node, sprintf('%s() not on %s', $targetMethod, $shortClass), verboseOnly: true);
+            // FieldRule + a polymorphic verb (min/max/between/size/gt/lt/gte/lte)
+            // is the canonical "user gave up finding the native method" shape —
+            // PromoteFieldFactoryRector can't auto-promote because the verb
+            // exists on string/numeric/array/file and the intersection isn't
+            // a singleton. Enrich the skip line with candidate factories so
+            // verbose-mode triage can point users at the right replacement
+            // instead of having them read the rule code. Surfaced by hihaho
+            // peer (yw6d2sll) on 0.12.0 dogfood.
+            if ($resolution['class'] === FieldRule::class
+                && in_array($targetMethod, self::POLYMORPHIC_TYPED_VERBS, true)) {
+                $reason .= sprintf(
+                    ' — %s() is type-dependent; consider FluentRule::string() / FluentRule::numeric() / FluentRule::array() / FluentRule::file() depending on the field',
+                    $targetMethod,
+                );
+            }
+
+            $this->logSkipForCall($node, $reason, verboseOnly: true);
 
             return null;
         }

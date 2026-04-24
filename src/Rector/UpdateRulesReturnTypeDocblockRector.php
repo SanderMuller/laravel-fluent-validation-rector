@@ -329,6 +329,17 @@ CODE_SAMPLE
             return true;
         }
 
+        // Already narrowed — silent idempotency guard. Accept both the
+        // emitted FQN form and the short-name form a consumer may have
+        // authored after adding a `use ...\FluentRuleContract;` statement.
+        // Without the short-name form here, the rule would log 40+
+        // "user-customized — respecting" verbose entries per run on
+        // codebases that adopted the contract via import (mijntp dogfood
+        // against 0.12.0).
+        if (in_array(trim($existingBody), self::ALREADY_NARROWED_BODIES, true)) {
+            return false;
+        }
+
         if (! $this->canNarrowExistingBody($existingBody)) {
             $truncated = substr(trim($existingBody), 0, 80);
             $this->logSkip($class, sprintf("existing @return tag '%s' is user-customized — respecting", $truncated), verboseOnly: true);
@@ -336,9 +347,21 @@ CODE_SAMPLE
             return false;
         }
 
-        // Already narrowed — idempotency guard, silent.
-        return trim($existingBody) !== self::CONTRACT_ANNOTATION_BODY;
+        return true;
     }
+
+    /**
+     * Docblock bodies that equal the rule's emission target and therefore
+     * must not be rewritten. Covers both the FQN form this rector emits and
+     * the short-name form that results when a consumer adds a `use` import
+     * for `FluentRuleContract` post-conversion.
+     *
+     * @var list<string>
+     */
+    private const array ALREADY_NARROWED_BODIES = [
+        self::CONTRACT_ANNOTATION_BODY,
+        'array<string, FluentRuleContract>',
+    ];
 
     private function isFluentRuleChainValue(Expr $value): bool
     {
@@ -408,6 +431,17 @@ CODE_SAMPLE
         $trimmed = trim($body);
 
         if ($trimmed === 'array') {
+            return true;
+        }
+
+        // Laravel's default IDE-generated docblock for rules() is
+        // `array<string, mixed>`. Treating that as user-customized
+        // false-positives on codebases that use IDE scaffolding and
+        // never hand-edited the annotation. Narrowing `mixed` at the
+        // item level to `FluentRuleContract` is strict (FluentRule
+        // classes are always narrower than `mixed`) and condition 3
+        // has already proven every item is a FluentRule chain.
+        if ($trimmed === 'array<string, mixed>') {
             return true;
         }
 
