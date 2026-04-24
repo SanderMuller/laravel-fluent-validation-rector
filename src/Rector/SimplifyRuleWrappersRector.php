@@ -4,10 +4,12 @@ namespace SanderMuller\FluentValidationRector\Rector;
 
 use PhpParser\Node;
 use PhpParser\Node\Arg;
+use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Scalar\Float_;
+use PhpParser\PrettyPrinter\Standard;
 use PHPStan\Analyser\Scope;
 use PHPStan\Reflection\ClassReflection;
 use PHPStan\Type\ObjectType;
@@ -83,8 +85,13 @@ final class SimplifyRuleWrappersRector extends AbstractRector implements Documen
         'accepted' => AcceptedRule::class,
     ];
 
-    /** Methods the rector may rewrite to. Bounds the reflection allowlist. */
-    private const array V1_REWRITE_TARGETS = [
+    /**
+     * Methods the rector may rewrite to. Bounds the reflection allowlist.
+     * Public so `PromoteFieldFactoryRector` can reason about which typed
+     * builders are compatible with a given rule-method without duplicating
+     * the table.
+     */
+    public const array V1_REWRITE_TARGETS = [
         'in', 'notIn', 'min', 'max', 'between', 'regex', 'exactly',
         // 1.19.0 additions:
         'enum',
@@ -118,7 +125,7 @@ final class SimplifyRuleWrappersRector extends AbstractRector implements Documen
      * because the AST literal is built before the rule-name-to-method
      * resolution runs.
      */
-    private const array RULE_NAME_TO_METHOD = [
+    public const array RULE_NAME_TO_METHOD = [
         'in' => 'in',
         'notIn' => 'notIn',
         'not_in' => 'notIn',
@@ -268,8 +275,19 @@ CODE_SAMPLE
             // (variable string, custom Rule object, builder tail like
             // `Rule::in(...)->where(...)`, concatenation, etc.). Legitimate
             // escape-hatch use — not actionable for consumers — so the skip
-            // only surfaces in verbose mode.
-            $this->logSkipForCall($node, 'rule payload not statically resolvable to a v1 shape', verboseOnly: true);
+            // only surfaces in verbose mode. The payload's AST class + a
+            // truncated pretty-print is included so verbose dogfood passes
+            // can bucket the log by cause (StaticCall Password::default() vs
+            // New_ CustomRule vs MethodCall …->withoutTrashed()) without
+            // having to open every flagged file.
+            $this->logSkipForCall(
+                $node,
+                sprintf(
+                    'rule payload not statically resolvable to a v1 shape: %s',
+                    $this->describeUnparseablePayload($node->args[0]->value),
+                ),
+                verboseOnly: true,
+            );
 
             return null;
         }
@@ -441,6 +459,32 @@ CODE_SAMPLE
      * back to `top-level` for nodes outside any class — rare in practice
      * but possible in plain scripts.
      */
+    /**
+     * Describe an unparseable `->rule(...)` payload for the verbose skip log.
+     * Emits the AST node's short class name followed by a single-line,
+     * whitespace-collapsed, 60-char-truncated pretty-print so consumers can
+     * bucket the 57-entry "not resolvable" category by cause without opening
+     * each flagged file. Added 0.12.0 as the sequencing gate for FieldRule
+     * auto-upgrade + payload-specific follow-on converters (peer `e0cp6lq3`
+     * 0.11.0 dogfood, 2026-04-24).
+     */
+    private function describeUnparseablePayload(Expr $payload): string
+    {
+        $shortClass = (new ReflectionClass($payload))->getShortName();
+
+        $rendered = (new Standard())->prettyPrintExpr($payload);
+        $rendered = preg_replace('/\s+/', ' ', $rendered) ?? $rendered;
+        $rendered = trim($rendered);
+
+        $maxLength = 60;
+
+        if (strlen($rendered) > $maxLength) {
+            $rendered = substr($rendered, 0, $maxLength - 3) . '...';
+        }
+
+        return sprintf('%s %s', $shortClass, $rendered);
+    }
+
     private function logSkipForCall(MethodCall $node, string $reason, bool $verboseOnly = false): void
     {
         $scope = $node->getAttribute(AttributeKey::SCOPE);
