@@ -134,6 +134,33 @@ final class PromoteFieldFactoryRector extends AbstractRector implements Document
         AcceptedRule::class,
     ];
 
+    /**
+     * Rule names whose Laravel semantics are STRICTLY LOOSER than the seed
+     * constraints of the typed factory that would otherwise win the
+     * method-name-based intersection. Promoting in these combinations adds
+     * an implicit constraint that rejects inputs the original rule
+     * accepted — a silent behavior regression.
+     *
+     * Example: Laravel's `accepted` rule passes on `"yes"`, `"on"`,
+     * `"true"`, `1`, `"1"`, `true`. `BooleanRule` seeds `'boolean'` which
+     * rejects `"yes"`, `"on"`, `"true"`. Promoting
+     * `FluentRule::field()->rule('accepted')` to
+     * `FluentRule::boolean()->accepted()` would silently drop those three
+     * input shapes — breaking every HTML checkbox form submit. Downstream
+     * dogfood (2026-04-24) caught this pre-apply before it hit prod. Same
+     * divergence applies to `declined` (drops `"no"`/`"off"`/`"false"`).
+     *
+     * The blocklist is keyed by the TYPED FACTORY CLASS that would win
+     * the intersection; any `->rule(<name>)` payload matching a listed
+     * name for that class forces the promoter to bail, leaving the
+     * `field()` factory and the escape-hatch `->rule('…')` intact.
+     *
+     * @var array<class-string, list<string>>
+     */
+    private const array SEMANTICALLY_DIVERGENT_PROMOTION = [
+        BooleanRule::class => ['accepted', 'declined'],
+    ];
+
     public function __construct()
     {
         RunSummary::registerShutdownHandler();
@@ -241,6 +268,14 @@ CODE_SAMPLE
             return null;
         }
 
+        // Semantic-divergence guard — reject promotions where the typed
+        // factory's seed constraints are strictly stricter than the
+        // triggering rule's input-acceptance set. See
+        // SEMANTICALLY_DIVERGENT_PROMOTION docblock for the rationale.
+        if ($this->anyRuleCallTripsDivergencyGuard($ruleCalls, $targetClass)) {
+            return null;
+        }
+
         // Arg-binding safety: FluentRule::field(?string $label) vs. targets
         // like FluentRule::array(?array $keys, ...) or FluentRule::password(?int $min, ...).
         // Promoting a labeled `field('Meta')` to `array('Meta')` would rebind
@@ -253,6 +288,48 @@ CODE_SAMPLE
         $root->name = new Identifier($factoryName);
 
         return $node;
+    }
+
+    /**
+     * Return true if any of the `->rule(...)` calls driving the intersection
+     * names a Laravel rule whose input-acceptance set diverges from the
+     * would-be target factory's seed constraints. See
+     * `SEMANTICALLY_DIVERGENT_PROMOTION`.
+     *
+     * @param  list<MethodCall>  $ruleCalls
+     * @param  class-string  $targetClass
+     */
+    private function anyRuleCallTripsDivergencyGuard(array $ruleCalls, string $targetClass): bool
+    {
+        $blocklist = self::SEMANTICALLY_DIVERGENT_PROMOTION[$targetClass] ?? [];
+
+        if ($blocklist === []) {
+            return false;
+        }
+
+        foreach ($ruleCalls as $ruleCall) {
+            if (count($ruleCall->args) !== 1) {
+                continue;
+            }
+
+            if (! $ruleCall->args[0] instanceof Arg) {
+                continue;
+            }
+
+            $parsed = $this->parseRulePayload($ruleCall->args[0]->value);
+
+            if ($parsed === null) {
+                continue;
+            }
+
+            [$ruleName] = $parsed;
+
+            if (in_array($ruleName, $blocklist, true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
