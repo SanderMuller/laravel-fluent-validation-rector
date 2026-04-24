@@ -234,54 +234,7 @@ CODE_SAMPLE
                 continue;
             }
 
-            if ($item->key instanceof String_) {
-                $entries[$item->key->value] = ['index' => $index, 'value' => $item->value];
-            } elseif ($item->key instanceof ClassConstFetch) {
-                // Try to resolve to string value: self::ITEMS where ITEMS = 'interactions'
-                $resolvedKey = $this->resolveClassConstToString($item->key);
-
-                if ($resolvedKey !== null) {
-                    $entries[$resolvedKey] = ['index' => $index, 'value' => $item->value];
-                    // Remember this ClassConstFetch as the preferred key expression for this path
-                    $concatEntries[$resolvedKey] = [
-                        'prefix' => $item->key,
-                        'suffixKey' => '',
-                    ];
-                } else {
-                    // Fallback: synthetic key for constants we can't resolve
-                    $syntheticKey = $this->classConstToSyntheticKey($item->key);
-
-                    if ($syntheticKey !== null) {
-                        $entries[$syntheticKey] = ['index' => $index, 'value' => $item->value];
-                        $concatEntries[$syntheticKey] = [
-                            'prefix' => $item->key,
-                            'suffixKey' => '',
-                        ];
-                    }
-                }
-            } elseif ($item->key instanceof Concat) {
-                $parsed = $this->parseConcatKey($item->key);
-
-                if ($parsed !== null) {
-                    // Try to fully resolve concat key if prefix is a known constant
-                    $resolved = $this->resolveConcatToString($parsed);
-
-                    if ($resolved !== null) {
-                        $entries[$resolved] = ['index' => $index, 'value' => $item->value];
-                        $concatEntries[$resolved] = [
-                            'prefix' => $parsed['prefixExpr'],
-                            'suffixKey' => $parsed['suffix'],
-                        ];
-                    } else {
-                        $syntheticKey = $parsed['prefixId'] . $parsed['suffix'];
-                        $entries[$syntheticKey] = ['index' => $index, 'value' => $item->value];
-                        $concatEntries[$syntheticKey] = [
-                            'prefix' => $parsed['prefixExpr'],
-                            'suffixKey' => $parsed['suffix'],
-                        ];
-                    }
-                }
-            }
+            $this->indexRuleItem($item, $index, $entries, $concatEntries);
         }
 
         if ($entries === []) {
@@ -295,6 +248,66 @@ CODE_SAMPLE
         }
 
         return $this->applyGroups($array, $groups, $entries, $concatEntries);
+    }
+
+    /**
+     * Classify a single ArrayItem by its key form (String_, ClassConstFetch, Concat) and
+     * append it to $entries / $concatEntries. Unsupported key forms are ignored.
+     *
+     * @param  array<string, array{index: int, value: Expr}>  $entries
+     * @param  array<string, array{prefix: Expr, suffixKey: string}>  $concatEntries
+     */
+    private function indexRuleItem(ArrayItem $item, int $index, array &$entries, array &$concatEntries): void
+    {
+        if ($item->key instanceof String_) {
+            $entries[$item->key->value] = ['index' => $index, 'value' => $item->value];
+
+            return;
+        }
+
+        if ($item->key instanceof ClassConstFetch) {
+            $this->indexClassConstKey($item->key, $item->value, $index, $entries, $concatEntries);
+
+            return;
+        }
+
+        if ($item->key instanceof Concat) {
+            $this->indexConcatKey($item->key, $item->value, $index, $entries, $concatEntries);
+        }
+    }
+
+    /**
+     * @param  array<string, array{index: int, value: Expr}>  $entries
+     * @param  array<string, array{prefix: Expr, suffixKey: string}>  $concatEntries
+     */
+    private function indexClassConstKey(ClassConstFetch $keyExpr, Expr $value, int $index, array &$entries, array &$concatEntries): void
+    {
+        $resolvedKey = $this->resolveClassConstToString($keyExpr) ?? $this->classConstToSyntheticKey($keyExpr);
+
+        if ($resolvedKey === null) {
+            return;
+        }
+
+        $entries[$resolvedKey] = ['index' => $index, 'value' => $value];
+        $concatEntries[$resolvedKey] = ['prefix' => $keyExpr, 'suffixKey' => ''];
+    }
+
+    /**
+     * @param  array<string, array{index: int, value: Expr}>  $entries
+     * @param  array<string, array{prefix: Expr, suffixKey: string}>  $concatEntries
+     */
+    private function indexConcatKey(Concat $keyExpr, Expr $value, int $index, array &$entries, array &$concatEntries): void
+    {
+        $parsed = $this->parseConcatKey($keyExpr);
+
+        if ($parsed === null) {
+            return;
+        }
+
+        $resolved = $this->resolveConcatToString($parsed) ?? $parsed['prefixId'] . $parsed['suffix'];
+
+        $entries[$resolved] = ['index' => $index, 'value' => $value];
+        $concatEntries[$resolved] = ['prefix' => $parsed['prefixExpr'], 'suffixKey' => $parsed['suffix']];
     }
 
     // ─── Concat key parsing ──────────────────────────────────────────────
@@ -535,7 +548,6 @@ CODE_SAMPLE
             return []; // Safety: don't recurse too deep
         }
 
-        // Group by first child segment
         /** @var array<string, list<string>> */
         $segmentToKeys = [];
 
@@ -547,78 +559,103 @@ CODE_SAMPLE
 
         foreach ($segmentToKeys as $segment => $keys) {
             if (count($keys) === 1 && $keys[0] === $prefix . '.' . $segment) {
-                // Leaf: exact match, no deeper nesting
                 $items[] = new ArrayItem($entries[$keys[0]]['value'], new String_($segment));
                 $consumed[] = $entries[$keys[0]]['index'];
-            } else {
-                // This segment has sub-children — recurse
-                $childValue = null;
-                $directKey = $prefix . '.' . $segment;
 
-                if (isset($entries[$directKey])) {
-                    $childValue = $entries[$directKey]['value'];
-                    $consumed[] = $entries[$directKey]['index'];
-                }
-
-                // Collect sub-children
-                $subWildcard = [];
-                $subFixed = [];
-                $subWildcardParent = null;
-
-                foreach ($keys as $fullKey) {
-                    if ($fullKey === $directKey) {
-                        continue;
-                    }
-
-                    $subSuffix = substr($fullKey, strlen($directKey) + 1);
-
-                    if ($subSuffix === '*') {
-                        $subWildcardParent = $fullKey;
-                    } elseif (str_starts_with($subSuffix, '*.')) {
-                        $subSegment = explode('.', substr($subSuffix, 2))[0];
-                        $subWildcard[$fullKey] = $subSegment;
-                    } else {
-                        $subSegment = explode('.', $subSuffix)[0];
-                        $subFixed[$fullKey] = $subSegment;
-                    }
-                }
-
-                if ($childValue === null) {
-                    $childValue = $this->buildFluentRuleFactoryCall('field');
-                }
-
-                // Absorb wildcard parent
-                if ($subWildcardParent !== null && isset($entries[$subWildcardParent])) {
-                    $consumed[] = $entries[$subWildcardParent]['index'];
-                }
-
-                // Recurse for wildcard sub-children
-                if ($subWildcard !== []) {
-                    $eachItems = $this->buildNestedItems($subWildcard, $entries, $directKey . '.*', $consumed, $depth + 1);
-
-                    if ($eachItems !== []) {
-                        $childValue = new MethodCall($childValue, new Identifier('each'), [
-                            new Arg($this->multilineArray($eachItems)),
-                        ]);
-                    }
-                }
-
-                // Recurse for fixed sub-children
-                if ($subFixed !== []) {
-                    $childrenItems = $this->buildNestedItems($subFixed, $entries, $directKey, $consumed, $depth + 1);
-
-                    if ($childrenItems !== []) {
-                        $childValue = new MethodCall($childValue, new Identifier('children'), [
-                            new Arg($this->multilineArray($childrenItems)),
-                        ]);
-                    }
-                }
-
-                $items[] = new ArrayItem($childValue, new String_($segment));
+                continue;
             }
+
+            $items[] = new ArrayItem(
+                $this->buildNestedChildValue($keys, $entries, $prefix . '.' . $segment, $consumed, $depth),
+                new String_($segment),
+            );
         }
 
         return $items;
+    }
+
+    /**
+     * Build a single nested child value that has sub-children (wildcard and/or fixed).
+     *
+     * @param  list<string>  $keys
+     * @param  array<string, array{index: int, value: Expr}>  $entries
+     * @param  list<int>  $consumed
+     */
+    private function buildNestedChildValue(array $keys, array $entries, string $directKey, array &$consumed, int $depth): Expr
+    {
+        $childValue = null;
+
+        if (isset($entries[$directKey])) {
+            $childValue = $entries[$directKey]['value'];
+            $consumed[] = $entries[$directKey]['index'];
+        }
+
+        $partitioned = $this->partitionSubChildren($keys, $directKey);
+
+        if ($childValue === null) {
+            $childValue = $this->buildFluentRuleFactoryCall('field');
+        }
+
+        if ($partitioned['subWildcardParent'] !== null && isset($entries[$partitioned['subWildcardParent']])) {
+            $consumed[] = $entries[$partitioned['subWildcardParent']]['index'];
+        }
+
+        if ($partitioned['subWildcard'] !== []) {
+            $eachItems = $this->buildNestedItems($partitioned['subWildcard'], $entries, $directKey . '.*', $consumed, $depth + 1);
+
+            if ($eachItems !== []) {
+                $childValue = new MethodCall($childValue, new Identifier('each'), [
+                    new Arg($this->multilineArray($eachItems)),
+                ]);
+            }
+        }
+
+        if ($partitioned['subFixed'] !== []) {
+            $childrenItems = $this->buildNestedItems($partitioned['subFixed'], $entries, $directKey, $consumed, $depth + 1);
+
+            if ($childrenItems !== []) {
+                $childValue = new MethodCall($childValue, new Identifier('children'), [
+                    new Arg($this->multilineArray($childrenItems)),
+                ]);
+            }
+        }
+
+        return $childValue;
+    }
+
+    /**
+     * Partition sub-children under $directKey into wildcard, fixed, and a lone wildcard parent.
+     *
+     * @param  list<string>  $keys
+     * @return array{subWildcard: array<string, string>, subFixed: array<string, string>, subWildcardParent: ?string}
+     */
+    private function partitionSubChildren(array $keys, string $directKey): array
+    {
+        $subWildcard = [];
+        $subFixed = [];
+        $subWildcardParent = null;
+
+        foreach ($keys as $fullKey) {
+            if ($fullKey === $directKey) {
+                continue;
+            }
+
+            $subSuffix = substr($fullKey, strlen($directKey) + 1);
+
+            if ($subSuffix === '*') {
+                $subWildcardParent = $fullKey;
+            } elseif (str_starts_with($subSuffix, '*.')) {
+                $subWildcard[$fullKey] = explode('.', substr($subSuffix, 2))[0];
+            } else {
+                $subFixed[$fullKey] = explode('.', $subSuffix)[0];
+            }
+        }
+
+        return [
+            'subWildcard' => $subWildcard,
+            'subFixed' => $subFixed,
+            'subWildcardParent' => $subWildcardParent,
+        ];
     }
 
     // ─── Apply groups ────────────────────────────────────────────────────
@@ -640,141 +677,19 @@ CODE_SAMPLE
         $insertions = [];
 
         foreach ($groups as $group) {
-            $parentKey = $group['parent'];
+            $result = $this->processGroup($group, $entries, $concatEntries);
 
-            // Pre-validate: ALL entries in this group (parent + wildcard parent + children)
-            // must be FluentRule chains. Otherwise the nested ArrayItems would contain
-            // raw PHP arrays that can't be used as ValidationRule values.
-            if (! $this->allGroupEntriesAreFluentRule($group, $entries, $parentKey)) {
+            if ($result === null) {
                 continue;
             }
 
-            /** @var list<int> */
-            $groupConsumed = [];
-
-            // Build nested each() items (recursive)
-            $eachItems = [];
-
-            if ($group['wildcardKeys'] !== []) {
-                $eachItems = $this->buildNestedItems(
-                    $group['wildcardKeys'],
-                    $entries,
-                    $parentKey . '.*',
-                    $groupConsumed,
-                );
+            if ($result['parentIndex'] !== null) {
+                $indicesToUpdate[$result['parentIndex']] = $result['parentValue'];
+            } elseif ($result['insertion'] !== null) {
+                $insertions[] = $result['insertion'];
             }
 
-            // Build nested children() items (recursive)
-            $childrenItems = [];
-
-            if ($group['fixedKeys'] !== []) {
-                $childrenItems = $this->buildNestedItems(
-                    $group['fixedKeys'],
-                    $entries,
-                    $parentKey,
-                    $groupConsumed,
-                );
-            }
-
-            // Gap 2: flat-wildcard shorthand. When only a single `items.*`
-            // entry exists (no nested `items.*.field` siblings, no explicit
-            // `items.*` fixed children), fold the wildcard entry's own
-            // FluentRule chain into the parent as `->each(<that chain>)`.
-            // Example: `'items.*' => FluentRule::field()->filled()` →
-            // parent gets `->each(FluentRule::field()->filled())`.
-            $eachScalar = null;
-
-            if (
-                $eachItems === []
-                && $childrenItems === []
-                && $group['wildcardParentKey'] !== null
-                && isset($entries[$group['wildcardParentKey']])
-                && $this->isFluentRuleChain($entries[$group['wildcardParentKey']]['value'])
-            ) {
-                $eachScalar = $entries[$group['wildcardParentKey']]['value'];
-                $groupConsumed[] = $entries[$group['wildcardParentKey']]['index'];
-            }
-
-            if ($eachItems === [] && $childrenItems === [] && $eachScalar === null) {
-                continue;
-            }
-
-            // Check wildcard parent (items.*) — only absorb if redundant.
-            // Skip this branch when $eachScalar is set: we've already consumed
-            // the wildcard parent as the scalar argument to each().
-            if ($eachScalar === null && $group['wildcardParentKey'] !== null && isset($entries[$group['wildcardParentKey']])) {
-                if ($eachItems !== [] && ! $this->isRedundantWildcardParent($entries[$group['wildcardParentKey']]['value'])) {
-                    continue; // Non-redundant → bail on this group
-                }
-
-                $groupConsumed[] = $entries[$group['wildcardParentKey']]['index'];
-            }
-
-            // Get or create parent value
-            $parentValue = isset($entries[$parentKey]) ? $entries[$parentKey]['value'] : null;
-            $parentIndex = isset($entries[$parentKey]) ? $entries[$parentKey]['index'] : null;
-
-            // If parent exists but isn't a FluentRule chain (e.g., raw array literal), bail
-            if ($parentValue !== null && ! $this->isFluentRuleChain($parentValue)) {
-                continue;
-            }
-
-            // Validate parent type supports the chain methods we're about to add
-            // - each() only on ArrayRule (FluentRule::array())
-            // - children() on ArrayRule or FieldRule (FluentRule::array() or ::field())
-            if ($parentValue !== null) {
-                $factory = $this->getFluentRuleFactory($parentValue);
-
-                if (($eachItems !== [] || $eachScalar !== null) && $factory !== 'array') {
-                    continue; // each() requires ArrayRule
-                }
-
-                if ($childrenItems !== [] && ! in_array($factory, ['array', 'field'], true)) {
-                    continue; // children() requires ArrayRule or FieldRule
-                }
-            }
-
-            if ($parentValue === null) {
-                // Synthesize a bare FluentRule::array() parent without a presence
-                // modifier. Adding ->nullable() here short-circuits Laravel's
-                // validation when the parent key is missing, so nested ->required()
-                // children would silently never fire. Leaving the synthesized parent
-                // bare preserves the original dot-notation semantics: nested
-                // `required` children still trigger when the parent is absent.
-                $parentValue = $this->buildFluentRuleFactoryCall('array');
-            }
-
-            if ($eachItems !== []) {
-                $parentValue = new MethodCall(
-                    $parentValue,
-                    new Identifier('each'),
-                    [new Arg($this->multilineArray($eachItems))],
-                );
-            } elseif ($eachScalar !== null) {
-                $parentValue = new MethodCall(
-                    $parentValue,
-                    new Identifier('each'),
-                    [new Arg($eachScalar)],
-                );
-            }
-
-            if ($childrenItems !== []) {
-                $parentValue = new MethodCall(
-                    $parentValue,
-                    new Identifier('children'),
-                    [new Arg($this->multilineArray($childrenItems))],
-                );
-            }
-
-            if ($parentIndex !== null) {
-                $indicesToUpdate[$parentIndex] = $parentValue;
-            } else {
-                $insertAt = $groupConsumed !== [] ? min($groupConsumed) : 0;
-                $parentKeyExpr = $this->buildParentKeyExpr($parentKey, $concatEntries);
-                $insertions[] = ['position' => $insertAt, 'item' => new ArrayItem($parentValue, $parentKeyExpr)];
-            }
-
-            $indicesToRemove = [...$indicesToRemove, ...$groupConsumed];
+            $indicesToRemove = [...$indicesToRemove, ...$result['consumed']];
         }
 
         if ($indicesToRemove === [] && $indicesToUpdate === [] && $insertions === []) {
@@ -823,6 +738,187 @@ CODE_SAMPLE
         $array->items = $newItems;
 
         return true;
+    }
+
+    /**
+     * Apply one group: build nested chain items, validate parent compatibility,
+     * and return update/insertion instructions. Returns null when the group
+     * is skipped (unsupported structure, non-FluentRule entries, type mismatch).
+     *
+     * @param  array{parent: string, wildcardKeys: array<string, string>, fixedKeys: array<string, string>, wildcardParentKey: ?string}  $group
+     * @param  array<string, array{index: int, value: Expr}>  $entries
+     * @param  array<string, array{prefix: Expr, suffixKey: string}>  $concatEntries
+     * @return array{parentIndex: ?int, parentValue: Expr, insertion: ?array{position: int, item: ArrayItem}, consumed: list<int>}|null
+     */
+    private function processGroup(array $group, array $entries, array $concatEntries): ?array
+    {
+        $parentKey = $group['parent'];
+
+        if (! $this->allGroupEntriesAreFluentRule($group, $entries, $parentKey)) {
+            return null;
+        }
+
+        /** @var list<int> */
+        $groupConsumed = [];
+
+        $collected = $this->collectGroupChainItems($group, $entries, $parentKey, $groupConsumed);
+
+        if ($collected === null) {
+            return null;
+        }
+
+        $eachItems = $collected['eachItems'];
+        $childrenItems = $collected['childrenItems'];
+        $eachScalar = $collected['eachScalar'];
+
+        $parentValue = isset($entries[$parentKey]) ? $entries[$parentKey]['value'] : null;
+        $parentIndex = isset($entries[$parentKey]) ? $entries[$parentKey]['index'] : null;
+
+        if ($parentValue !== null && ! $this->isFluentRuleChain($parentValue)) {
+            return null;
+        }
+
+        if (! $this->parentFactoryAllowsChain($parentValue, $eachItems, $childrenItems, $eachScalar)) {
+            return null;
+        }
+
+        if ($parentValue === null) {
+            // Synthesize a bare FluentRule::array() parent without a presence
+            // modifier. Adding ->nullable() here short-circuits Laravel's
+            // validation when the parent key is missing, so nested ->required()
+            // children would silently never fire. Leaving the synthesized parent
+            // bare preserves the original dot-notation semantics: nested
+            // `required` children still trigger when the parent is absent.
+            $parentValue = $this->buildFluentRuleFactoryCall('array');
+        }
+
+        $parentValue = $this->appendChainToParent($parentValue, $eachItems, $childrenItems, $eachScalar);
+
+        $insertion = null;
+
+        if ($parentIndex === null) {
+            $insertAt = $groupConsumed !== [] ? min($groupConsumed) : 0;
+            $parentKeyExpr = $this->buildParentKeyExpr($parentKey, $concatEntries);
+            $insertion = ['position' => $insertAt, 'item' => new ArrayItem($parentValue, $parentKeyExpr)];
+        }
+
+        return [
+            'parentIndex' => $parentIndex,
+            'parentValue' => $parentValue,
+            'insertion' => $insertion,
+            'consumed' => $groupConsumed,
+        ];
+    }
+
+    /**
+     * Build the each() / children() / scalar-each items for a group, and absorb the
+     * wildcard parent entry (items.*) when appropriate. Returns null if nothing
+     * would be emitted, or if a non-redundant wildcard parent blocks the group.
+     *
+     * @param  array{parent: string, wildcardKeys: array<string, string>, fixedKeys: array<string, string>, wildcardParentKey: ?string}  $group
+     * @param  array<string, array{index: int, value: Expr}>  $entries
+     * @param  list<int>  $groupConsumed  indices to remove (mutated)
+     * @return array{eachItems: list<ArrayItem>, childrenItems: list<ArrayItem>, eachScalar: ?Expr}|null
+     */
+    private function collectGroupChainItems(array $group, array $entries, string $parentKey, array &$groupConsumed): ?array
+    {
+        $eachItems = $group['wildcardKeys'] !== []
+            ? $this->buildNestedItems($group['wildcardKeys'], $entries, $parentKey . '.*', $groupConsumed)
+            : [];
+
+        $childrenItems = $group['fixedKeys'] !== []
+            ? $this->buildNestedItems($group['fixedKeys'], $entries, $parentKey, $groupConsumed)
+            : [];
+
+        // Gap 2: flat-wildcard shorthand. When only a single `items.*`
+        // entry exists (no nested `items.*.field` siblings, no explicit
+        // `items.*` fixed children), fold the wildcard entry's own
+        // FluentRule chain into the parent as `->each(<that chain>)`.
+        $eachScalar = null;
+
+        if (
+            $eachItems === []
+            && $childrenItems === []
+            && $group['wildcardParentKey'] !== null
+            && isset($entries[$group['wildcardParentKey']])
+            && $this->isFluentRuleChain($entries[$group['wildcardParentKey']]['value'])
+        ) {
+            $eachScalar = $entries[$group['wildcardParentKey']]['value'];
+            $groupConsumed[] = $entries[$group['wildcardParentKey']]['index'];
+        }
+
+        if ($eachItems === [] && $childrenItems === [] && $eachScalar === null) {
+            return null;
+        }
+
+        // Absorb the wildcard parent (items.*) only when redundant. When
+        // $eachScalar is set we've already consumed it above.
+        if ($eachScalar === null && $group['wildcardParentKey'] !== null && isset($entries[$group['wildcardParentKey']])) {
+            if ($eachItems !== [] && ! $this->isRedundantWildcardParent($entries[$group['wildcardParentKey']]['value'])) {
+                return null;
+            }
+
+            $groupConsumed[] = $entries[$group['wildcardParentKey']]['index'];
+        }
+
+        return [
+            'eachItems' => $eachItems,
+            'childrenItems' => $childrenItems,
+            'eachScalar' => $eachScalar,
+        ];
+    }
+
+    /**
+     * Validate parent type supports the chain methods we're about to add:
+     * each() requires ArrayRule, children() requires ArrayRule or FieldRule.
+     *
+     * @param  list<ArrayItem>  $eachItems
+     * @param  list<ArrayItem>  $childrenItems
+     */
+    private function parentFactoryAllowsChain(?Expr $parentValue, array $eachItems, array $childrenItems, ?Expr $eachScalar): bool
+    {
+        if (! $parentValue instanceof Expr) {
+            return true;
+        }
+
+        $factory = $this->getFluentRuleFactory($parentValue);
+
+        if (($eachItems !== [] || $eachScalar instanceof Expr) && $factory !== 'array') {
+            return false;
+        }
+
+        return ! ($childrenItems !== [] && ! in_array($factory, ['array', 'field'], true));
+    }
+
+    /**
+     * @param  list<ArrayItem>  $eachItems
+     * @param  list<ArrayItem>  $childrenItems
+     */
+    private function appendChainToParent(Expr $parentValue, array $eachItems, array $childrenItems, ?Expr $eachScalar): Expr
+    {
+        if ($eachItems !== []) {
+            $parentValue = new MethodCall(
+                $parentValue,
+                new Identifier('each'),
+                [new Arg($this->multilineArray($eachItems))],
+            );
+        } elseif ($eachScalar instanceof Expr) {
+            $parentValue = new MethodCall(
+                $parentValue,
+                new Identifier('each'),
+                [new Arg($eachScalar)],
+            );
+        }
+
+        if ($childrenItems !== []) {
+            return new MethodCall(
+                $parentValue,
+                new Identifier('children'),
+                [new Arg($this->multilineArray($childrenItems))],
+            );
+        }
+
+        return $parentValue;
     }
 
     /**

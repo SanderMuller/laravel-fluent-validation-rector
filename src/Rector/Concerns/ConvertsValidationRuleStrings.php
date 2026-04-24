@@ -27,6 +27,7 @@ use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Stmt\Namespace_;
 use PhpParser\Node\Stmt\Return_;
 use PHPStan\Type\ObjectType;
+use Rector\PhpParser\Node\FileNode;
 use RecursiveCallbackFilterIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -401,29 +402,52 @@ trait ConvertsValidationRuleStrings
 
         self::$lastScannedFile = $filePath;
 
-        // Collect all top-level statements, unwrapping Rector's FileNode and Namespace_ wrappers
+        foreach ($this->collectExtendingClassesFromFile() as $classNode) {
+            $this->collectUnsafeParentClass($classNode);
+        }
+    }
+
+    /**
+     * @return list<Class_>
+     */
+    private function collectExtendingClassesFromFile(): array
+    {
         $classNodes = [];
 
         foreach ($this->getFile()->getNewStmts() as $stmt) {
-            $innerStmts = $stmt->stmts ?? [$stmt];
+            $innerStmts = $stmt instanceof Namespace_ || $stmt instanceof FileNode
+                ? $stmt->stmts
+                : [$stmt];
 
             foreach ($innerStmts as $innerStmt) {
-                // Unwrap Namespace_ to get its class statements
-                if ($innerStmt instanceof Namespace_) {
-                    foreach ($innerStmt->stmts as $namespacedStmt) {
-                        if ($namespacedStmt instanceof Class_ && $namespacedStmt->extends instanceof Name) {
-                            $classNodes[] = $namespacedStmt;
-                        }
-                    }
-                } elseif ($innerStmt instanceof Class_ && $innerStmt->extends instanceof Name) {
-                    $classNodes[] = $innerStmt;
-                }
+                array_push($classNodes, ...$this->extractExtendingClasses($innerStmt));
             }
         }
 
-        foreach ($classNodes as $classNode) {
-            $this->collectUnsafeParentClass($classNode);
+        return $classNodes;
+    }
+
+    /**
+     * @return list<Class_>
+     */
+    private function extractExtendingClasses(Node $node): array
+    {
+        if ($node instanceof Namespace_) {
+            $classes = [];
+            foreach ($node->stmts as $namespacedStmt) {
+                if ($namespacedStmt instanceof Class_ && $namespacedStmt->extends instanceof Name) {
+                    $classes[] = $namespacedStmt;
+                }
+            }
+
+            return $classes;
         }
+
+        if ($node instanceof Class_ && $node->extends instanceof Name) {
+            return [$node];
+        }
+
+        return [];
     }
 
     /**
@@ -799,72 +823,59 @@ trait ConvertsValidationRuleStrings
         );
     }
 
+    /**
+     * Rule names that take a single verbatim string argument.
+     *
+     * @var list<string>
+     */
+    private const array SINGLE_STRING_ARG_RULES = [
+        'regex',
+        'notRegex',
+        'startsWith',
+        'endsWith',
+        'doesntStartWith',
+        'doesntEndWith',
+        'format',
+    ];
+
     private function buildModifierCall(Expr $expr, string $name, ?string $args): ?MethodCall
     {
         if (in_array($name, self::SIMPLE_MODIFIERS, true)) {
             return new MethodCall($expr, new Identifier($name));
         }
 
-        if (in_array($name, self::NUMERIC_ARG_RULES, true) && $args !== null) {
+        if ($args === null) {
+            return null;
+        }
+
+        if (in_array($name, self::NUMERIC_ARG_RULES, true)) {
             return new MethodCall($expr, new Identifier($name), [
                 new Arg($this->parseNumericArg($args)),
             ]);
         }
 
-        if (in_array($name, self::TWO_NUMERIC_ARG_RULES, true) && $args !== null) {
-            $argParts = explode(',', $args, 2);
-
-            if (count($argParts) !== 2) {
-                return null;
-            }
-
-            return new MethodCall($expr, new Identifier($name), [
-                new Arg($this->parseNumericArg($argParts[0])),
-                new Arg($this->parseNumericArg($argParts[1])),
-            ]);
+        if (in_array($name, self::TWO_NUMERIC_ARG_RULES, true)) {
+            return $this->buildTwoNumericArgCall($expr, $name, $args);
         }
 
-        if (in_array($name, self::STRING_ARG_RULES, true) && $args !== null) {
+        if (
+            in_array($name, self::STRING_ARG_RULES, true)
+            || in_array($name, self::SINGLE_STRING_ARG_RULES, true)
+        ) {
             return new MethodCall($expr, new Identifier($name), [
                 new Arg(new String_($args)),
             ]);
         }
 
-        if ($name === 'in' && $args !== null) {
-            return $this->buildArrayArgCall($expr, 'in', $args);
+        if ($name === 'in' || $name === 'notIn') {
+            return $this->buildArrayArgCall($expr, $name, $args);
         }
 
-        if ($name === 'notIn' && $args !== null) {
-            return $this->buildArrayArgCall($expr, 'notIn', $args);
+        if ($name === 'exists' || $name === 'unique') {
+            return $this->buildTableColumnCall($expr, $name, $args);
         }
 
-        if (($name === 'regex' || $name === 'notRegex') && $args !== null) {
-            return new MethodCall($expr, new Identifier($name), [
-                new Arg(new String_($args)),
-            ]);
-        }
-
-        if ($name === 'exists' && $args !== null) {
-            return $this->buildTableColumnCall($expr, 'exists', $args);
-        }
-
-        if ($name === 'unique' && $args !== null) {
-            return $this->buildTableColumnCall($expr, 'unique', $args);
-        }
-
-        if ((in_array($name, ['startsWith', 'endsWith', 'doesntStartWith', 'doesntEndWith'], true)) && $args !== null) {
-            return new MethodCall($expr, new Identifier($name), [
-                new Arg(new String_($args)),
-            ]);
-        }
-
-        if ($name === 'format' && $args !== null) {
-            return new MethodCall($expr, new Identifier('format'), [
-                new Arg(new String_($args)),
-            ]);
-        }
-
-        if (in_array($name, self::COMMA_SEPARATED_ARGS_RULES, true) && $args !== null) {
+        if (in_array($name, self::COMMA_SEPARATED_ARGS_RULES, true)) {
             return new MethodCall($expr, new Identifier($name), array_map(
                 static fn (string $v): Arg => new Arg(new String_($v)),
                 explode(',', $args),
@@ -872,6 +883,20 @@ trait ConvertsValidationRuleStrings
         }
 
         return null;
+    }
+
+    private function buildTwoNumericArgCall(Expr $expr, string $name, string $args): ?MethodCall
+    {
+        $argParts = explode(',', $args, 2);
+
+        if (count($argParts) !== 2) {
+            return null;
+        }
+
+        return new MethodCall($expr, new Identifier($name), [
+            new Arg($this->parseNumericArg($argParts[0])),
+            new Arg($this->parseNumericArg($argParts[1])),
+        ]);
     }
 
     /**
