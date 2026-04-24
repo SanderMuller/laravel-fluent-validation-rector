@@ -285,9 +285,12 @@ trait ConvertsValidationRuleStrings
 
         // Abstract classes are designed to be extended. Subclasses may use
         // collect(parent::rules())->mergeRecursive(...) which breaks when the
-        // parent returns FluentRule objects instead of plain arrays.
-        if ($classLike->isAbstract()) {
-            $this->logSkip($classLike, 'abstract class (subclasses may manipulate parent::rules() as plain arrays)');
+        // parent returns FluentRule objects instead of plain arrays. Gate on
+        // hasMethod('rules') so we don't log skips for every abstract class
+        // in the codebase (Events, Exceptions, DataObjects, Commands with no
+        // validation surface at all — 150+ false skips observed in the wild).
+        if ($classLike->isAbstract() && $this->hasRulesMethod($classLike)) {
+            $this->logSkip($classLike, 'abstract class with rules() (subclasses may manipulate parent::rules() as plain arrays)');
 
             return null;
         }
@@ -349,6 +352,21 @@ trait ConvertsValidationRuleStrings
      * other than `rules()` — e.g. `rulesWithoutPrefix()` on custom
      * FluentValidator subclasses used for JSON-import validation.
      */
+    private function hasRulesMethod(Class_ $class): bool
+    {
+        foreach ($class->getMethods() as $method) {
+            if ($this->isName($method, 'rules')) {
+                return true;
+            }
+
+            if ($this->hasFluentRulesAttribute($method)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function hasFluentRulesAttribute(ClassMethod $method): bool
     {
         // Referenced as a string (not ::class) so PHPStan doesn't require the

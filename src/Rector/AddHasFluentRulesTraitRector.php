@@ -7,14 +7,15 @@ use PhpParser\Node;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Name;
 use PhpParser\Node\Stmt\Class_;
+use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Stmt\Namespace_;
 use PhpParser\NodeVisitor;
 use Rector\Contract\Rector\ConfigurableRectorInterface;
 use Rector\Rector\AbstractRector;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidation\HasFluentRules;
-use SanderMuller\FluentValidation\HasFluentValidation;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
+use SanderMuller\FluentValidationRector\Rector\Concerns\IdentifiesLivewireClasses;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesTraitInsertion;
 use SanderMuller\FluentValidationRector\RunSummary;
@@ -32,6 +33,7 @@ use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
 final class AddHasFluentRulesTraitRector extends AbstractRector implements ConfigurableRectorInterface, DocumentedRuleInterface
 {
     use DetectsInheritedTraits;
+    use IdentifiesLivewireClasses;
     use LogsSkipReasons;
     use ManagesTraitInsertion;
 
@@ -155,7 +157,7 @@ CODE_SAMPLE
         }
 
         if ($this->alreadyHasTrait($class)) {
-            $this->logSkip($class, 'already has HasFluentRules trait');
+            $this->logSkip($class, 'already has HasFluentRules trait', verboseOnly: true);
 
             return false;
         }
@@ -170,7 +172,7 @@ CODE_SAMPLE
 
         // Children of configured base classes inherit the trait — skip to avoid duplication
         if ($class->extends instanceof Name && in_array($this->getName($class->extends), $this->baseClasses, true)) {
-            $this->logSkip($class, 'extends a configured base class (trait inherited from parent)');
+            $this->logSkip($class, 'extends a configured base class (trait inherited from parent)', verboseOnly: true);
 
             return false;
         }
@@ -180,14 +182,18 @@ CODE_SAMPLE
         // already declares it. Complements the explicit base_classes config
         // for codebases that don't want to enumerate every shared base.
         if ($this->anyAncestorUsesTrait($class, HasFluentRules::class)) {
-            $this->logSkip($class, 'parent class already uses HasFluentRules (trait inherited)');
+            $this->logSkip($class, 'parent class already uses HasFluentRules (trait inherited)', verboseOnly: true);
 
             return false;
         }
 
-        // Skip abstract classes — subclasses may transform rules via mergeRecursive
-        if ($class->isAbstract()) {
-            $this->logSkip($class, 'abstract class (subclasses may transform rules via mergeRecursive)');
+        // Skip abstract classes that declare rules() — subclasses may transform
+        // that method via mergeRecursive, and the trait on the base would not
+        // be correct for every subclass. Gate on hasMethod('rules') so we don't
+        // log skips for every unrelated abstract in the codebase (Events,
+        // Exceptions, DataObjects, Commands with no validation surface).
+        if ($class->isAbstract() && $class->getMethod('rules') instanceof ClassMethod) {
+            $this->logSkip($class, 'abstract class with rules() (subclasses may transform via mergeRecursive — add to base_classes config to opt in)');
 
             return false;
         }
@@ -198,37 +204,6 @@ CODE_SAMPLE
         // Console\Kernel, Collections), logging this bail inflates the skip
         // log with entries users can't act on.
         return $this->usesFluentRule($class);
-    }
-
-    private function isLivewireClass(Class_ $class): bool
-    {
-        // Direct parent name match
-        if ($class->extends instanceof Name) {
-            $parentName = $this->getName($class->extends);
-
-            if (in_array($parentName, ['Livewire\Component', 'Livewire\Form'], true)) {
-                return true;
-            }
-        }
-
-        // Already has a Livewire trait
-        foreach ($class->getTraitUses() as $traitUse) {
-            foreach ($traitUse->traits as $trait) {
-                if ($this->getName($trait) === HasFluentValidation::class) {
-                    return true;
-                }
-            }
-        }
-
-        // Heuristic: classes with a render() method are Livewire components/forms,
-        // even if they extend intermediate base classes.
-        foreach ($class->getMethods() as $method) {
-            if ($this->isName($method, 'render')) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private function alreadyHasTrait(Class_ $class): bool

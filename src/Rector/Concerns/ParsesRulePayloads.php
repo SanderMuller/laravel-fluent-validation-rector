@@ -64,6 +64,11 @@ trait ParsesRulePayloads
         'present_with', 'present_with_all',
         'missing_with', 'missing_with_all',
         'prohibits',
+        // `requiredArrayKeys(string ...$keys)` — ArrayRule-only; semantically
+        // array-key validation, not field-dependency, but shares the variadic
+        // string signature that this builder produces. Per-class method
+        // allowlist in SimplifyRuleWrappersRector gates the receiver.
+        'required_array_keys',
     ];
 
     /**

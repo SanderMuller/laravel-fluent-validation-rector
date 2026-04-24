@@ -331,7 +331,7 @@ CODE_SAMPLE
 
         if (! $this->canNarrowExistingBody($existingBody)) {
             $truncated = substr(trim($existingBody), 0, 80);
-            $this->logSkip($class, sprintf("existing @return tag '%s' is user-customized — respecting", $truncated));
+            $this->logSkip($class, sprintf("existing @return tag '%s' is user-customized — respecting", $truncated), verboseOnly: true);
 
             return false;
         }

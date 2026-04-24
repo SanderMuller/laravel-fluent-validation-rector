@@ -80,12 +80,23 @@ trait LogsSkipReasons
      */
     private static bool $logSessionVerified = false;
 
-    private function logSkip(Class_ $class, string $reason): void
+    /**
+     * @param  bool  $verboseOnly  When true, only writes the entry in verbose
+     *                             mode. Use for non-actionable skips: success
+     *                             cases ("already has trait", "parent inherits
+     *                             trait"), user-customized-docblock, statically
+     *                             unresolvable rule payloads (legit escape
+     *                             hatches like `->rule(Password::default())`).
+     *                             Default false preserves the actionable-skip
+     *                             path for bugs/config mismatches users need
+     *                             to see.
+     */
+    private function logSkip(Class_ $class, string $reason, bool $verboseOnly = false): void
     {
         $className = $class->namespacedName?->toString()
             ?? ($class->name instanceof Identifier ? $class->name->toString() : 'anonymous');
 
-        $this->writeSkipEntry($className, $reason);
+        $this->writeSkipEntry($className, $reason, $verboseOnly);
     }
 
     /**
@@ -93,13 +104,17 @@ trait LogsSkipReasons
      * AST node — e.g. `MethodCall`-driven rectors that resolve the
      * enclosing class via PHPStan scope rather than parent-walking.
      */
-    private function logSkipByName(string $className, string $reason): void
+    private function logSkipByName(string $className, string $reason, bool $verboseOnly = false): void
     {
-        $this->writeSkipEntry($className, $reason);
+        $this->writeSkipEntry($className, $reason, $verboseOnly);
     }
 
-    private function writeSkipEntry(string $className, string $reason): void
+    private function writeSkipEntry(string $className, string $reason, bool $verboseOnly = false): void
     {
+        if ($verboseOnly && ! Diagnostics::isVerbose()) {
+            return;
+        }
+
         $file = $this->getFile()->getFilePath();
         $rule = (new ReflectionClass($this))->getShortName();
 

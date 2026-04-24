@@ -247,6 +247,9 @@ The log is a file sink because Rector's `withParallel(...)` executor doesn't for
 > Rector caches per-file results. Files that hit a bail produce no transformation, so the skip entry is written once and the rule is not re-invoked on cached runs. To force every file to be revisited and every bail to be re-logged, run `vendor/bin/rector process --clear-cache` (or delete `.cache/rector*`).
 
 > [!NOTE]
+> The default skip log only includes actionable entries — categories that a user can fix, like hybrid `validate([...])` conflicts or Filament inheritance chains. Success-path notices ("already has trait", "parent class already uses trait", custom `@return` docblock, non-statically-resolvable rule payloads like `->rule(Password::default())`, and FieldRule-on-typed-method mismatches) are silenced unless `FLUENT_VALIDATION_RECTOR_VERBOSE=1` is set. Set it when debugging why a specific file wasn't rewritten.
+
+> [!NOTE]
 > `ConvertLivewireRuleAttributeRector` verifies the generated `rules(): array` is syntactically correct, but it can't prove the converted rule is behaviorally equivalent to the source attribute. If a converted Livewire component has no feature test covering validation, review the diff by hand and watch for dropped `message:` / explicit `onUpdate:` / `translate: false` args (logged to the skip file) that need manual migration to Livewire's `messages(): array` hook or project config. `messages:` (plural, not a Livewire-documented arg) surfaces its own "unrecognized, likely typo for `message:`?" log entry.
 
 ## Known limitations

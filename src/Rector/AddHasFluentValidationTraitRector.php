@@ -209,12 +209,26 @@ CODE_SAMPLE
         }
 
         if ($class->isAbstract()) {
-            $this->logSkip($class, 'abstract class');
+            $this->logAbstractLivewireSkip($class);
 
             return null;
         }
 
         if (! $this->usesFluentRule($class)) {
+            // A Livewire component with a rules() method but no FluentRule
+            // usage is actionable: the user either forgot to run the string
+            // converter (ValidationStringToFluentRuleRector) or has rules the
+            // converter couldn't rewrite. Promote to a skip-log entry so it
+            // surfaces in the end-of-run summary instead of silently dropping.
+            // Plain Livewire components with no rules() at all get the usual
+            // silent skip — they're just not validation-bearing.
+            if ($this->hasRulesMethod($class)) {
+                $this->logSkip(
+                    $class,
+                    'Livewire component has rules() but no FluentRule usage — convert string rules to FluentRule (run the ValidationStringToFluentRuleRector set) before this rule fires',
+                );
+            }
+
             return null;
         }
 
@@ -234,13 +248,13 @@ CODE_SAMPLE
         $wrongFqn = $isFilament ? HasFluentValidation::class : HasFluentValidationForFilament::class;
 
         if ($this->directlyUsesTrait($class, $targetFqn)) {
-            $this->logSkip($class, sprintf('already has %s trait', $target));
+            $this->logSkip($class, sprintf('already has %s trait', $target), verboseOnly: true);
 
             return null;
         }
 
         if ($this->anyAncestorUsesTrait($class, $targetFqn)) {
-            $this->logSkip($class, sprintf('parent class already uses %s (trait inherited)', $target));
+            $this->logSkip($class, sprintf('parent class already uses %s (trait inherited)', $target), verboseOnly: true);
 
             return null;
         }
@@ -334,6 +348,32 @@ CODE_SAMPLE
                 if ($this->isName($method, $name)) {
                     return true;
                 }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Abstract Livewire bases with no `rules()` method have no validation
+     * surface — silently skip. When they do declare `rules()`, subclasses
+     * may override it, so the correct place for the trait is on each
+     * concrete subclass; emit an actionable skip to guide the user.
+     */
+    private function logAbstractLivewireSkip(Class_ $class): void
+    {
+        if (! $this->hasRulesMethod($class)) {
+            return;
+        }
+
+        $this->logSkip($class, 'abstract class with rules() (subclasses may override; add the trait directly on concrete subclasses)');
+    }
+
+    private function hasRulesMethod(Class_ $class): bool
+    {
+        foreach ($class->getMethods() as $method) {
+            if ($this->isName($method, 'rules')) {
+                return true;
             }
         }
 

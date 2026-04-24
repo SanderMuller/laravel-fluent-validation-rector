@@ -103,6 +103,9 @@ final class SimplifyRuleWrappersRector extends AbstractRector implements Documen
         'presentWith', 'presentWithAll',
         'missingWith', 'missingWithAll',
         'prohibits',
+        // ArrayRule-only: requires the receiver to resolve to ArrayRule, gated
+        // naturally by the per-class method-availability allowlist.
+        'requiredArrayKeys',
     ];
 
     /**
@@ -153,6 +156,8 @@ final class SimplifyRuleWrappersRector extends AbstractRector implements Documen
         'missing_with' => 'missingWith',
         'missing_with_all' => 'missingWithAll',
         'prohibits' => 'prohibits',
+        // ArrayRule-only; isMethodAvailable() gates receivers that lack it.
+        'required_array_keys' => 'requiredArrayKeys',
     ];
 
     /**
@@ -261,8 +266,10 @@ CODE_SAMPLE
         if ($parsed === null) {
             // Known FluentRule chain but payload shape isn't in v1 scope
             // (variable string, custom Rule object, builder tail like
-            // `Rule::in(...)->where(...)`, concatenation, etc.).
-            $this->logSkipForCall($node, 'rule payload not statically resolvable to a v1 shape');
+            // `Rule::in(...)->where(...)`, concatenation, etc.). Legitimate
+            // escape-hatch use — not actionable for consumers — so the skip
+            // only surfaces in verbose mode.
+            $this->logSkipForCall($node, 'rule payload not statically resolvable to a v1 shape', verboseOnly: true);
 
             return null;
         }
@@ -293,7 +300,11 @@ CODE_SAMPLE
         if (! $this->isMethodAvailable($resolution['class'], $targetMethod)) {
             $shortClass = (new ReflectionClass($resolution['class']))->getShortName();
 
-            $this->logSkipForCall($node, sprintf('%s() not on %s', $targetMethod, $shortClass));
+            // FieldRule missing typed methods (min/max/regex) is a UX
+            // opportunity — users could switch to FluentRule::string() /
+            // ::numeric() — but not actionable from the skip log directly.
+            // Verbose-only so the default log stays signal-heavy.
+            $this->logSkipForCall($node, sprintf('%s() not on %s', $targetMethod, $shortClass), verboseOnly: true);
 
             return null;
         }
@@ -430,7 +441,7 @@ CODE_SAMPLE
      * back to `top-level` for nodes outside any class — rare in practice
      * but possible in plain scripts.
      */
-    private function logSkipForCall(MethodCall $node, string $reason): void
+    private function logSkipForCall(MethodCall $node, string $reason, bool $verboseOnly = false): void
     {
         $scope = $node->getAttribute(AttributeKey::SCOPE);
         $className = 'top-level';
@@ -439,7 +450,7 @@ CODE_SAMPLE
             $className = $scope->getClassReflection()->getName();
         }
 
-        $this->logSkipByName($className, $reason);
+        $this->logSkipByName($className, $reason, $verboseOnly);
     }
 
     /**
