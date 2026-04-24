@@ -57,6 +57,18 @@ final class UpdateRulesReturnTypeDocblockRector extends AbstractRector implement
     use NormalizesRulesDocblock;
 
     /**
+     * Re-declared on the using class so static analyzers can resolve
+     * `UpdateRulesReturnTypeDocblockRector::TREAT_AS_FLUENT_COMPATIBLE`
+     * from consumer `rector.php` files. PHP 8.2 permits reading a
+     * trait constant via the using class at runtime, but intelephense
+     * / PHPStan flag the expression as "Undefined class constant".
+     * Values must match `AllowlistedRuleFactories`'s constants.
+     */
+    public const string TREAT_AS_FLUENT_COMPATIBLE = 'treat_as_fluent_compatible';
+
+    public const string ALLOW_CHAIN_TAIL_ON_ALLOWLISTED = 'allow_chain_tail_on_allowlisted';
+
+    /**
      * @param  array<mixed>  $configuration
      */
     public function configure(array $configuration): void
