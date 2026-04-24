@@ -140,3 +140,30 @@ Under `tests/InlineResolvableParentRules/Fixture/`:
 - Property-spread (`...$this->baseRules`). Requires cross-class state flow analysis.
 - Variable-variable spread (see OQ 1).
 - Runtime-conditional arrays (`$base = $flag ? [a] : [b]; return [...$base];`). Conservative skip.
+
+---
+
+## Implementation status (2026-04-24)
+
+**Shipped.** User opted in despite mijntp's zero-match grep — harness is cheap and the rector is a pure upgrade (preserves current behavior when it can't resolve).
+
+- [x] `extractReturnArray` relaxed: accepts single-`return` (strict) and N-top-level-`Expression(Assign)`-then-return (relaxed). Strict mode kept for the recursive parent-side parse.
+- [x] `resolveSpreadSource` dispatcher — `parent::rules()` → parent resolver, `Variable` → `resolveVariableSpread`, anything else → null (leave spread intact).
+- [x] `ResolvesVariableSpread` trait (`src/Rector/Concerns/ResolvesVariableSpread.php`) — holds the 5 helpers to keep the rector under PHPStan's cognitive-complexity threshold.
+- [x] Dead-assign strip after variable-spread inline — `stripDeadVariableSpreadAssign` removes the single `$var = ...;` stmt so impure RHS (method calls, `new`, etc.) don't evaluate twice.
+- [x] Parent resolver rewrite — switched from PHPStan scope (`$scope->getClassReflection()`) to native `ReflectionClass` walking from `$class->extends`, and FQCN-based class matching in `loadParentRulesMethod` instead of short-name.
+- [x] 13 fixtures: 2 inline (literal + `parent::rules()` two-step), 1 inline (impure RHS with `$this->computeLimit()` — proves dead-assign strip), 10 skip (multi-assign / method-call RHS / used-elsewhere / post-return / if / foreach / match-arm / try / closure-capture).
+
+### Findings
+
+- **PHPStan scope returns null for non-autoloaded classes (blocker).** The original `resolveParentRulesItems` used `$scope->getClassReflection()` which worked for `InlineParentRulesPlainLiteral` but silently returned null for every other fixture. Existing fixtures hid this by being skip-tests: a null child reflection bailed to a no-op, which matched the single-section fixture's expected "no change". Fix: use native `ReflectionClass` walking from `$class->extends`. Side benefit — now works in consumer codebases where the child lives outside the composer autoloader's scanned roots.
+- **Codex HIGH: impure-RHS double-evaluation.** First implementation left the `$base = ['k' => $this->compute()]` assignment in place and inlined a CLONE of the array items, causing `compute()` to evaluate twice at runtime. Fixed by `stripDeadVariableSpreadAssign` — safe because the `countVariableReferences(...) === 2` gate already guaranteed the assignment was single-use.
+- **Codex MEDIUM: multi-namespace same-short-name collision.** `loadParentRulesMethod` previously matched by short name only; a legal multi-namespace file could return the wrong class. Fixed by tracking the active namespace through a `Namespace_` walk and matching on FQCN (`$ns . '\\' . $short`) in `findClassByFqcn`. Pre-existing short-name behavior would also have been wrong under scope-mode; the switch-plus-fix eliminates both paths.
+- **Codex HIGH (second pass): peer-assignment reordering.** The dead-assign strip from the first pass fixed double-evaluation but could still reorder side effects when OTHER top-level assigns sit around the spread source. Example: `$a = sideA(); $base = sideBase(); $b = sideB(); return [...$base];` — after stripping `$base`, the inlined items' RHS (`sideBase`) runs AFTER `sideB()` instead of between `sideA` and `sideB`. Fixed by tightening the gate: `countTopLevelAssignments === 1` required, so the spread source is the only assignment in the body. Added `skip_variable_spread_peer_assignment.php.inc` fixture.
+- **Codex LOW: closure-capture reference counting.** Added `skip_variable_spread_closure_capture.php.inc` to prove the gate's `!= 2` arm handles `use ($base)` captures correctly. Destructuring writes (`[$base] = ...`) and `unset($base['k'])` paths are implicitly handled — the former appears as a Variable node (counted), the latter doesn't appear at all (unset detects only the scalar-variable case, which is the intended behavior).
+- **`NodeFinder` import removed** — replaced with a manual `matchClassInStmts` recursion that tracks namespace context. Was not reachable via `NodeFinder::findFirst` alone.
+
+### Tests
+
+- 505 tests / 863 assertions / 0 failures (+14 new fixtures in `tests/InlineResolvableParentRules/Fixture/`).
+- Pint clean. PHPStan 0 errors (after extracting `ResolvesVariableSpread` trait to keep class complexity under 80). `vendor/bin/rector process` 0 self-changes.

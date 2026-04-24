@@ -35,6 +35,25 @@ final class Diagnostics
     public const VERBOSE_LOG_FILENAME = '.rector-fluent-validation-skips.log';
 
     /**
+     * Default tier — only always-on (non-`verboseOnly`) entries surface.
+     */
+    public const TIER_OFF = 'off';
+
+    /**
+     * Middle tier — surfaces `verboseOnly` entries flagged `actionable: true`
+     * in addition to the always-on set. Skips non-actionable noise
+     * (trait-already-present, Livewire-detected-not-FormRequest, etc.).
+     */
+    public const TIER_ACTIONABLE = 'actionable';
+
+    /**
+     * Legacy "everything" tier. `VERBOSE_ENV=1` / `=true` / `=all` all
+     * resolve here. Preserves pre-0.13 behaviour exactly — every
+     * `verboseOnly` entry writes regardless of actionable flag.
+     */
+    public const TIER_ALL = 'all';
+
+    /**
      * OS env only. `$_SERVER` / `$_ENV` are intentionally not consulted:
      * they can diverge from the process environment (e.g. Dotenv/bootstrap
      * code mutates them but not OS env), which would produce a
@@ -43,10 +62,42 @@ final class Diagnostics
      * userland superglobals. Parent seeing verbose-on while workers see
      * verbose-off would split skip writes between the cwd log and the
      * tmp log, losing both the file and the end-of-run hint.
+     *
+     * Kept for back-compat: returns true iff the resolved tier is `all`.
+     * Internal call sites that need to distinguish `actionable` from `all`
+     * should call {@see verbosityTier()} directly.
      */
     public static function isVerbose(): bool
     {
-        return getenv(self::VERBOSE_ENV) === '1';
+        return self::verbosityTier() === self::TIER_ALL;
+    }
+
+    /**
+     * Resolve the 3-level verbosity tier from the OS env. Accepted values:
+     *
+     *   - unset / empty                         → `off`
+     *   - `actionable`                          → `actionable`
+     *   - `1` / `true` / `all` / any other non-empty truthy → `all`
+     *
+     * Parsing is case-insensitive for the named tier values. Anything
+     * non-empty that isn't `actionable` falls through to `all` so legacy
+     * `VERBOSE=1` consumers keep their existing everything-output behaviour.
+     */
+    public static function verbosityTier(): string
+    {
+        $raw = getenv(self::VERBOSE_ENV);
+
+        if ($raw === false || $raw === '') {
+            return self::TIER_OFF;
+        }
+
+        $normalized = strtolower($raw);
+
+        if ($normalized === self::TIER_ACTIONABLE) {
+            return self::TIER_ACTIONABLE;
+        }
+
+        return self::TIER_ALL;
     }
 
     /**
@@ -79,7 +130,12 @@ final class Diagnostics
 
     public static function skipLogPath(): string
     {
-        return self::isVerbose() ? self::verboseLogPath() : self::quietLogPath();
+        // Any opt-in tier (`actionable` or `all`) surfaces the log in cwd —
+        // consumers who asked for diagnostic output want it inspectable in
+        // the project root. Only `off` (no opt-in) hides the log in tmp.
+        return self::verbosityTier() === self::TIER_OFF
+            ? self::quietLogPath()
+            : self::verboseLogPath();
     }
 
     public static function skipLogSentinelPath(): string

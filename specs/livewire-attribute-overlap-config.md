@@ -139,3 +139,29 @@ Under `tests/ConvertLivewireRuleAttribute/Fixture/` (extending existing):
 - Conflict resolution inside `force` mode (keeping attr rules vs `validate()` rules when both exist). Rector emits the attr-derived rule into `rules()`; consumer decides.
 - Cross-class `validate()` calls (e.g., a trait calls `$this->validate()`). Trait-level analysis deferred.
 - Livewire v2 vs v3 attr differences. Rector already handles both `#[Rule]` and `#[Validate]` uniformly; no extra surface.
+
+---
+
+## Implementation status (2026-04-24)
+
+**Shipped:** `bail` (default, preserves prior behavior) + `partial`. Force mode deferred — requires comment-emission logic orthogonal to the overlap-detection core and no collectiq-side demand vs. `partial`.
+
+- [x] `KEY_OVERLAP_BEHAVIOR` config + `OVERLAP_BEHAVIOR_BAIL` / `OVERLAP_BEHAVIOR_PARTIAL` constants on `ConvertLivewireRuleAttributeRector`.
+- [x] `ExtractsExplicitValidateKeys` trait — returns `list<string>|'unsafe'`. Accepts direct `Array_` and `RuleSet::compileToArrays($literalArray)`. Any other wrapper → `'unsafe'`.
+- [x] `PredictsLivewireAttributeEmitKeys` trait — emit keys for `#[Validate]` / `#[Rule]` attrs (keyed-first-arg → internal keys; single-chain → property name).
+- [x] `shouldProcessClass` dispatch: `'unsafe'` always bails; `'partial'` populates `$partialOverlapSkipKeys` and `propertyHasPartialOverlap` skips individual properties.
+- [x] 9 fixtures under `tests/ConvertLivewireRuleAttribute/FixturePartialOverlap/`.
+
+### Findings
+
+- **Extraction-unsafe wrappers (Codex HIGH).** Naïve "find any `Array_` inside `validate()`" accepts `array_merge($dynamic, ['title' => ...])` and misclassifies an overlapping property as non-overlapping. Fixed by narrowing the accepted shape list to direct `Array_` + `RuleSet::compileToArrays($literalArray)`; anything else returns `'unsafe'` → classwide bail.
+- **Named `rules:` arg lookup (Codex HIGH).** `validate(messages: [...], rules: [...])` with `rules` passed by name would be read from positional slot 0 (the `messages` arg), seeding the skip set with message keys like `'title.required'`. Fixed: named-arg lookup precedes positional index in `extractRulesArgFromValidateCall`.
+- **Predicted emit keys, not property name (Codex HIGH).** `#[Validate(['todos' => ..., 'todos.*' => ...])]` on `$items` has effective keys `todos` / `todos.*`, not `items`. Property-name-only overlap check would convert + strip the overlapping `todos` rule. Fixed by `PredictsLivewireAttributeEmitKeys`: keyed-first-arg attrs emit their internal keys; single-chain attrs emit the property name.
+- **`preserve_realtime_validation` marker.** Partial-skipped properties keep their `#[Validate]` attrs intact, so the existing marker-emission path is untouched.
+- **Idempotency.** Second pass on a partial-converted file: non-overlapping attrs are already gone; overlapping attrs remain and re-match the skip path. No-op.
+- **Complexity budget.** Extracted both new responsibilities into `Concerns/*` traits to keep `ConvertLivewireRuleAttributeRector` under PHPStan's cognitive-complexity threshold.
+
+### Tests
+
+- 478 tests / 820 assertions / 0 failures. 60 `ConvertLivewireRuleAttribute` fixtures including 9 new partial-overlap cases.
+- Pint clean. PHPStan 0 errors. `vendor/bin/rector process` 0 self-changes.

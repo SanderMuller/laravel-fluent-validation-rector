@@ -13,6 +13,7 @@ use PhpParser\PrettyPrinter\Standard;
 use PHPStan\Analyser\Scope;
 use PHPStan\Reflection\ClassReflection;
 use PHPStan\Type\ObjectType;
+use Rector\Contract\Rector\ConfigurableRectorInterface;
 use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\Rector\AbstractRector;
 use ReflectionClass;
@@ -32,8 +33,10 @@ use SanderMuller\FluentValidation\Rules\ImageRule;
 use SanderMuller\FluentValidation\Rules\NumericRule;
 use SanderMuller\FluentValidation\Rules\PasswordRule;
 use SanderMuller\FluentValidation\Rules\StringRule;
+use SanderMuller\FluentValidationRector\Rector\Concerns\AllowlistedRuleFactories;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ParsesRulePayloads;
+use SanderMuller\FluentValidationRector\Rector\Concerns\WalksConditionableProxies;
 use SanderMuller\FluentValidationRector\RunSummary;
 use SanderMuller\FluentValidationRector\Tests\SimplifyRuleWrappers\SimplifyRuleWrappersRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
@@ -51,10 +54,22 @@ use WeakMap;
  *
  * @see SimplifyRuleWrappersRectorTest
  */
-final class SimplifyRuleWrappersRector extends AbstractRector implements DocumentedRuleInterface
+final class SimplifyRuleWrappersRector extends AbstractRector implements ConfigurableRectorInterface, DocumentedRuleInterface
 {
+    use AllowlistedRuleFactories;
     use LogsSkipReasons;
     use ParsesRulePayloads;
+    use WalksConditionableProxies;
+
+    /**
+     * @param  array<mixed>  $configuration
+     */
+    public function configure(array $configuration): void
+    {
+        /** @var array<string, mixed> $typed */
+        $typed = $configuration;
+        $this->configureAllowlistedRuleFactoriesFrom($typed);
+    }
 
     /**
      * Hard-coded baseline mirroring laravel-fluent-validation v1.17.1's
@@ -113,6 +128,12 @@ final class SimplifyRuleWrappersRector extends AbstractRector implements Documen
         // ArrayRule-only: requires the receiver to resolve to ArrayRule, gated
         // naturally by the per-class method-availability allowlist.
         'requiredArrayKeys',
+        // Zero-arg tokens lowered from `->rule('accepted')` etc. Available on
+        // every typed receiver via HasFieldModifiers/SelfValidates, but the
+        // per-receiver allowlist still gates in case a future builder drops
+        // one of these.
+        'accepted', 'declined', 'present', 'prohibited',
+        'nullable', 'sometimes', 'required', 'filled',
     ];
 
     /**
@@ -165,6 +186,19 @@ final class SimplifyRuleWrappersRector extends AbstractRector implements Documen
         'prohibits' => 'prohibits',
         // ArrayRule-only; isMethodAvailable() gates receivers that lack it.
         'required_array_keys' => 'requiredArrayKeys',
+        // Zero-arg tokens written as `->rule('accepted')` etc. Parser in
+        // `ParsesRulePayloads::ZERO_ARG_RULE_TOKENS` accepts these with no
+        // tail; the map here lowers to the matching fluent method. All are
+        // provided by `HasFieldModifiers`/`SelfValidates` traits so they exist
+        // on every typed receiver; `isMethodAvailable` gates per-receiver.
+        'accepted' => 'accepted',
+        'declined' => 'declined',
+        'present' => 'present',
+        'prohibited' => 'prohibited',
+        'nullable' => 'nullable',
+        'sometimes' => 'sometimes',
+        'required' => 'required',
+        'filled' => 'filled',
     ];
 
     /**
@@ -286,6 +320,14 @@ CODE_SAMPLE
         $parsed = $this->parseRulePayload($node->args[0]->value);
 
         if ($parsed === null) {
+            // Consumer-declared allowlist: shapes like `->rule(Model::existsRule())`
+            // or `->rule(new DutchPostcodeRule())` stay as escape-hatch calls and
+            // the skip log stays silent. Suppresses verbose-mode noise on
+            // codebases that have their own custom rule-factory conventions.
+            if ($this->isAllowlistedRuleFactory($node->args[0]->value)) {
+                return null;
+            }
+
             // Known FluentRule chain but payload shape isn't in v1 scope
             // (variable string, custom Rule object, builder tail like
             // `Rule::in(...)->where(...)`, concatenation, etc.). Legitimate
@@ -302,6 +344,7 @@ CODE_SAMPLE
                     $this->describeUnparseablePayload($node->args[0]->value),
                 ),
                 verboseOnly: true,
+                actionable: false,
             );
 
             return null;
@@ -439,7 +482,16 @@ CODE_SAMPLE
                 return null;
             }
 
-            if (in_array($current->name->toString(), self::CONDITIONABLE_HOPS, true)) {
+            // Step through the hop only when every provided callback
+            // provably returns the receiver unchanged. `when(value,
+            // callback, default)` returns `$this|TWhenReturnType` —
+            // when a callback is provided its return value propagates,
+            // so an un-invariant-checked step-through would miscompile
+            // chains like `->when($c, fn () => FluentRule::array())`
+            // whose receiver at runtime becomes `ArrayRule`, not the
+            // outer `StringRule`. Codex review (2026-04-24) flagged
+            // the unchecked form as a HIGH safety hole.
+            if (in_array($current->name->toString(), self::CONDITIONABLE_HOPS, true) && ! $this->conditionableHopPreservesReceiver($current)) {
                 return 'conditionable_proxy';
             }
 
@@ -513,7 +565,7 @@ CODE_SAMPLE
         return sprintf('%s %s', $shortClass, $rendered);
     }
 
-    private function logSkipForCall(MethodCall $node, string $reason, bool $verboseOnly = false): void
+    private function logSkipForCall(MethodCall $node, string $reason, bool $verboseOnly = false, bool $actionable = true): void
     {
         $scope = $node->getAttribute(AttributeKey::SCOPE);
         $className = 'top-level';
@@ -522,7 +574,7 @@ CODE_SAMPLE
             $className = $scope->getClassReflection()->getName();
         }
 
-        $this->logSkipByName($className, $reason, $verboseOnly);
+        $this->logSkipByName($className, $reason, $verboseOnly, $actionable);
     }
 
     /**

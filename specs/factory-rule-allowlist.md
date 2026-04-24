@@ -197,3 +197,27 @@ Integration tests confirm `UpdateRulesReturnTypeDocblockRector` and `SimplifyRul
 - PHPStan integration — consumers can declare the allowlist separately in phpstan config. Not a rector surface.
 - Reflection-based auto-discovery (scan classpath for methods returning `ValidationRule`). Too much startup cost.
 - Generating the allowlist from usage stats (skip-log frequency). Separate tooling, not a rector feature.
+
+---
+
+## Implementation status (2026-04-24)
+
+- [x] `Concerns\AllowlistedRuleFactories` trait — config parsing, pattern compilation, `isAllowlistedRuleFactory(Expr)` matcher.
+- [x] `UpdateRulesReturnTypeDocblockRector`: `ConfigurableRectorInterface` + trait integration. Mixed-array silent-skip. Loud-skip warning when existing docblock is already narrowed but array has drifted.
+- [x] `SimplifyRuleWrappersRector`: `ConfigurableRectorInterface` + trait integration. Allowlisted `->rule()` payload → silent skip in parse-fail branch.
+- [x] Test configs updated with sample allowlist entries (`Question::existsRule`, `DutchPostcodeRule::class`). Patterns don't collide with existing fixture shapes.
+- [x] Unit tests for pattern compiler (`AllowlistedRuleFactoriesTest`) covering exact / `*` / `**` / leading-wildcard / leading-backslash normalization / placeholder-collision regression.
+- [x] Integration fixtures: `skip_mixed_with_allowlisted_factory`, `skip_mixed_with_allowlisted_constructor`, `skip_mixed_with_allowlisted_stale_narrow_docblock` (POLISH); `skip_rule_wrapper_allowlisted_static_factory`, `skip_rule_wrapper_allowlisted_constructor`, `skip_rule_wrapper_allowlisted_chain_tail_default_off` (SimplifyRuleWrappers).
+
+### Findings
+
+- **Pattern compiler — tokenizer not substitution (Codex review, 2026-04-24).** Initial draft used textual sentinel strings (`DOUBLESTARPLACEHOLDERXYZ` / `SINGLESTARPLACEHOLDERXYZ`) to substitute stars before `preg_quote`-ing, then restored them to regex fragments. That shape is vulnerable to collision: an allowlist entry containing the literal sentinel substring would be compiled to an unintentionally-broad matcher. Rewrote to `preg_split` on `(\*\*|\*)` with `PREG_SPLIT_DELIM_CAPTURE` so literal spans and star tokens are separated lexically; each literal span is `preg_quote`'d independently, each star token maps to its regex fragment. No substitution, no collision possible. Regression test `testLiteralInputCannotCollideWithStarPlaceholders` locks this in.
+- **`\x00` bytes are NOT `preg_quote`-safe placeholders.** First fix attempt used `"\x00DS\x00"` — Codex's "use bytes that can't appear in input" advice — but `preg_quote` turns `\x00` into the literal string `\000` (an escape sequence for the null byte in regex), so the post-quote placeholder differs from the pre-quote one. Symptom: none of the wildcard tests matched. Diagnosed via `bin2hex` trace. Resolved by moving to the tokenizer approach above.
+- **Silent mixed-array skip leaves stale narrow docblock lying (Codex high-severity).** If a rules() method had previously been narrowed to `array<string, FluentRuleContract>` and later gained an allowlisted rule factory (custom existsRule or similar), the array is now mixed but the narrow annotation claims homogeneous fluent contracts. My initial implementation silently skipped — the stale annotation stayed. Fixed by threading `$sawAllowlistedItem` out of `allItemsAreFluentChains` and checking in `processRulesMethod`: when mixed AND existing docblock is the narrow form, log a default-mode skip calling out the drift. Pure silent-skip only when mixed AND docblock hasn't been narrowed yet.
+- **`**` zero-depth not implemented.** Docstring originally promised `**` matches "any depth including zero segments" but the regex fragment is `.*` which requires at least one char AND doesn't collapse adjacent backslashes. Genuine zero-depth (e.g. `App\**\Rule` matching `App\Rule`) would require pattern-level rewriting of the surrounding separators, not just `.*`. Documented the gap; consumers who need zero-depth match currently have to add a second exact-FQN entry. ROADMAP material if demand surfaces.
+- **Chain-tail opt-in default off** (spec §2c) verified in integration fixture — default config rejects `Question::existsRule()->where(...)` even when `Question::existsRule` is allowlisted; consumer must opt-in via `ALLOW_CHAIN_TAIL_ON_ALLOWLISTED => true`.
+- **PHPStan contravariant param type**: `ConfigurableRectorInterface::configure(array $configuration)` declares `array<mixed>`. Trait's `configureAllowlistedRuleFactoriesFrom` wants `array<string, mixed>`. Bridged via inline `/** @var array<string, mixed> $typed */` cast at the consuming rector's `configure()` call site.
+
+### Tests
+
+469 / 810 / 0 failures. PHPStan clean. Rector self-check clean.

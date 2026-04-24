@@ -76,4 +76,62 @@ final class DiagnosticsTest extends TestCase
     {
         $this->assertSame(Diagnostics::skipLogPath() . '.session', Diagnostics::skipLogSentinelPath());
     }
+
+    public function testVerbosityTierOffWhenEnvUnset(): void
+    {
+        $this->assertSame(Diagnostics::TIER_OFF, Diagnostics::verbosityTier());
+    }
+
+    public function testVerbosityTierOffWhenEnvEmpty(): void
+    {
+        putenv(Diagnostics::VERBOSE_ENV . '=');
+
+        $this->assertSame(Diagnostics::TIER_OFF, Diagnostics::verbosityTier());
+    }
+
+    public function testVerbosityTierActionable(): void
+    {
+        putenv(Diagnostics::VERBOSE_ENV . '=actionable');
+
+        $this->assertSame(Diagnostics::TIER_ACTIONABLE, Diagnostics::verbosityTier());
+        $this->assertFalse(Diagnostics::isVerbose(), 'actionable tier is not legacy verbose');
+    }
+
+    public function testVerbosityTierActionableCaseInsensitive(): void
+    {
+        putenv(Diagnostics::VERBOSE_ENV . '=Actionable');
+
+        $this->assertSame(Diagnostics::TIER_ACTIONABLE, Diagnostics::verbosityTier());
+    }
+
+    public function testVerbosityTierAllFromLegacyOne(): void
+    {
+        putenv(Diagnostics::VERBOSE_ENV . '=1');
+
+        $this->assertSame(Diagnostics::TIER_ALL, Diagnostics::verbosityTier());
+        $this->assertTrue(Diagnostics::isVerbose(), 'legacy =1 must keep isVerbose() true');
+    }
+
+    public function testVerbosityTierAllFromTrueString(): void
+    {
+        putenv(Diagnostics::VERBOSE_ENV . '=true');
+
+        $this->assertSame(Diagnostics::TIER_ALL, Diagnostics::verbosityTier());
+    }
+
+    public function testVerbosityTierAllFromAllString(): void
+    {
+        putenv(Diagnostics::VERBOSE_ENV . '=all');
+
+        $this->assertSame(Diagnostics::TIER_ALL, Diagnostics::verbosityTier());
+    }
+
+    public function testActionableTierUsesCwdLogPath(): void
+    {
+        putenv(Diagnostics::VERBOSE_ENV . '=actionable');
+
+        $cwd = getcwd();
+        $this->assertNotFalse($cwd);
+        $this->assertSame($cwd . '/' . Diagnostics::VERBOSE_LOG_FILENAME, Diagnostics::skipLogPath());
+    }
 }

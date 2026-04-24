@@ -135,6 +135,28 @@ final class RunSummaryTest extends TestCase
         $this->assertFileExists($logPath, 'Verbose mode must leave the log for the user to inspect.');
     }
 
+    public function testActionableTierEmitsFilePathLine(): void
+    {
+        putenv(Diagnostics::VERBOSE_ENV . '=actionable');
+
+        $logPath = Diagnostics::skipLogPath();
+        $this->assertSame(
+            getcwd() . '/' . Diagnostics::VERBOSE_LOG_FILENAME,
+            $logPath,
+            'Actionable tier must surface the log in cwd, like verbose mode.',
+        );
+
+        file_put_contents($logPath, "[fluent-validation:skip] actionable entry\n");
+
+        $line = RunSummary::format();
+
+        $this->assertNotNull($line);
+        $this->assertStringContainsString('1 skip entry', $line);
+        $this->assertStringContainsString(Diagnostics::VERBOSE_LOG_FILENAME, $line);
+        $this->assertStringContainsString('see for details', $line);
+        $this->assertStringNotContainsString('Re-run with', $line, 'Any opt-in tier already points at the file — no re-run hint needed.');
+    }
+
     public function testDefaultModeEmitsHint(): void
     {
         $logPath = Diagnostics::skipLogPath();
@@ -147,7 +169,7 @@ final class RunSummaryTest extends TestCase
 
         $this->assertNotNull($line);
         $this->assertStringContainsString('2 skip entries', $line);
-        $this->assertStringContainsString('Re-run with ' . Diagnostics::VERBOSE_ENV . '=1', $line);
+        $this->assertStringContainsString('Re-run with ' . Diagnostics::VERBOSE_ENV . '=actionable', $line);
         $this->assertStringContainsString('--clear-cache', $line, 'Hint must mention --clear-cache since bail results are cached per-file.');
         $this->assertStringNotContainsString('see for details', $line, 'Off-mode line must not reference a file path.');
     }

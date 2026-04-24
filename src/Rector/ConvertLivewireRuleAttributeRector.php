@@ -20,7 +20,6 @@ use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Stmt\Nop;
 use PhpParser\Node\Stmt\Property;
 use PhpParser\Node\Stmt\Return_;
-use PhpParser\NodeVisitor;
 use Rector\Contract\Rector\ConfigurableRectorInterface;
 use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\PostRector\Collector\UseNodesToAddCollector;
@@ -30,9 +29,11 @@ use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ConvertsValidationRuleArrays;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsLivewireRuleAttributes;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ExpandsKeyedAttributeArrays;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ExtractsExplicitValidateKeys;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ExtractsLivewireAttributeLabels;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\MigratesAttributeMessages;
+use SanderMuller\FluentValidationRector\Rector\Concerns\PredictsLivewireAttributeEmitKeys;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ReportsLivewireAttributeArgs;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ResolvesInheritedRulesVisibility;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ResolvesRealtimeValidationMarker;
@@ -83,6 +84,21 @@ final class ConvertLivewireRuleAttributeRector extends AbstractRector implements
     public const string PRESERVE_REALTIME_VALIDATION = 'preserve_realtime_validation';
 
     /**
+     * Config key for the key-overlap behavior. Controls how the rector
+     * reacts when a class has `#[Validate]` attrs AND at least one
+     * `$this->validate([...])` / `$this->validateOnly($field, [...])` call
+     * with an explicit-array rules-arg.
+     *
+     * See spec `livewire-attribute-overlap-config.md` for the mode matrix
+     * and safety analysis.
+     */
+    public const string KEY_OVERLAP_BEHAVIOR = 'key_overlap_behavior';
+
+    public const string OVERLAP_BEHAVIOR_BAIL = 'bail';
+
+    public const string OVERLAP_BEHAVIOR_PARTIAL = 'partial';
+
+    /**
      * Opt-in flag controlling `message:` attribute-arg migration into a
      * generated `messages(): array` method. Default `false` (legacy
      * behavior — `message:` args are skip-logged and the user migrates
@@ -99,12 +115,27 @@ final class ConvertLivewireRuleAttributeRector extends AbstractRector implements
 
     private bool $migrateMessages = false;
 
+    private string $keyOverlapBehavior = self::OVERLAP_BEHAVIOR_BAIL;
+
+    /**
+     * Property names whose `#[Validate]` attrs overlap with at least one
+     * explicit `$this->validate([...])` key on the current class under
+     * processing. Populated by `shouldProcessClass` when
+     * `key_overlap_behavior = 'partial'` and consulted by `collectRuleEntries`
+     * to leave matching properties' attrs intact.
+     *
+     * @var array<string, true>
+     */
+    private array $partialOverlapSkipKeys = [];
+
     use ConvertsValidationRuleArrays;
     use DetectsLivewireRuleAttributes;
     use ExpandsKeyedAttributeArrays;
+    use ExtractsExplicitValidateKeys;
     use ExtractsLivewireAttributeLabels;
     use LogsSkipReasons;
     use MigratesAttributeMessages;
+    use PredictsLivewireAttributeEmitKeys;
     use ReportsLivewireAttributeArgs;
     use ResolvesInheritedRulesVisibility;
     use ResolvesRealtimeValidationMarker;
@@ -126,6 +157,15 @@ final class ConvertLivewireRuleAttributeRector extends AbstractRector implements
 
         if (is_bool($messagesFlag)) {
             $this->migrateMessages = $messagesFlag;
+        }
+
+        $overlapMode = $configuration[self::KEY_OVERLAP_BEHAVIOR] ?? null;
+
+        if (is_string($overlapMode) && in_array($overlapMode, [
+            self::OVERLAP_BEHAVIOR_BAIL,
+            self::OVERLAP_BEHAVIOR_PARTIAL,
+        ], true)) {
+            $this->keyOverlapBehavior = $overlapMode;
         }
     }
 
@@ -240,6 +280,17 @@ CODE_SAMPLE
                 continue;
             }
 
+            // Partial-overlap mode: properties whose name appears in an
+            // explicit `$this->validate([...])` key set stay as attrs (no
+            // extract, no strip). The existing validate() call continues to
+            // drive that property's validation; stripping the attr would
+            // remove the runtime real-time-validation source leaving only
+            // the action-method check, changing behavior. Property names
+            // that don't overlap convert normally.
+            if ($this->propertyHasPartialOverlap($stmt)) {
+                continue;
+            }
+
             $entries = $this->extractAndStripRuleAttribute($stmt, $class);
 
             if ($entries === null) {
@@ -281,14 +332,34 @@ CODE_SAMPLE
      */
     private function shouldProcessClass(Class_ $class): bool
     {
+        $this->partialOverlapSkipKeys = [];
+
         if (! $this->hasAnyLivewireRuleAttribute($class)) {
             return false;
         }
 
-        if ($this->hasExplicitValidateCall($class)) {
-            $this->logSkip($class, 'class calls $this->validate([...]) with explicit args — attribute conversion skipped to avoid generating dead-code rules()');
+        $explicit = $this->extractExplicitValidateKeys($class);
+
+        // `'unsafe'` => at least one `$this->validate()` call with a
+        // shape we can't statically inspect (variable, array_merge, etc.).
+        // The overlap set would be incomplete; revert to the classwide bail
+        // regardless of configured mode. Codex review requirement.
+        if ($explicit === 'unsafe') {
+            $this->logSkip($class, '$this->validate() called with extraction-unsafe arg shape — classwide bail regardless of key_overlap_behavior config');
 
             return false;
+        }
+
+        if (is_array($explicit) && $explicit !== []) {
+            if ($this->keyOverlapBehavior === self::OVERLAP_BEHAVIOR_BAIL) {
+                $this->logSkip($class, 'class calls $this->validate([...]) with explicit args — attribute conversion skipped to avoid generating dead-code rules()');
+
+                return false;
+            }
+
+            // Partial mode: stash the overlap set so collectRuleEntries
+            // can leave matching properties' attrs in place.
+            $this->partialOverlapSkipKeys = array_fill_keys($explicit, true);
         }
 
         if ($this->resolveGeneratedRulesVisibility($class) === null) {
@@ -649,42 +720,30 @@ CODE_SAMPLE
      * method (or attributes), so conversion remains safe there — only the
      * explicit-rules form triggers the bail.
      */
-    private function hasExplicitValidateCall(Class_ $class): bool
+    /**
+     * Whether any rule key this property's attrs would emit overlaps the
+     * explicit-validate skip set populated by `shouldProcessClass`. For
+     * simple single-chain attrs the emit key is the property name; for
+     * keyed-first-arg attrs (`#[Validate(['todos' => ..., 'todos.*' => ...])]`)
+     * the emit keys are the internal string keys. Checking property name
+     * alone would miss keyed overlaps (Codex review 2026-04-24).
+     *
+     * Only fires in partial-overlap mode; in bail/default modes the skip
+     * set is empty and this is a cheap no-op.
+     */
+    private function propertyHasPartialOverlap(Property $property): bool
     {
-        $found = false;
+        if ($this->partialOverlapSkipKeys === []) {
+            return false;
+        }
 
-        $this->traverseNodesWithCallable($class, function (Node $inner) use (&$found): ?int {
-            if ($found) {
-                return NodeVisitor::STOP_TRAVERSAL;
+        foreach ($this->predictEmitKeysForProperty($property) as $key) {
+            if (isset($this->partialOverlapSkipKeys[$key])) {
+                return true;
             }
+        }
 
-            if (! $inner instanceof MethodCall) {
-                return null;
-            }
-
-            if ($this->isName($inner->name, 'validate')) {
-                $rulesArg = $inner->args[0] ?? null;
-            } elseif ($this->isName($inner->name, 'validateOnly')) {
-                $rulesArg = $inner->args[1] ?? null;
-            } else {
-                return null;
-            }
-
-            if (! $rulesArg instanceof Arg) {
-                return null;
-            }
-
-            // Accept both direct Array_ args (validate(['x' => ...])) and
-            // wrapped calls like validate(RuleSet::compileToArrays([...]))
-            // that pass an Array_ or Expr to a helper. The common signal is
-            // "user is providing rules at call time" — any non-null arg at
-            // the rules-position meets that bar for the hybrid-bail heuristic.
-            $found = true;
-
-            return NodeVisitor::STOP_TRAVERSAL;
-        });
-
-        return $found;
+        return false;
     }
 
     private function findRulesMethod(Class_ $class): ?ClassMethod

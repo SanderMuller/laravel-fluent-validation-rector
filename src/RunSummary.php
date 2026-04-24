@@ -75,9 +75,10 @@ final class RunSummary
             fwrite(STDOUT, $line);
 
             // Off-mode: cleanup runs after emit so no artifact survives
-            // into the next run. Verbose mode leaves the log in cwd for
-            // the user to inspect.
-            if (! Diagnostics::isVerbose()) {
+            // into the next run. Any opt-in tier (`actionable` / `all`)
+            // leaves the log in cwd for the user to inspect — the
+            // consumer asked for it.
+            if (Diagnostics::verbosityTier() === Diagnostics::TIER_OFF) {
                 self::unlinkLogArtifacts();
             }
         });
@@ -138,7 +139,7 @@ final class RunSummary
 
         $noun = $count === 1 ? 'entry' : 'entries';
 
-        if (Diagnostics::isVerbose()) {
+        if (Diagnostics::verbosityTier() !== Diagnostics::TIER_OFF) {
             return sprintf(
                 "\n[fluent-validation] %d skip %s written to %s — see for details\n",
                 $count,
@@ -150,8 +151,11 @@ final class RunSummary
         // `--clear-cache` matters: bail results are cached per file, so a
         // plain re-run with verbose env set still produces an empty log on
         // cached files. The hint has to be actionable as-copied.
+        // `=actionable` is the recommended entry point — surfaces only
+        // entries a consumer can act on; `=1` (legacy) / `=all` remain
+        // available for complete diagnostic output.
         return sprintf(
-            "\n[fluent-validation] %d skip %s. Re-run with %s=1 and --clear-cache for details.\n",
+            "\n[fluent-validation] %d skip %s. Re-run with %s=actionable and --clear-cache for details.\n",
             $count,
             $noun,
             Diagnostics::VERBOSE_ENV,

@@ -20,12 +20,14 @@ use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Stmt\Return_;
 use PhpParser\NodeVisitor;
+use Rector\Contract\Rector\ConfigurableRectorInterface;
 use Rector\Rector\AbstractRector;
 use ReflectionClass;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidation\HasFluentRules;
 use SanderMuller\FluentValidation\HasFluentValidation;
 use SanderMuller\FluentValidation\HasFluentValidationForFilament;
+use SanderMuller\FluentValidationRector\Rector\Concerns\AllowlistedRuleFactories;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\NormalizesRulesDocblock;
@@ -47,11 +49,25 @@ use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
  *
  * @see UpdateRulesReturnTypeDocblockRectorTest
  */
-final class UpdateRulesReturnTypeDocblockRector extends AbstractRector implements DocumentedRuleInterface
+final class UpdateRulesReturnTypeDocblockRector extends AbstractRector implements ConfigurableRectorInterface, DocumentedRuleInterface
 {
+    use AllowlistedRuleFactories;
     use DetectsInheritedTraits;
     use LogsSkipReasons;
     use NormalizesRulesDocblock;
+
+    /**
+     * @param  array<mixed>  $configuration
+     */
+    public function configure(array $configuration): void
+    {
+        // Trait expects array<string, mixed>; ConfigurableRectorInterface
+        // declares array<mixed>. Match the interface (contravariant) and
+        // narrow inside the trait where needed.
+        /** @var array<string, mixed> $typed */
+        $typed = $configuration;
+        $this->configureAllowlistedRuleFactoriesFrom($typed);
+    }
 
     /**
      * Final emitted `@return` annotation body. Leading backslash on the FQN
@@ -189,7 +205,23 @@ CODE_SAMPLE
             return false;
         }
 
-        if (! $this->allItemsAreFluentChains($class, $arrayNode)) {
+        $sawAllowlistedItem = false;
+
+        if (! $this->allItemsAreFluentChains($class, $arrayNode, $sawAllowlistedItem)) {
+            // Mixed fluent + allowlisted → silent skip, EXCEPT when the
+            // existing docblock was already narrowed to FluentRuleContract.
+            // That annotation is now stale (it claims all items are
+            // FluentRuleContract instances, but the allowlisted item isn't).
+            // Codex review (2026-04-24): emit a loud (default-mode) skip so
+            // the consumer notices the contract drift.
+            if ($sawAllowlistedItem) {
+                $existingBody = $this->extractReturnAnnotationBody($method->getDocComment());
+
+                if ($existingBody !== null && trim($existingBody) === self::CONTRACT_ANNOTATION_BODY) {
+                    $this->logSkip($class, 'rules() now mixes FluentRule chains with allowlisted rule factories — existing narrowed @return may be stale (mixed-array types cannot be expressed as FluentRuleContract)');
+                }
+            }
+
             return false;
         }
 
@@ -247,8 +279,13 @@ CODE_SAMPLE
         return $return->expr;
     }
 
-    private function allItemsAreFluentChains(Class_ $class, Array_ $arrayNode): bool
+    /**
+     * @param-out bool $sawAllowlistedItem
+     */
+    private function allItemsAreFluentChains(Class_ $class, Array_ $arrayNode, ?bool &$sawAllowlistedItem = null): bool
     {
+        $sawAllowlistedItem = false;
+
         foreach ($arrayNode->items as $index => $item) {
             if (! $item instanceof ArrayItem) {
                 $this->logSkip($class, sprintf('ArrayItem at index %d is malformed', $index));
@@ -273,16 +310,34 @@ CODE_SAMPLE
                 return false;
             }
 
-            if (! $this->isFluentRuleChainValue($item->value)) {
-                $shape = (new ReflectionClass($item->value))->getShortName();
-                $keyDesc = $item->key instanceof String_ ? $item->key->value : 'const';
-                $this->logSkip($class, sprintf("value at key '%s' is not a FluentRule chain (shape: %s)", $keyDesc, $shape));
-
-                return false;
+            if ($this->isFluentRuleChainValue($item->value)) {
+                continue;
             }
+
+            // Consumer-declared allowlist: shapes like `Model::existsRule()`
+            // or `new DutchPostcodeRule()` produce rule-compatible values
+            // this rule can't statically prove are FluentRule chains. Don't
+            // narrow the docblock (would be a type-lie for mixed arrays),
+            // but don't log either — allowlisted items are documented
+            // escape-hatch usage, not actionable noise.
+            if ($this->isAllowlistedRuleFactory($item->value)) {
+                $sawAllowlistedItem = true;
+
+                continue;
+            }
+
+            $shape = (new ReflectionClass($item->value))->getShortName();
+            $keyDesc = $item->key instanceof String_ ? $item->key->value : 'const';
+            $this->logSkip($class, sprintf("value at key '%s' is not a FluentRule chain (shape: %s)", $keyDesc, $shape));
+
+            return false;
         }
 
-        return true;
+        // All non-allowlisted items are fluent chains. If ANY allowlisted
+        // items were present, the array is mixed — bail silently rather
+        // than narrow to `FluentRuleContract` (would lie about the
+        // allowlisted items' type).
+        return ! $sawAllowlistedItem;
     }
 
     /**
@@ -342,7 +397,7 @@ CODE_SAMPLE
 
         if (! $this->canNarrowExistingBody($existingBody)) {
             $truncated = substr(trim($existingBody), 0, 80);
-            $this->logSkip($class, sprintf("existing @return tag '%s' is user-customized — respecting", $truncated), verboseOnly: true);
+            $this->logSkip($class, sprintf("existing @return tag '%s' is user-customized — respecting", $truncated), verboseOnly: true, actionable: false);
 
             return false;
         }

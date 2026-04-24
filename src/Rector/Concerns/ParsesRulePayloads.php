@@ -58,6 +58,31 @@ trait ParsesRulePayloads
         'missing_if', 'missing_unless',
     ];
 
+    /**
+     * Laravel rule-token names that are written as `->rule('<token>')` with
+     * no arg tail and map to a zero-arg fluent method on the receiver
+     * (`->rule('accepted')` → `->accepted()`). All are inherited from
+     * `HasFieldModifiers` or `SelfValidates` so they exist on every typed
+     * builder; `isMethodAvailable` still gates per-receiver to catch any
+     * future divergence.
+     *
+     * `bail` excluded — hihaho 0.12.0 dogfood confirmed zero wild usage as a
+     * `->rule('bail')` wrapper. Always authored as pipe-prefix (`'bail|…'`)
+     * or chained `->bail()`.
+     *
+     * @var list<string>
+     */
+    private const array ZERO_ARG_RULE_TOKENS = [
+        'accepted',
+        'declined',
+        'present',
+        'prohibited',
+        'nullable',
+        'sometimes',
+        'required',
+        'filled',
+    ];
+
     /** @var list<string> */
     private const array COMMA_SEPARATED_PURE_FIELDS_RULES = [
         'required_with', 'required_with_all', 'required_without', 'required_without_all',
@@ -207,6 +232,16 @@ trait ParsesRulePayloads
             // intended exact-zero spelling. Result is a zero-arg call
             // (`->positive()`, not `->positive(0)`).
             return $this->isLiteralZeroToken($tail) ? [] : null;
+        }
+
+        // Zero-arg tokens written as `->rule('accepted')` / `->rule('nullable')`
+        // etc. RULE_NAME_TO_METHOD maps the names to fluent methods; here the
+        // only job is to confirm the token has no tail args and emit an empty
+        // arg list. Excludes `bail` — peer review (hihaho 0.12.0 dogfood)
+        // confirmed zero wild usage as a wrapper, only as pipe-prefix or
+        // chained `->bail()`.
+        if (in_array($name, self::ZERO_ARG_RULE_TOKENS, true)) {
+            return $tail === '' ? [] : null;
         }
 
         // `enum` deliberately has no string-form support in v1 — the

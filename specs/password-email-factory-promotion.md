@@ -76,6 +76,31 @@ Inherits `PromoteFieldFactoryRector`'s surface. No new config.
 
 ---
 
+## Implementation status (2026-04-24)
+
+Shipped as Trigger B inside `PromoteFieldFactoryRector`. Implementation split across the rector's `refactor()` dispatch + a dedicated `Concerns\PromotesPasswordEmailFactory` trait. Tests pass 440 / 768 assertions; PHPStan clean; Rector self-check clean.
+
+- [x] Extend `PromoteFieldFactoryRector::refactor()` with a factory-name dispatch: `field` → Trigger A (existing), `string` → Trigger B (new).
+- [x] Add `Concerns\PromotesPasswordEmailFactory` trait housing the Trigger B logic (keeps the rector's cognitive complexity under the 80 threshold).
+- [x] Implement Safety Gate #1 (zero-arg source).
+- [x] Implement Safety Gate #2 (method-subset check via reflection on target class with per-process cache).
+- [x] Implement Safety Gate #3 (exactly one Password/Email rule + no other `->rule()` payloads).
+- [x] Implement Safety Gate #4 (Conditionable bail).
+- [x] Splice out the matched rule hop + rewire any middle-chain neighbour.
+- [x] Rewrite root factory + add `$min` arg when `Password::min(<literal>)`.
+- [x] WeakMap-based visited-root guard to prevent inner-fire re-processing after an outer bail.
+- [x] Fixture matrix per §4 (7 emit + 11 skip, 18 total — exceeds baseline, includes Codex-flagged edge cases).
+
+### Findings
+
+- **Rector traversal ordering**: Rector visits `MethodCall` nodes in pre-order (outermost fires first), consistent with `AbstractRector::enterNode`. The outer-first fire is the only vantage point from which `collectHopsFromRoot` can see the complete chain, so the WeakMap visited-root marker is load-bearing: inner fires arriving after the outer's decision would otherwise re-process with a truncated view and could splice one of two stacked `->rule(Password::*)` payloads, defeating the double-rule bail.
+- **Chain splice**: when the matched hop is the outermost `MethodCall` (most common), return the matched hop's `->var` as the replacement — Rector substitutes the new outermost in place. When the matched hop is in the middle of a longer chain, rewire the hop above it to bypass the spliced node, then return the unchanged outermost.
+- **Int_ vs ClassConstFetch `$min`**: peer-flagged widening materialized as a simple two-case accept in `resolvePasswordEmailPayload` — no signature-dependent complication since both node kinds print as valid PHP arg expressions.
+- **Trait extraction for complexity**: the in-class implementation pushed `PromoteFieldFactoryRector`'s cognitive complexity from 79 → 87. Extracting Trigger B to `Concerns\PromotesPasswordEmailFactory` cleanly brought it back under the 80 threshold without restructuring logic. The `@phpstan-require-extends AbstractRector` contract on the trait lets it use `$this->getName()` and the Rector-provided methods without a runtime check.
+- **Safety Gate #2 needs a divergent-modifier blocklist (Codex evaluate pass, 2026-04-24).** The spec's "method-subset check" via `methodExistsOnClass` is insufficient for `min` / `max`: they exist on both `StringRule` (`int, ?string` — adds a length-check validation rule) and `PasswordRule` (`int` only — mutates the embedded Password builder's min/max chars). Name-only availability passes; promotion silently shifts semantics AND the 2-arg form `->min(20, 'msg')` would TypeError at runtime on the narrower `PasswordRule::min` signature. Fixed with a hardcoded `DIVERGENT_MODIFIER_BLOCKLIST` keyed by target class — `PasswordRule => ['min', 'max']` — checked before the availability probe. `EmailRule::max` has matching signature + semantic to `StringRule::max` and is not blocklisted. Four new fixtures lock this in: `skip_password_promotion_with_string_min_modifier`, `skip_password_promotion_with_string_min_two_arg_form`, `skip_password_promotion_with_string_max_modifier`, `promote_email_with_max_modifier`.
+
+---
+
 ## 3. Safety Analysis
 
 ### 3a. `Password::min($n)` promotion to `FluentRule::password($n)`

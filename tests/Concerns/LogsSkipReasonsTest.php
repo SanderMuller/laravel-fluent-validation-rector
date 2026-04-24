@@ -104,6 +104,92 @@ final class LogsSkipReasonsTest extends TestCase
         $this->assertStringContainsString('actionable skip', (string) file_get_contents($logPath));
     }
 
+    public function testActionableTierSurfacesActionableVerboseOnlyEntry(): void
+    {
+        putenv(Diagnostics::VERBOSE_ENV . '=actionable');
+        $this->assertSame(Diagnostics::TIER_ACTIONABLE, Diagnostics::verbosityTier());
+
+        $harness = new LogsSkipReasonsHarness($this->tempDir . '/SomeClass.php');
+        $harness->callLogSkipByName(
+            'App\\SomeClass',
+            'rule payload not statically resolvable',
+            verboseOnly: true,
+            actionable: true,
+        );
+
+        $logPath = Diagnostics::skipLogPath();
+        $this->assertFileExists($logPath);
+        $this->assertStringContainsString('rule payload not statically resolvable', (string) file_get_contents($logPath));
+    }
+
+    public function testActionableTierHidesNonActionableVerboseOnlyEntry(): void
+    {
+        putenv(Diagnostics::VERBOSE_ENV . '=actionable');
+        $this->assertSame(Diagnostics::TIER_ACTIONABLE, Diagnostics::verbosityTier());
+
+        $harness = new LogsSkipReasonsHarness($this->tempDir . '/SomeClass.php');
+        $harness->callLogSkipByName(
+            'App\\SomeClass',
+            'already has trait',
+            verboseOnly: true,
+            actionable: false,
+        );
+
+        $logPath = Diagnostics::skipLogPath();
+        $this->assertFalse(
+            is_file($logPath) && filesize($logPath) > 0,
+            'non-actionable verbose-only entry must not surface in actionable tier',
+        );
+    }
+
+    public function testActionableTierStillWritesDefaultSkips(): void
+    {
+        putenv(Diagnostics::VERBOSE_ENV . '=actionable');
+
+        $harness = new LogsSkipReasonsHarness($this->tempDir . '/SomeClass.php');
+        $harness->callLogSkipByName('App\\SomeClass', 'default bug-mode skip');
+
+        $logPath = Diagnostics::skipLogPath();
+        $this->assertFileExists($logPath);
+        $this->assertStringContainsString('default bug-mode skip', (string) file_get_contents($logPath));
+    }
+
+    public function testAllTierSurfacesNonActionableVerboseOnlyEntry(): void
+    {
+        putenv(Diagnostics::VERBOSE_ENV . '=all');
+        $this->assertSame(Diagnostics::TIER_ALL, Diagnostics::verbosityTier());
+
+        $harness = new LogsSkipReasonsHarness($this->tempDir . '/SomeClass.php');
+        $harness->callLogSkipByName(
+            'App\\SomeClass',
+            'already has trait',
+            verboseOnly: true,
+            actionable: false,
+        );
+
+        $logPath = Diagnostics::skipLogPath();
+        $this->assertFileExists($logPath);
+        $this->assertStringContainsString('already has trait', (string) file_get_contents($logPath));
+    }
+
+    public function testLegacyOneValueStillWritesEverything(): void
+    {
+        putenv(Diagnostics::VERBOSE_ENV . '=1');
+        $this->assertSame(Diagnostics::TIER_ALL, Diagnostics::verbosityTier());
+
+        $harness = new LogsSkipReasonsHarness($this->tempDir . '/SomeClass.php');
+        $harness->callLogSkipByName(
+            'App\\SomeClass',
+            'already has trait',
+            verboseOnly: true,
+            actionable: false,
+        );
+
+        $logPath = Diagnostics::skipLogPath();
+        $this->assertFileExists($logPath);
+        $this->assertStringContainsString('already has trait', (string) file_get_contents($logPath));
+    }
+
     private function resetDedupState(): void
     {
         $reflection = new ReflectionClass(LogsSkipReasons::class);

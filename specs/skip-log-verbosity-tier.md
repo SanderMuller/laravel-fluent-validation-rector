@@ -109,3 +109,32 @@ Not a fixture-driven change primarily — instrumentation more than rule logic.
 - JSON-structured log output for CI consumption. Can be added later.
 - Intra-class dedup changes. Current `(rule, file, class, reason)` tuple already coalesces correctly (hihaho peer review 2026-04-24 confirmed against `CreateNewUser` with 3× identical `->rule()` calls — 1 log entry produced).
 - Retroactive relabeling of existing `verboseOnly: true` sites. Will happen incrementally as each rector is touched.
+
+---
+
+## Implementation status (2026-04-24)
+
+**Shipped.** 3-tier (`off` / `actionable` / `all`) with legacy `=1` back-compat. All 9 `verboseOnly: true` sites audited + labeled in this pass (spec's "incremental retrofit" optimization not needed — 9 sites is small enough to do at once).
+
+- [x] `Diagnostics::TIER_OFF|TIER_ACTIONABLE|TIER_ALL` + `verbosityTier()` parser (case-insensitive, legacy `=1`/`=true`/`=all` → `all`).
+- [x] `Diagnostics::isVerbose()` kept as alias for `TIER_ALL` (legacy-consumer behavior preserved).
+- [x] `Diagnostics::skipLogPath()` — any opt-in tier (actionable / all) writes to cwd; only `off` hides in tmp.
+- [x] `LogsSkipReasons::logSkip` / `logSkipByName` / `writeSkipEntry` + internal helper `tierAllowsVerboseOnly(bool $actionable)` — `off` never, `actionable` iff label=true, `all` always.
+- [x] `RunSummary` — shutdown cleanup + hint-line gating both pivot on `verbosityTier() === TIER_OFF` (not `isVerbose()`). Default-tier hint now recommends `=actionable` instead of `=1`.
+- [x] 9 call sites audited — AddHasFluent*Trait (6 sites) → `actionable: false`; UpdateRulesReturnTypeDocblock user-customized `@return` (1) → `actionable: false`; SimplifyRuleWrappers unparseable payload (1) → `actionable: false`; SimplifyRuleWrappers method-not-on-receiver with FieldRule hint (1) → `actionable: true` (default — the hint IS the actionable guidance).
+- [x] `DiagnosticsTest`: 8 new cases covering tier parsing (off/actionable/all/legacy/empty/case-insensitive + actionable cwd path).
+- [x] `LogsSkipReasonsTest`: 5 new cases covering actionable-surfaces, actionable-hides-non-actionable, actionable-still-default, all-surfaces-non-actionable, legacy-one-surfaces-all.
+- [x] `RunSummaryTest`: new actionable-tier case + updated default-mode-hint assertion.
+
+### Findings
+
+- **RunSummary cleanup regression (Codex HIGH).** First pass only updated `Diagnostics::skipLogPath()` to route `actionable` to cwd; `RunSummary::registerShutdownHandler` still unlinked the log whenever `! isVerbose()` — so an `actionable` run wrote the log, then the parent deleted it at shutdown, and the hint line still said `Re-run with ...=1`. Fixed by replacing both `isVerbose()` checks with `verbosityTier() === TIER_OFF`.
+- **Non-actionable label on SimplifyRuleWrappers unparseable payload (Codex MEDIUM).** Existing code comment explicitly said "not actionable for consumers" — I initially left it at default `actionable: true`. Flipped to `false`.
+- **Non-actionable label on UpdateRulesReturnTypeDocblock user-customized `@return` (Codex MEDIUM).** Reason is "respecting consumer customization" — not something the package can act on. Flipped to `false`.
+- **Split labeling on SimplifyRuleWrappers method-not-on-receiver (judgment call).** The FieldRule-enriched hint (`consider FluentRule::string() / numeric() / array() / file()`) is the whole point of logging — consumers act on it to migrate. Kept `actionable: true`.
+- **`RunSummary` hint evolution.** Default-mode hint now says `Re-run with FLUENT_VALIDATION_RECTOR_VERBOSE=actionable` (was `=1`). Legacy `=1` consumers see zero behavior change; new consumers are nudged toward the quieter tier.
+
+### Tests
+
+- 492 tests / 850 assertions / 0 failures. +14 tests (8 Diagnostics, 5 LogsSkipReasons, 1 RunSummary).
+- Pint clean. PHPStan 0 errors. `vendor/bin/rector process` 0 self-changes.

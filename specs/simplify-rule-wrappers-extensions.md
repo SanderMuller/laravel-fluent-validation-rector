@@ -146,3 +146,24 @@ Add to `tests/SimplifyRuleWrappers/Fixture/`:
 - `->rule(fn ($attr, $val, $fail) => ...)` inline-closure validators. Correctly stays as escape hatch.
 - `->rule(new SomeCustomRule(...))` object wrappers. Covered by a separate spec (factory-rule allowlist).
 - Arbitrary Laravel `Rule::*()` tail calls (`Rule::in([...])->where(fn() => ...)`). Complex receiver resolution; out of scope for this extension bundle.
+
+---
+
+## Implementation status (2026-04-24)
+
+**Shipped**: items 2 (zero-arg string tokens) + 3 (Conditionable step-through, narrowed invariant). Item 1 (nested FluentRule unwrap) **dropped** — see findings.
+
+- [x] **Item 2 — zero-arg string tokens.** Extended `RULE_NAME_TO_METHOD` with `accepted/declined/present/prohibited/nullable/sometimes/required/filled`. Extended `ParsesRulePayloads::buildArgsFromStringTail` to accept these token names with empty tail (returns `[]`). `V1_REWRITE_TARGETS` extended so `isMethodAvailable` gates per-receiver. `'bail'` deliberately excluded per peer review.
+- [x] **Item 3 — Conditionable step-through.** Modified `resolveReceiverType` to invoke `WalksConditionableProxies::conditionableHopPreservesReceiver` before bailing on a Conditionable hop. Logic extracted to the new trait for reuse + to keep the rector's class complexity under the 80 threshold.
+- [x] **Fixture matrix**: 4 emit + 5 skip, including the Codex-flagged `fn ($r) => $r->getLabel()` negative case.
+
+### Findings
+
+- **Item 1 dropped — `anyOf` doesn't exist on typed rules.** `FluentRule::anyOf()` is a facade static method that produces an `AnyOf` rule object; it's NOT declared on `StringRule` / `NumericRule` / etc. via the shared surface. The spec's proposed rewrite `->rule(FluentRule::anyOf([...]))` → `->anyOf([...])` would produce invalid code (runtime `BadMethodCallException`). Verified via `method_exists(StringRule::class, 'anyOf')` — false. `when()`/`unless()` DO exist on typed rules (via `Conditionable`), but `->rule(FluentRule::when(...))` is not an idiomatic use-case in the wild. Net: the entire unwrap path was based on a misread of the package's API. Dropping v1, opening a ROADMAP item if anyone files real cases.
+- **Item 3 invariant narrowed to bare-return + side-effect-only shapes (Codex review, 2026-04-24).** Initial draft accepted `fn ($r) => $r->nullable()` (method-chain rooted in param) on the theory that fluent modifiers conventionally return `$this`. Codex flagged this as a HIGH miscompile hole: `$r->getLabel()` returns `string|null`, `$r->compiledRules()` returns `array`, and `Macroable::__call` / `FieldRule::__call` dispatch returns arbitrary values. All three pass the naïve "rooted in param" check but violate the receiver-preserving invariant. Reflecting every chain hop's declared return type would prove safety but requires threading the resolved receiver class into the closure-invariant check. Deferred. v1 narrows to three provably-safe shapes: (1) closure with no explicit return (returns null → `when` substitutes `$this` via `?? $this`), (2) `return;` with no expression, (3) bare `fn ($r) => $r` / `return $r;`. Method-chain bodies now skip. Real-world value is smaller than initial draft (hihaho's `fn ($r) => $r->present()` pattern falls out), but correctness is preserved. Reflection-based method-return-type probe queued as future hardening.
+- **3-arg `when(value, callback, default)` and named args both handled**: `extractConditionableCallback` looks up each role by `Arg::$name` first then positional index. Both callbacks (callback + default) must pass the invariant independently.
+- **Trait extraction for complexity**: item-3 helpers pushed `SimplifyRuleWrappersRector`'s class complexity from 78 → 83. Extracting the Conditionable invariant logic to `Concerns\WalksConditionableProxies` kept it under the 80 threshold. Same pattern as `PromotesPasswordEmailFactory` from the prior spec.
+
+### Tests
+
+457 / 785 / 0 failures. PHPStan clean. Rector self-check clean.

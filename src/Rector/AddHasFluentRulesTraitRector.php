@@ -156,13 +156,13 @@ CODE_SAMPLE
         // Users debugging "why didn't the trait get added?" can still see it with
         // FLUENT_VALIDATION_RECTOR_VERBOSE=1.
         if ($this->isLivewireClass($class)) {
-            $this->logSkip($class, 'detected as Livewire (uses HasFluentValidation instead)', verboseOnly: true);
+            $this->logSkip($class, 'detected as Livewire (uses HasFluentValidation instead)', verboseOnly: true, actionable: false);
 
             return false;
         }
 
         if ($this->alreadyHasTrait($class)) {
-            $this->logSkip($class, 'already has HasFluentRules trait', verboseOnly: true);
+            $this->logSkip($class, 'already has HasFluentRules trait', verboseOnly: true, actionable: false);
 
             return false;
         }
@@ -177,7 +177,7 @@ CODE_SAMPLE
 
         // Children of configured base classes inherit the trait — skip to avoid duplication
         if ($class->extends instanceof Name && in_array($this->getName($class->extends), $this->baseClasses, true)) {
-            $this->logSkip($class, 'extends a configured base class (trait inherited from parent)', verboseOnly: true);
+            $this->logSkip($class, 'extends a configured base class (trait inherited from parent)', verboseOnly: true, actionable: false);
 
             return false;
         }
@@ -187,7 +187,7 @@ CODE_SAMPLE
         // already declares it. Complements the explicit base_classes config
         // for codebases that don't want to enumerate every shared base.
         if ($this->anyAncestorUsesTrait($class, HasFluentRules::class)) {
-            $this->logSkip($class, 'parent class already uses HasFluentRules (trait inherited)', verboseOnly: true);
+            $this->logSkip($class, 'parent class already uses HasFluentRules (trait inherited)', verboseOnly: true, actionable: false);
 
             return false;
         }

@@ -22,6 +22,7 @@ use SanderMuller\FluentValidation\Rules\NumericRule;
 use SanderMuller\FluentValidation\Rules\PasswordRule;
 use SanderMuller\FluentValidation\Rules\StringRule;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ParsesRulePayloads;
+use SanderMuller\FluentValidationRector\Rector\Concerns\PromotesPasswordEmailFactory;
 use SanderMuller\FluentValidationRector\RunSummary;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
@@ -67,6 +68,7 @@ use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
 final class PromoteFieldFactoryRector extends AbstractRector implements DocumentedRuleInterface
 {
     use ParsesRulePayloads;
+    use PromotesPasswordEmailFactory;
 
     /**
      * Conditionable hops that turn the chain receiver into a
@@ -171,11 +173,13 @@ CODE_SAMPLE
         }
 
         // Walk `->var` down to the chain root. Every MethodCall in a
-        // `FluentRule::field()->…->…` chain will fire this rector — the
-        // `field` name check on the resolved root lets non-first hops exit
-        // immediately. We also rely on the fact that mutating the root's
-        // identifier once ("field" → "string") means the subsequent fires
-        // from outer chain hops see the already-promoted name and bail.
+        // `FluentRule::<factory>()->…->…` chain will fire this rector — the
+        // factory-name check on the resolved root lets non-first hops exit
+        // immediately (post-promotion the root's name has changed, so only
+        // the first fire matches the source factory). This parent-first
+        // traversal ordering is what makes the splice+rename safe: outer
+        // MethodCall fires first, mutates the chain, subsequent inner hops
+        // see the promoted state and bail.
         $root = $this->walkToStaticCallRoot($node);
 
         if (! $root instanceof StaticCall) {
@@ -190,10 +194,30 @@ CODE_SAMPLE
             return null;
         }
 
-        if (! $root->name instanceof Identifier || $root->name->toString() !== 'field') {
+        if (! $root->name instanceof Identifier) {
             return null;
         }
 
+        $rootFactoryName = $root->name->toString();
+
+        if ($rootFactoryName === 'field') {
+            return $this->applyFieldTrigger($root, $node);
+        }
+
+        if ($rootFactoryName === 'string') {
+            return $this->applyPasswordEmailTrigger($root, $node, self::CONDITIONABLE_HOPS);
+        }
+
+        return null;
+    }
+
+    /**
+     * Trigger A (original): `FluentRule::field()->rule('max:61')->rule(...)`
+     * → `FluentRule::string()` / `::numeric()` / etc. when all `->rule(...)`
+     * payloads resolve to methods on exactly one typed builder.
+     */
+    private function applyFieldTrigger(StaticCall $root, MethodCall $node): ?Node
+    {
         $ruleCalls = $this->collectRuleCallsFromRoot($root, $node);
 
         if ($ruleCalls === []) {
@@ -231,6 +255,18 @@ CODE_SAMPLE
         return $node;
     }
 
+    /**
+     * Trigger B (spec `password-email-factory-promotion.md`):
+     * `FluentRule::string()->…->rule(Password::default())` → `FluentRule::password()`
+     * (and `Password::min($literal)`, `Email::default()` analogs).
+     *
+     * Splices the matched `->rule(Password::*)` / `->rule(Email::default())` hop
+     * out of the chain and rewrites the root factory. Safety-gated per spec §2b:
+     * zero-arg source factory, no other `->rule()` payloads, no Conditionable
+     * hops, and every non-rule chain modifier must be available on the target
+     * rule class (PasswordRule lacks `same()`/`different()`; collectiq dogfood
+     * verified this would BadMethodCall-at-runtime without the gate).
+     */
     /**
      * Walk `$methodCall->var` down until hitting the root of the chain.
      * Returns the root if it's a `StaticCall`; otherwise null. Handles

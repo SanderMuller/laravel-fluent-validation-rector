@@ -248,13 +248,13 @@ CODE_SAMPLE
         $wrongFqn = $isFilament ? HasFluentValidation::class : HasFluentValidationForFilament::class;
 
         if ($this->directlyUsesTrait($class, $targetFqn)) {
-            $this->logSkip($class, sprintf('already has %s trait', $target), verboseOnly: true);
+            $this->logSkip($class, sprintf('already has %s trait', $target), verboseOnly: true, actionable: false);
 
             return null;
         }
 
         if ($this->anyAncestorUsesTrait($class, $targetFqn)) {
-            $this->logSkip($class, sprintf('parent class already uses %s (trait inherited)', $target), verboseOnly: true);
+            $this->logSkip($class, sprintf('parent class already uses %s (trait inherited)', $target), verboseOnly: true, actionable: false);
 
             return null;
         }

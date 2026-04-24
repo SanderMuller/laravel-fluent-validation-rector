@@ -90,13 +90,23 @@ trait LogsSkipReasons
      *                             Default false preserves the actionable-skip
      *                             path for bugs/config mismatches users need
      *                             to see.
+     * @param  bool  $actionable   Only consulted when `$verboseOnly` is true.
+     *                             Labels whether the consumer can realistically
+     *                             act on the skip (true) or whether it's
+     *                             structural noise (false — trait already
+     *                             present, class doesn't extend FormRequest,
+     *                             Livewire class routed to a different rector).
+     *                             Surfaces in the `actionable` verbosity tier
+     *                             even though the entry is `verboseOnly`.
+     *                             Default true matches the existing
+     *                             verbose-mode surface for unaudited sites.
      */
-    private function logSkip(Class_ $class, string $reason, bool $verboseOnly = false): void
+    private function logSkip(Class_ $class, string $reason, bool $verboseOnly = false, bool $actionable = true): void
     {
         $className = $class->namespacedName?->toString()
             ?? ($class->name instanceof Identifier ? $class->name->toString() : 'anonymous');
 
-        $this->writeSkipEntry($className, $reason, $verboseOnly);
+        $this->writeSkipEntry($className, $reason, $verboseOnly, $actionable);
     }
 
     /**
@@ -104,14 +114,14 @@ trait LogsSkipReasons
      * AST node — e.g. `MethodCall`-driven rectors that resolve the
      * enclosing class via PHPStan scope rather than parent-walking.
      */
-    private function logSkipByName(string $className, string $reason, bool $verboseOnly = false): void
+    private function logSkipByName(string $className, string $reason, bool $verboseOnly = false, bool $actionable = true): void
     {
-        $this->writeSkipEntry($className, $reason, $verboseOnly);
+        $this->writeSkipEntry($className, $reason, $verboseOnly, $actionable);
     }
 
-    private function writeSkipEntry(string $className, string $reason, bool $verboseOnly = false): void
+    private function writeSkipEntry(string $className, string $reason, bool $verboseOnly = false, bool $actionable = true): void
     {
-        if ($verboseOnly && ! Diagnostics::isVerbose()) {
+        if ($verboseOnly && ! self::tierAllowsVerboseOnly($actionable)) {
             return;
         }
 
@@ -135,6 +145,27 @@ trait LogsSkipReasons
         if (Diagnostics::isVerbose()) {
             fwrite(STDERR, $entry);
         }
+    }
+
+    /**
+     * Decide whether a `verboseOnly: true` entry should write given the
+     * current tier and the entry's `actionable` label.
+     *
+     *   - `off` tier          → never write verboseOnly entries.
+     *   - `actionable` tier   → write only when the entry is labelled
+     *                           `actionable: true`. Filters the
+     *                           trait-already-present / Livewire-class /
+     *                           not-a-FormRequest noise that dominates the
+     *                           legacy verbose log.
+     *   - `all` tier          → write unconditionally (legacy behaviour).
+     */
+    private static function tierAllowsVerboseOnly(bool $actionable): bool
+    {
+        return match (Diagnostics::verbosityTier()) {
+            Diagnostics::TIER_ALL => true,
+            Diagnostics::TIER_ACTIONABLE => $actionable,
+            default => false,
+        };
     }
 
     /**
