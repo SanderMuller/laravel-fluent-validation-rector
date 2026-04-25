@@ -114,25 +114,25 @@ the specific reason strings. Pin each new emit site.
 
 ## Implementation
 
-- [ ] Re-read each of the 18 `return null` paths in
+- [x] Re-read each of the 18 `return null` paths in
       `GroupWildcardRulesToEachRector`. Document (in `## Findings`)
       which are decision points vs early-exits. Must be a concrete
       list with line numbers so the diff is auditable
-- [ ] Add `$this->logSkip($class, '<reason>')` at each decision-point
+- [x] Add `$this->logSkip($class, '<reason>')` at each decision-point
       site. Reasons must be specific (not "skipped" — "mixed
       wildcard/keyed siblings at depth %d cannot fold to each()")
-- [ ] Audit `ValidationStringToFluentRuleRector::refactor()` and
+- [x] Audit `ValidationStringToFluentRuleRector::refactor()` and
       `ValidationArrayToFluentRuleRector::refactor()` rector-level
       bail paths. Record the audit in `## Findings`. Add emit sites
       only if a case surfaces where silence misleads users
-- [ ] Regression fixtures under `tests/GroupWildcardRulesToEach/Fixture/`
+- [x] Regression fixtures under `tests/GroupWildcardRulesToEach/Fixture/`
       named `skip_<reason>.php.inc` — one per new emit site.
       Assertion pattern: verify the fixture's output equals input
       (skip is a no-op transform), and a companion test reads the
       verbose-mode skip-log path and asserts the expected reason
       string is present. Reuse the `RunSummaryTest` pattern for the
       log-read + cleanup
-- [ ] Tests — each regression fixture has matching test coverage.
+- [x] Tests — each regression fixture has matching test coverage.
       Verify via `vendor/bin/pest tests/GroupWildcardRulesToEach/`
 
 ---
@@ -163,8 +163,95 @@ the specific reason strings. Pin each new emit site.
 
 <!-- Notes added during implementation. Do not remove this section. -->
 
-- Populate during Phase 1 implementation: per-line categorization of
-  the 18 `return null` sites in `GroupWildcardRulesToEachRector`.
-  Format: `- line NNN — decision-point | early-exit | unclear — reason`.
-- Populate during Phase 2: audit conclusion for
-  `ValidationString/ArrayToFluentRuleRector` rector-level bails.
+### Bail-site audit — `GroupWildcardRulesToEachRector` (2026-04-25)
+
+File grew since the spec's 0.7.0 audit; actual bail count is now ~28
+across `return null` and `return false`. Categorization:
+
+**Early-exits** (no log):
+- L128 `refactor()` — node not `Namespace_` (framework filter)
+- L145 `refactor()` — `! $hasChanged` (common no-op path)
+- L172 `refactorClass()` — node not `Return_(Array_)` (AST traversal)
+- L181 `refactorClass()` — `groupRulesArray` returned false (delegation)
+- L241 `groupRulesArray()` — no string-keyed entries (common)
+- L247 `groupRulesArray()` — no groupable patterns found (common)
+- L322/329/335 `resolveClassConstToString()` — AST-shape filters
+- L349/355 `resolveConcatToString()` — AST-shape filters
+- L367 `classConstToSyntheticKey()` — AST-shape filter
+- L428/433 `parseConcatKey()` — incomplete parse / no `.` suffix (early-exit; key isn't a wildcard pattern)
+- L696 `applyGroups()` — nothing to remove/update/insert
+- L767 `processGroup()` — `collectGroupChainItems` returned null (delegation)
+- L851 `collectGroupChainItems()` — no eachItems/childrenItems/eachScalar (common no-group)
+- L946 `hasInvalidWildcard()` — predicate return
+- L1002/1007/1013/1020 `allGroupEntriesAreFluentRule()` — predicate returns (decision is at the L758 caller)
+- L1042 `isRedundantWildcardParent()` — predicate return
+
+**Decision points** (emit `logSkip`):
+- L758 `processGroup()` — group entries mix FluentRule and raw rules (parent: `<key>`). User wrote `'items' => [...]` raw alongside `'items.*' => FluentRule::...` — folding would lose the raw form. Reason: `"wildcard group has non-FluentRule entries — cannot fold to each() (parent: <key>)"`.
+- L778 `processGroup()` — parent rule is not a FluentRule chain. User wrote `'items' => 'array|min:1'` raw string + `items.*` children. Reason: `"parent rule for '<key>' is not a FluentRule chain — cannot append ->each()"`.
+- L782 `processGroup()` — parent factory doesn't allow `each()`/`children()`. User wrote `FluentRule::string()` parent + wildcard children. Reason: `"parent factory <factory>() doesn't support each()/children() — only array() and field() do"`.
+- L858 `collectGroupChainItems()` — wildcard parent has non-redundant rules that would be lost. Reason: `"wildcard parent '<key>.*' has type-specific rules that would be lost in grouping"`.
+- L499/516 `findTopLevelGroups()` — double-wildcard `**` (or non-first `*`) detected. Reason: `"double wildcard or non-first '*' in key suffix — cannot fold to nested each()"`.
+- `indexConcatKey()` — when `parseConcatKey` returns null (paths L404/409/414/423 mean "concat too complex to parse"). Reason: `"concat key too complex to parse for grouping (expected '<ClassConst> . \".suffix\"' shape)"`.
+
+**6 new emit sites** total. The remaining ~22 bails are framework
+filters, AST shape mismatches, or internal predicate returns where
+emitting would be noise.
+
+### Plumbing decision
+
+`processGroup`/`collectGroupChainItems`/`indexConcatKey`/`findTopLevelGroups`
+don't currently take a `Class_` arg. Threading it through 4 helpers is
+invasive — instead, store `private ?Class_ $currentClass` as instance
+state set in `refactorClass()`, mirroring the existing `$this->localConstants`
+pattern. Reset to `null` on entry to keep the rector reentrant across
+classes within a namespace.
+
+### Bail audit — `ValidationStringToFluentRuleRector` / `ValidationArrayToFluentRuleRector`
+
+Both rectors dispatch on three node types via `getNodeTypes()`:
+`[ClassLike::class, MethodCall::class, StaticCall::class]`. Their
+`refactor()` methods have the same shape — a 3-arm `if` matching each
+type then a single trailing `return null;` for the no-match case.
+
+The single `return null` (L121 / L123) fires when the visited node is
+a MethodCall/StaticCall whose `name` isn't `validate` or `make`. That
+matches every other method call in the codebase: `$user->save()`,
+`Carbon::now()`, `$builder->where()`, etc. Logging here would emit
+thousands of noise lines per file with zero actionable signal.
+
+Concern-level logging (`ConvertsValidationRuleStrings`) already fires
+at the actual decision points: rule string can't be tokenized, rule
+shape isn't recognized, etc. Those reach the user as one log line per
+unhandled rule.
+
+**Conclusion**: no new emit sites in either converter rector. Spec's
+provisional audit confirmed.
+
+### Implementation notes
+
+- Added `private ?Class_ $currentClass` instance prop + `logGroupSkip()`
+  helper rather than threading `Class_` through 4 helper signatures.
+  Mirrors the existing `$this->localConstants` / `$this->needsFluentRuleImport`
+  state pattern on the rector.
+- `processGroup()` L778 ("parent rule isn't a FluentRule chain") is
+  defensive — `allGroupEntriesAreFluentRule()` at L758 already catches
+  the case when the parent entry exists in the entries map but isn't
+  a FluentRule chain. Kept the bail itself (defensive) but dropped the
+  `logGroupSkip()` call — an unreachable emit is dead noise in the
+  dedup cache (Codex review catch).
+- 4 of 6 emit sites had pre-existing `skip_*.php.inc` fixtures
+  (`skip_double_wildcard`, `skip_non_redundant_wildcard`,
+  `skip_raw_array_parent`, `skip_wrong_parent_type`). 1 new fixture
+  added (`skip_complex_concat_key`).
+- Log-content regression test (`GroupWildcardSkipLogTest`) had to copy
+  fixtures to unique temp paths before running rector — Rector's
+  per-process file cache (path+mtime keyed) caused cache hits when
+  the canonical fixture path had already been processed by
+  `GroupWildcardRulesToEachRectorTest` earlier in the same suite run.
+  Without the temp-copy, the rector silently no-ops on the second
+  visit, no logSkip fires, and the assertion fails. Single test class
+  invocation passes; full-suite invocation needed the cache bypass.
+- PHPStan baseline complexity bumped 174 → 177 (one helper method +
+  one instance prop addition). Not padding — reflects real (small)
+  growth from the emit-site additions.

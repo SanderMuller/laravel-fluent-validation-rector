@@ -115,6 +115,15 @@ CODE_SAMPLE
     private array $localConstants = [];
 
     /**
+     * The class currently under refactor. Set in `refactorClass()` so deep
+     * helpers (`processGroup`, `collectGroupChainItems`, `indexConcatKey`,
+     * `findTopLevelGroups`) can reach `logSkip()` without threading a
+     * `Class_` arg through every signature. Reset to null on entry to keep
+     * the rector reentrant across classes within a namespace.
+     */
+    private ?Class_ $currentClass = null;
+
+    /**
      * Set to true when any class in the current namespace synthesized a
      * FluentRule factory call (FluentRule::array() / FluentRule::field()).
      * Triggers insertion of `use SanderMuller\FluentValidation\FluentRule;`
@@ -152,48 +161,73 @@ CODE_SAMPLE
         return $node;
     }
 
+    /**
+     * Internal helper: emit a skip-log entry tied to the class currently
+     * being refactored. Decision-point bails inside deep helpers
+     * (`processGroup`, `collectGroupChainItems`, `indexConcatKey`,
+     * `findTopLevelGroups`) call this rather than `logSkip` directly so
+     * they don't have to thread the `Class_` arg through their signatures.
+     * No-ops when `$currentClass` isn't set, which only happens if a
+     * caller bypasses `refactorClass()` — defensive, shouldn't trigger
+     * in normal flow.
+     */
+    private function logGroupSkip(string $reason): void
+    {
+        if ($this->currentClass instanceof Class_) {
+            $this->logSkip($this->currentClass, $reason);
+        }
+    }
+
     /** @phpstan-impure */
     private function refactorClass(Class_ $class): bool
     {
         // Build map of local string constants for resolving self::X keys
         $this->localConstants = $this->collectLocalStringConstants($class);
+        $this->currentClass = $class;
 
-        $hasChanged = false;
+        try {
+            $hasChanged = false;
 
-        foreach ($class->getMethods() as $method) {
-            if (! $this->isName($method, 'rules')) {
-                continue;
-            }
+            foreach ($class->getMethods() as $method) {
+                if (! $this->isName($method, 'rules')) {
+                    continue;
+                }
 
-            $methodChanged = false;
+                $methodChanged = false;
 
-            $this->traverseNodesWithCallable($method, function (Node $inner) use (&$methodChanged): ?Return_ {
-                if (! $inner instanceof Return_ || ! $inner->expr instanceof Array_) {
+                $this->traverseNodesWithCallable($method, function (Node $inner) use (&$methodChanged): ?Return_ {
+                    if (! $inner instanceof Return_ || ! $inner->expr instanceof Array_) {
+                        return null;
+                    }
+
+                    if ($this->groupRulesArray($inner->expr)) {
+                        $methodChanged = true;
+
+                        return $inner;
+                    }
+
                     return null;
+                });
+
+                if ($methodChanged) {
+                    $hasChanged = true;
+
+                    // Grouping flat wildcards into `array()->each(...)` changes the
+                    // terminal Rule subclass (e.g. StringRule → ArrayRule), which
+                    // invalidates narrow author-written `@return` annotations. See
+                    // NormalizesRulesDocblock for rationale; mijntp's 0.4.14 run
+                    // surfaced 5 production files with this exact shape.
+                    $this->normalizeRulesDocblockIfStale($method);
                 }
-
-                if ($this->groupRulesArray($inner->expr)) {
-                    $methodChanged = true;
-
-                    return $inner;
-                }
-
-                return null;
-            });
-
-            if ($methodChanged) {
-                $hasChanged = true;
-
-                // Grouping flat wildcards into `array()->each(...)` changes the
-                // terminal Rule subclass (e.g. StringRule → ArrayRule), which
-                // invalidates narrow author-written `@return` annotations. See
-                // NormalizesRulesDocblock for rationale; mijntp's 0.4.14 run
-                // surfaced 5 production files with this exact shape.
-                $this->normalizeRulesDocblockIfStale($method);
             }
-        }
 
-        return $hasChanged;
+            return $hasChanged;
+        } finally {
+            // Clear class-attribution state on exit so a stray downstream
+            // `logGroupSkip()` call (e.g. after a future refactor adds a
+            // new emit-site path) cannot misattribute to a stale class.
+            $this->currentClass = null;
+        }
     }
 
     /**
@@ -301,6 +335,10 @@ CODE_SAMPLE
         $parsed = $this->parseConcatKey($keyExpr);
 
         if ($parsed === null) {
+            $this->logGroupSkip(
+                'concat key too complex to parse for grouping — only static class-constant prefixes (e.g. self::FOO) followed by a dotted-string suffix are supported',
+            );
+
             return;
         }
 
@@ -514,6 +552,11 @@ CODE_SAMPLE
             }
 
             if ($hasDoubleWildcard) {
+                $this->logGroupSkip(sprintf(
+                    "double wildcard or non-first '*' in key suffix under '%s' — cannot fold to nested each()",
+                    $prefix,
+                ));
+
                 continue; // Skip this group entirely
             }
 
@@ -755,6 +798,11 @@ CODE_SAMPLE
         $parentKey = $group['parent'];
 
         if (! $this->allGroupEntriesAreFluentRule($group, $entries, $parentKey)) {
+            $this->logGroupSkip(sprintf(
+                "wildcard group has non-FluentRule entries — cannot fold to each() (parent: '%s')",
+                $parentKey,
+            ));
+
             return null;
         }
 
@@ -775,10 +823,20 @@ CODE_SAMPLE
         $parentIndex = isset($entries[$parentKey]) ? $entries[$parentKey]['index'] : null;
 
         if ($parentValue !== null && ! $this->isFluentRuleChain($parentValue)) {
+            // Defensive — `allGroupEntriesAreFluentRule` above already
+            // rejects this case. Keep the guard but no log entry: any
+            // emit here would be unreachable noise in the dedup cache.
             return null;
         }
 
         if (! $this->parentFactoryAllowsChain($parentValue, $eachItems, $childrenItems, $eachScalar)) {
+            $factory = $parentValue instanceof Expr ? ($this->getFluentRuleFactory($parentValue) ?? 'unknown') : 'unknown';
+            $this->logGroupSkip(sprintf(
+                "parent factory %s() doesn't support each()/children() — only array() and field() do (parent: '%s')",
+                $factory,
+                $parentKey,
+            ));
+
             return null;
         }
 
@@ -855,6 +913,11 @@ CODE_SAMPLE
         // $eachScalar is set we've already consumed it above.
         if ($eachScalar === null && $group['wildcardParentKey'] !== null && isset($entries[$group['wildcardParentKey']])) {
             if ($eachItems !== [] && ! $this->isRedundantWildcardParent($entries[$group['wildcardParentKey']]['value'])) {
+                $this->logGroupSkip(sprintf(
+                    "wildcard parent '%s' has type-specific rules that would be lost in grouping",
+                    $group['wildcardParentKey'],
+                ));
+
                 return null;
             }
 

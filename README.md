@@ -145,6 +145,12 @@ Strips Livewire `#[Rule('...')]` / `#[Validate('...')]` property attributes and 
 
 Folds flat wildcard and dotted keys into nested `each()` / `children()` calls. Applies to FormRequests and Livewire components alike.
 
+- **Bails on** (each emits a specific skip-log entry under [`=actionable`](#diagnostics)):
+  - Wildcard group has non-FluentRule entries — `'items' => ['required', ...]` next to `'items.*' => FluentRule::...`.
+  - Parent rule's factory doesn't support `each()` / `children()` — only `FluentRule::array()` and `FluentRule::field()` do.
+  - Wildcard parent (`items.*`) has type-specific rules that grouping would silently drop.
+  - Double wildcard (`**`) or non-first `*` in a key suffix.
+  - Concat-keyed wildcard (`$prefix . '.*.foo'`) where the prefix isn't a static class constant.
 - **Notes**:
   - On Livewire, the `HasFluentValidation` trait's `getRules()` override flattens the nested form back to wildcard keys at runtime, so grouping is safe.
   - When a dot-notation key has no explicit parent rule, synthesizes a bare `FluentRule::array()` parent so nested `required` children still fire.
