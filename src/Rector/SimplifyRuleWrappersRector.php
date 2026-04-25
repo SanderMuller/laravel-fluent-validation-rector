@@ -236,6 +236,32 @@ final class SimplifyRuleWrappersRector extends AbstractRector implements Configu
     ];
 
     /**
+     * Methods whose only typed-rule home (`BooleanRule::accepted()`,
+     * `BooleanRule::declined()`) is also blocklisted from auto-promotion
+     * by `PromoteFieldFactoryRector::SEMANTICALLY_DIVERGENT_PROMOTION`
+     * because the boolean factory's `'boolean'` seed constraint rejects
+     * `"yes"` / `"on"` / `"true"` (`accepted`) or `"no"` / `"off"` /
+     * `"false"` (`declined`) — inputs the corresponding Laravel rule
+     * permits.
+     *
+     * When `SimplifyRuleWrappersRector` reaches the "method not on
+     * receiver" bail with one of these on a `FieldRule` chain, the
+     * generic `accepted() not on FieldRule` line gives no clue WHY
+     * auto-promotion didn't happen. The enriched hint explains the
+     * blocklist rationale and points at the two remaining options
+     * (keep the escape hatch, or explicitly use `boolean()` if the
+     * stricter input set matches the consumer's form contract).
+     *
+     * Surfaced by downstream peer review on 0.13.1 dogfood.
+     *
+     * @var array<string, string>
+     */
+    private const array SEMANTIC_DIVERGENCE_HINTS = [
+        'accepted' => "auto-promotion to FluentRule::boolean() blocked because boolean's implicit constraint rejects 'yes'/'on'/'true' which the accepted Laravel rule permits. Keep the field()->rule('accepted') escape hatch, OR use FluentRule::boolean()->accepted() explicitly if your form submits only 1/true/\"1\".",
+        'declined' => "auto-promotion to FluentRule::boolean() blocked because boolean's implicit constraint rejects 'no'/'off'/'false' which the declined Laravel rule permits. Keep the field()->rule('declined') escape hatch, OR use FluentRule::boolean()->declined() explicitly if your form submits only 0/false/\"0\".",
+    ];
+
+    /**
      * Receiver classes where a target method exists natively but its
      * semantics differ from Laravel's like-named rule token. The native
      * method must NOT be considered an equivalent rewrite target.
@@ -403,6 +429,11 @@ CODE_SAMPLE
                     ' — %s() is type-dependent; consider FluentRule::string() / FluentRule::numeric() / FluentRule::array() / FluentRule::file() depending on the field',
                     $targetMethod,
                 );
+            }
+
+            if ($resolution['class'] === FieldRule::class
+                && isset(self::SEMANTIC_DIVERGENCE_HINTS[$targetMethod])) {
+                $reason .= ' — ' . self::SEMANTIC_DIVERGENCE_HINTS[$targetMethod];
             }
 
             $this->logSkipForCall($node, $reason, verboseOnly: true);
