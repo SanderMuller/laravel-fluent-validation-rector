@@ -3,15 +3,20 @@
 namespace SanderMuller\FluentValidationRector\Rector;
 
 use PhpParser\Node;
+use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
+use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Stmt\Class_;
+use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Stmt\Namespace_;
+use PhpParser\Node\Stmt\Property;
 use PhpParser\Node\Stmt\TraitUseAdaptation\Precedence;
 use PhpParser\NodeVisitor;
 use Rector\Rector\AbstractRector;
 use SanderMuller\FluentValidation\FluentRule;
+use SanderMuller\FluentValidation\FluentRules;
 use SanderMuller\FluentValidation\HasFluentValidation;
 use SanderMuller\FluentValidation\HasFluentValidationForFilament;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsFilamentForms;
@@ -232,6 +237,21 @@ CODE_SAMPLE
             return null;
         }
 
+        // Livewire-side validation surface gate. The trait overrides
+        // `validate()` / `validateOnly()` / `getRules()` /
+        // `getValidationAttributes()` — Livewire-internal entry points.
+        // When the class never invokes any of those (no `$this->validate(...)`,
+        // no `$this->validateOnly(...)`, no `#[Validate]` attribute, no
+        // `rules()` / attributed / rules-shaped method), the trait is
+        // dead code — its overrides have no caller. Collectiq dogfood
+        // (2026-04-26) found `ReadingStatsPage` got the trait inserted
+        // because it uses FluentRule inside a standalone
+        // `Validator::make([...])->validate()` call. Silent skip — the
+        // class isn't doing Livewire validation at all.
+        if (! $this->hasLivewireValidationSurface($class)) {
+            return null;
+        }
+
         $filamentTrait = $this->findDirectFilamentTrait($class);
         $ancestorHasFilament = ! $filamentTrait instanceof Name && $this->ancestorHasFilamentTrait($class);
 
@@ -378,6 +398,114 @@ CODE_SAMPLE
         }
 
         return false;
+    }
+
+    /**
+     * True when the class exercises Livewire's own validation pipeline
+     * — the entry points the trait's overrides actually intercept.
+     * Required signals (any one is sufficient):
+     *
+     * - `rules()` method exists.
+     * - Any property carries a `#[Validate]` attribute (Livewire's
+     *   attribute-based validation).
+     * - Any method has the `#[FluentRules]` attribute (per-method opt-in).
+     * - Any method body contains a `$this->validate(...)` or
+     *   `$this->validateOnly(...)` MethodCall.
+     *
+     * Without any of these, the class IS a Livewire component and DOES
+     * use FluentRule, but never invokes the entry points the trait
+     * overrides — adding the trait would be dead code. Codex 2026-04-26
+     * (collectiq dogfood) caught the gap on `ReadingStatsPage`, which
+     * uses FluentRule only inside a standalone `Validator::make([...])`
+     * call.
+     */
+    private function hasLivewireValidationSurface(Class_ $class): bool
+    {
+        foreach ($class->getMethods() as $method) {
+            if ($this->isName($method, 'rules')) {
+                return true;
+            }
+
+            if ($this->methodCarriesFluentRulesAttribute($method)) {
+                return true;
+            }
+        }
+
+        foreach ($class->getProperties() as $property) {
+            if ($this->propertyCarriesValidateAttribute($property)) {
+                return true;
+            }
+        }
+
+        return $this->callsLivewireValidate($class);
+    }
+
+    private function methodCarriesFluentRulesAttribute(ClassMethod $method): bool
+    {
+        foreach ($method->attrGroups as $attrGroup) {
+            foreach ($attrGroup->attrs as $attr) {
+                if ($this->getName($attr->name) === FluentRules::class) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function propertyCarriesValidateAttribute(Property $property): bool
+    {
+        foreach ($property->attrGroups as $attrGroup) {
+            foreach ($attrGroup->attrs as $attr) {
+                $attrName = $this->getName($attr->name);
+
+                if ($attrName === 'Livewire\\Attributes\\Validate' || $attrName === 'Livewire\\Attributes\\Rule') {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function callsLivewireValidate(Class_ $class): bool
+    {
+        $found = false;
+
+        foreach ($class->getMethods() as $method) {
+            $this->traverseNodesWithCallable($method, function (Node $node) use (&$found): ?int {
+                if ($this->isLivewireValidateCall($node)) {
+                    $found = true;
+
+                    return NodeVisitor::STOP_TRAVERSAL;
+                }
+
+                return null;
+            });
+
+            if ($found) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function isLivewireValidateCall(Node $node): bool
+    {
+        if (! $node instanceof MethodCall || ! $node->var instanceof Variable) {
+            return false;
+        }
+
+        if (! $this->isName($node->var, 'this')) {
+            return false;
+        }
+
+        if ($this->isName($node->name, 'validate')) {
+            return true;
+        }
+
+        return $this->isName($node->name, 'validateOnly');
     }
 
     private function usesFluentRule(Class_ $class): bool

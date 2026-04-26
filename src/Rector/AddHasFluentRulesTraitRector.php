@@ -182,6 +182,20 @@ CODE_SAMPLE
             return false;
         }
 
+        // FormRequest-ancestry gate. `HasFluentRules` overrides
+        // `createDefaultValidator(ValidationFactory)`, which is a
+        // FormRequest-internal hook — adding it to a non-FormRequest
+        // class is dead code at best (Controller / Action / Test /
+        // Nova Resource / DataObject / standalone Validator subclass)
+        // and misleading at worst. Hihaho dogfood (2026-04-26) found
+        // ~26 false positives across 6 categories on 0.14.0 because
+        // the widened `usesFluentRule()` matched FluentRule anywhere
+        // in the class without a class-shape gate. Silent skip — these
+        // categories don't want noise in the actionable tier.
+        if (! $this->anyAncestorExtends($class, FormRequest::class)) {
+            return false;
+        }
+
         // Auto-detect inherited trait via the ancestor chain so the rector
         // doesn't re-add HasFluentRules to every subclass of a parent that
         // already declares it. Complements the explicit base_classes config

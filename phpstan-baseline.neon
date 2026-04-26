@@ -5,3 +5,8 @@ parameters:
 			identifier: complexity.classLike
 			count: 1
 			path: src/Rector/GroupWildcardRulesToEachRector.php
+		-
+			rawMessage: 'Class cognitive complexity is 87, keep it under 80'
+			identifier: complexity.classLike
+			count: 1
+			path: src/Rector/AddHasFluentValidationTraitRector.php
