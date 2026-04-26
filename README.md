@@ -406,13 +406,22 @@ FLUENT_VALIDATION_RECTOR_VERBOSE=1 vendor/bin/rector process --clear-cache
 
 Env-only is deliberate. The flag has to reach parallel workers (fresh PHP processes spawned via `proc_open`), and shell-exported env inherits automatically; an in-process `putenv()` wrapper would not. Exporting the variable one step above the rector invocation keeps a single source of truth that every worker sees.
 
-Any opt-in tier writes `.rector-fluent-validation-skips.log` to your project root (plus a `.session` sentinel used to coordinate truncation across parallel workers) and the end-of-run line points at it:
+Any opt-in tier writes `.cache/rector-fluent-validation-skips.log` (plus a `.session` sentinel used to coordinate truncation across parallel workers) and the end-of-run line points at it:
 
 ```
-[fluent-validation] 42 skip entries written to .rector-fluent-validation-skips.log — see for details
+[fluent-validation] 42 skip entries written to .cache/rector-fluent-validation-skips.log — see for details
 ```
 
-Gitignore both files if you enable verbose persistently. Otherwise CI auto-fix workflows that commit dirty artifacts will pick them up on every run.
+The `.cache/` subdir matches Rector's own cache directory convention — most projects already gitignore it. The first line of the log is a per-run header recording the package version, ISO-8601 UTC timestamp, and verbose tier, useful for cross-release diff stability in CI:
+
+```
+# laravel-fluent-validation-rector 0.14.1 — generated 2026-04-26T11:47:12Z
+# verbose tier: actionable
+
+[fluent-validation:skip] ...
+```
+
+The header is always emitted when verbose mode is on, even on zero-entry runs, so the file's existence stays stable across runs. Pre-0.14.1 the log lived at `<cwd>/.rector-fluent-validation-skips.log`; the package automatically cleans up that legacy path on first run after the upgrade.
 
 The log is a file sink because Rector's `withParallel(...)` executor doesn't forward worker STDERR to the parent. A diagnostic line written via `fwrite(STDERR, ...)` from a worker would vanish on parallel runs (Rector's default). A file sink survives worker death and you can inspect it from the project root after the run finishes. If you're writing your own Rector rule and want similar diagnostics, the same gotcha applies: `withParallel()` + STDERR means silent data loss.
 
