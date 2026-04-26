@@ -90,13 +90,6 @@ The `ALL` set runs the full migration pipeline (converters + grouping + trait in
 
 Grouped by the set that includes them. `FluentValidationSetList::ALL` runs everything in Converters + Grouping + Traits; `SIMPLIFY` is a separate post-migration cleanup set you opt into after verifying the initial conversion.
 
-> [!NOTE]
-> **fluent-validation 1.19.0 token surface** affects three rectors below:
-> - [`ValidationStringToFluentRuleRector`](#validationstringtofluentrulerector) and [`ValidationArrayToFluentRuleRector`](#validationarraytofluentrulerector) recognize `'ipv4'` / `'ipv6'` / `'mac_address'` / `'json'` / `'timezone'` / `'hex_color'` / `'active_url'` / `'list'` / `'declined'` as direct factory tokens, with sibling-token promotion (`'string|ipv4'` → `FluentRule::ipv4()` instead of the verbose `string()->ipv4()` detour).
-> - [`SimplifyFluentRuleRector`](#simplifyfluentrulerector) collapses already-fluent chains for these factories plus `regex` / `enum` arg-passthrough (`string()->regex($p)` → `regex($p)`, `field()->enum($t)` → `enum($t)`).
->
-> Requires `sandermuller/laravel-fluent-validation` ^1.19.
-
 ### Converters (set `CONVERT`)
 
 #### `ValidationStringToFluentRuleRector`
@@ -432,7 +425,11 @@ The log is a file sink because Rector's `withParallel(...)` executor doesn't for
 ## Known limitations
 
 - **Namespace-less files.** Classes at the file root without a `namespace` are silently skipped by the grouping and trait rectors. Laravel projects always use namespaces, so this rarely comes up in practice.
-- **Rules built outside `rules(): array`.** The rector looks for `rules(): array`, `$request->validate([...])`, and `Validator::make([...])`. Rules built inside `withValidator()` callbacks, custom `rulesWithoutPrefix()` conventions, or Action-class `Collection::put()->merge()` chains are left alone.
+- **Rules built inside `withValidator()` callbacks.** `withValidator()` is a post-validation hook for adding custom errors via `$validator->after(...)`, not a rules definition. No FluentRule equivalent — imperative code stays.
+- **Rules built via `Collection::put()->merge()->all()` chains.** Runtime-resolved collection pipelines aren't statically determinable. Out of scope unless a narrow shape (pure literal `put()` chain ending in `->all()`) gathers consumer demand.
+- **Multi-statement helper bodies.** Auto-detection requires a single-statement `return [...];` shape. Helpers like `private function buildRules() { $rules = [...]; return $rules; }` stay untouched. Inline the return or convert by hand.
+
+**Already covered (not limitations)**: `Validator::validate(...)`, the global `validator(...)` helper (when prefixed with `\` or in the global namespace), and custom-named rules methods (`editorRules()`, `rulesWithoutPrefix()`, etc.) on classes that qualify as rules-bearing (FormRequest descendants / fluent-validation-trait users / Livewire components / `#[FluentRules]`-marked methods). The converters auto-detect rules-shaped methods by content signature — a string-keyed `return [...];` whose values include a recognized rule string, `Rule::*()` call, FluentRule chain, or constructor-form rule object — without any consumer config.
 - **Ternary picking the rule NAME.** `['nullable', $flag ? 'email' : 'url']` (where the ternary chooses a *different rule*) is left alone. A `->when(cond, thenFn, elseFn)` conversion is tractable in principle but wasn't worth it: three separate codebase audits turned up near-zero usage (single digits across a 100+ FormRequest corpus), and the closure-based fluent form loses the terseness users reach for ternaries to preserve. Use `Rule::when(...)` or branch the rules array outside the ternary instead. **Not a limitation**: ternaries / method calls / function calls / match / nullsafe property fetches *as a rule's argument* — `['max', $cond ? 15 : 20]`, `['between', config('a'), config('b')]`, `['max', $this->limit ?? 10]` — convert fine via the permissive emittable-arg path on non-conditional tuples (see [`ValidationArrayToFluentRuleRector`](#validationarraytofluentrulerector)).
 - **`#[Validate(..., onUpdate: true)]` / `translate: false`.** These attribute args have no FluentRule builder equivalent and no migration path. They land in the skip log so you can move them to Livewire's hooks or project config manually. The rule string, `as:` / `attribute:` label, and `onUpdate: false` (consumed as a real-time-validation opt-out marker) are migrated. **`message:` is opt-in**: enable [`MIGRATE_MESSAGES`](#convertlivewireruleattributerector-config) to migrate string and array `message:` args into a generated `messages(): array` method alongside `rules()`. With `MIGRATE_MESSAGES` off (default), `message:` args also land in the skip log for manual migration.
 
