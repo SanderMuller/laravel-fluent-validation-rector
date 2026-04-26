@@ -433,7 +433,15 @@ CODE_SAMPLE
 
             if ($resolution['class'] === FieldRule::class
                 && isset(self::SEMANTIC_DIVERGENCE_HINTS[$targetMethod])) {
-                $reason .= ' — ' . self::SEMANTIC_DIVERGENCE_HINTS[$targetMethod];
+                // Receiver is `FluentRule::field()` — the explicit
+                // escape hatch the user already opted into. The hint
+                // message reads as "you did the right thing", which
+                // is confirmation, not actionable. Suppress the
+                // entire skip log entry on this combination (GH #2,
+                // hihaho dogfood 2026-04-26). Other classes
+                // (`BooleanRule`, etc.) still emit because there's a
+                // genuine hint to share.
+                return null;
             }
 
             $this->logSkipForCall($node, $reason, verboseOnly: true);
