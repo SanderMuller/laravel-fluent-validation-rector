@@ -27,6 +27,7 @@ class AllFluentLaravelDataAwareRuleShorthand
 
 namespace SanderMuller\FluentValidationRector\Tests\UpdateRulesReturnTypeDocblock\Fixture;
 
+use SanderMuller\FluentValidation\Contracts\FluentRuleContract;
 use Illuminate\Contracts\Validation\DataAwareRule;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidation\HasFluentValidation;
@@ -36,7 +37,7 @@ class AllFluentLaravelDataAwareRuleShorthand
     use HasFluentValidation;
 
     /**
-     * @return array<string, \SanderMuller\FluentValidation\Contracts\FluentRuleContract>
+     * @return array<string, FluentRuleContract>
      */
     public function rules(): array
     {

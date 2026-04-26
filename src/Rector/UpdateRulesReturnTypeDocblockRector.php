@@ -20,8 +20,11 @@ use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Stmt\Return_;
 use PhpParser\NodeVisitor;
 use Rector\Contract\Rector\ConfigurableRectorInterface;
+use Rector\PostRector\Collector\UseNodesToAddCollector;
 use Rector\Rector\AbstractRector;
+use Rector\StaticTypeMapper\ValueObject\Type\FullyQualifiedObjectType;
 use ReflectionClass;
+use SanderMuller\FluentValidation\Contracts\FluentRuleContract;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidationRector\Rector\Concerns\AllowlistedRuleFactories;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
@@ -84,16 +87,28 @@ final class UpdateRulesReturnTypeDocblockRector extends AbstractRector implement
     }
 
     /**
-     * Final emitted `@return` annotation body. Leading backslash on the FQN
-     * matches `STANDARD_RULES_ANNOTATION_BODY`'s style so both annotations
-     * read consistently in a narrowed file. Hard-coded as a string so the
-     * rector runs regardless of which package version the consumer has
-     * installed — the contract is emitted into docblocks as text, not
-     * resolved as a PHP class at rector-time.
+     * Final emitted `@return` annotation body. Uses the short
+     * `FluentRuleContract` name; the rector queues a `use` import for
+     * `\SanderMuller\FluentValidation\Contracts\FluentRuleContract` via
+     * `UseNodesToAddCollector` whenever the annotation is rewritten,
+     * so static analyzers resolve the short name correctly. Pre-0.14.1
+     * the body emitted the FQN inline, which Pint's
+     * `fully_qualified_strict_types` cleaned up afterwards — every
+     * rector run forced a follow-up Pint pass. Surfaced by collectiq
+     * dogfood (2026-04-26).
      */
-    private const string CONTRACT_ANNOTATION_BODY = 'array<string, \\SanderMuller\\FluentValidation\\Contracts\\FluentRuleContract>';
+    private const string CONTRACT_ANNOTATION_BODY = 'array<string, FluentRuleContract>';
 
-    public function __construct()
+    /**
+     * FQN queued via `UseNodesToAddCollector` whenever the annotation
+     * is rewritten. String-referenced (not `::class`) so the rector
+     * doesn't load the contract class at static-analysis time — the
+     * package's `^1.0` constraint includes versions that may not ship
+     * the contract under this exact namespace.
+     */
+    private const string CONTRACT_FQN = FluentRuleContract::class;
+
+    public function __construct(private readonly UseNodesToAddCollector $useNodesToAddCollector)
     {
         RunSummary::registerShutdownHandler();
     }
@@ -570,6 +585,7 @@ CODE_SAMPLE
 
         if (! $doc instanceof Doc) {
             $method->setDocComment(new Doc(sprintf("/**\n * %s\n */", $contractTag)));
+            $this->queueContractUseImport();
 
             return true;
         }
@@ -589,6 +605,7 @@ CODE_SAMPLE
             }
 
             $method->setDocComment(new Doc($replaced));
+            $this->queueContractUseImport();
 
             return true;
         }
@@ -616,8 +633,24 @@ CODE_SAMPLE
         }
 
         $method->setDocComment(new Doc($injected));
+        $this->queueContractUseImport();
 
         return true;
+    }
+
+    /**
+     * Queue the `use SanderMuller\FluentValidation\Contracts\FluentRuleContract;`
+     * import via Rector's post-rector collector. Idempotent across
+     * multiple methods in the same file — the collector dedups. Without
+     * this, the docblock's short `FluentRuleContract` would resolve to
+     * the wrong (or missing) symbol in static analyzers + IDEs. Pre-0.14.1
+     * the rector emitted the FQN inline; Pint would clean it up
+     * post-run, but every rector invocation forced a follow-up Pint
+     * pass on every touched file. GH dogfood (2026-04-26).
+     */
+    private function queueContractUseImport(): void
+    {
+        $this->useNodesToAddCollector->addUseImport(new FullyQualifiedObjectType(self::CONTRACT_FQN));
     }
 
     /**

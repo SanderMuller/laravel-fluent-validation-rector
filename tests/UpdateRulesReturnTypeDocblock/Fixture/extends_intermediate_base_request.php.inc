@@ -21,13 +21,14 @@ class ExtendsIntermediateBaseRequest extends IntermediateBaseRequest
 
 namespace SanderMuller\FluentValidationRector\Tests\UpdateRulesReturnTypeDocblock\Fixture;
 
+use SanderMuller\FluentValidation\Contracts\FluentRuleContract;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidationRector\Tests\Concerns\Fixture\IntermediateBaseRequest;
 
 class ExtendsIntermediateBaseRequest extends IntermediateBaseRequest
 {
     /**
-     * @return array<string, \SanderMuller\FluentValidation\Contracts\FluentRuleContract>
+     * @return array<string, FluentRuleContract>
      */
     public function rules(): array
     {

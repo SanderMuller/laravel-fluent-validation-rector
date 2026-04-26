@@ -21,13 +21,14 @@ class ExtendsAliasedFormRequest extends BaseRequest
 
 namespace SanderMuller\FluentValidationRector\Tests\UpdateRulesReturnTypeDocblock\Fixture;
 
+use SanderMuller\FluentValidation\Contracts\FluentRuleContract;
 use Illuminate\Foundation\Http\FormRequest as BaseRequest;
 use SanderMuller\FluentValidation\FluentRule;
 
 class ExtendsAliasedFormRequest extends BaseRequest
 {
     /**
-     * @return array<string, \SanderMuller\FluentValidation\Contracts\FluentRuleContract>
+     * @return array<string, FluentRuleContract>
      */
     public function rules(): array
     {

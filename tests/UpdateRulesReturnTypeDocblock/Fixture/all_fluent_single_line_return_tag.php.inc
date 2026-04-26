@@ -22,12 +22,13 @@ class AllFluentSingleLineReturnTag extends FormRequest
 
 namespace SanderMuller\FluentValidationRector\Tests\UpdateRulesReturnTypeDocblock\Fixture;
 
+use SanderMuller\FluentValidation\Contracts\FluentRuleContract;
 use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\FluentRule;
 
 class AllFluentSingleLineReturnTag extends FormRequest
 {
-    /** @return array<string, \SanderMuller\FluentValidation\Contracts\FluentRuleContract> */
+    /** @return array<string, FluentRuleContract> */
     public function rules(): array
     {
         return [

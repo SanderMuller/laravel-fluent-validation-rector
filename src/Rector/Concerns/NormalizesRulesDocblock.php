@@ -67,16 +67,27 @@ trait NormalizesRulesDocblock
 
     /**
      * Matches a full `@return` tag — including continuation lines that belong
-     * to the same tag. A PHPDoc tag's content ends at the next `@<tag>` line
-     * or at the docblock terminator. Without accounting for continuations, a
-     * multi-line annotation would only be partially rewritten, leaving
-     * dangling continuation lines behind.
+     * to the same tag. A PHPDoc tag's content ends at the next `@<tag>` line,
+     * a blank `*`-only separator line, or the docblock terminator. Without
+     * accounting for continuations, a multi-line annotation would only be
+     * partially rewritten, leaving dangling continuation lines behind. Without
+     * the blank-line stop, a trailing blank `*` separator (visual gap before
+     * the next tag) would be consumed by the body capture and lost on
+     * replacement — surfaced by collectiq dogfood (2026-04-26): `@return`
+     * followed by a blank `*` line followed by another PHPDoc tag (e.g.
+     * `@phpstan-*` annotations, `@param`) had its separator eaten by the
+     * rewrite.
+     *
+     * Continuation negative lookahead `(?!\s*@|\s*\/|\s*$)` rejects:
+     *   - `* @<tag>` (next PHPDoc tag)
+     *   - `* /` (docblock terminator)
+     *   - `*` followed by only whitespace / EOL (visual separator)
      *
      * Capture groups:
      * - Group 1: the `@return` token (kept verbatim in the replacement).
      * - Group 2: the annotation body we test for staleness and overwrite.
      */
-    protected const string RETURN_TAG_PATTERN = '/(@return)\s+((?:(?:(?!\s*\*\/)[^\r\n])*(?:\n[ \t]*\*(?!\s*@|\s*\/)(?:(?!\s*\*\/)[^\r\n])*)*))/';
+    protected const string RETURN_TAG_PATTERN = '/(@return)\s+((?:(?:(?!\s*\*\/)[^\r\n])*(?:\n[ \t]*\*(?![ \t]*\r?\n|\s*@|\s*\/)(?:(?!\s*\*\/)[^\r\n])*)*))/';
 
     /**
      * Normalize the rules() method's `@return` annotation when it references a

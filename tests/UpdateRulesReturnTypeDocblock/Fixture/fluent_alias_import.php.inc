@@ -22,13 +22,14 @@ class FluentAliasImport extends FormRequest
 
 namespace SanderMuller\FluentValidationRector\Tests\UpdateRulesReturnTypeDocblock\Fixture;
 
+use SanderMuller\FluentValidation\Contracts\FluentRuleContract;
 use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\FluentRule as FR;
 
 class FluentAliasImport extends FormRequest
 {
     /**
-     * @return array<string, \SanderMuller\FluentValidation\Contracts\FluentRuleContract>
+     * @return array<string, FluentRuleContract>
      */
     public function rules(): array
     {
