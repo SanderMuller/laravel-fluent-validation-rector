@@ -30,6 +30,8 @@ use PhpParser\Node\Stmt\ClassMethod;
  * the user may have written `@return array<string, mixed>` or a custom
  * supertype that's still correct post-mutation. Only narrow rule-typed
  * annotations are considered stale.
+ *
+ * @internal
  */
 trait NormalizesRulesDocblock
 {

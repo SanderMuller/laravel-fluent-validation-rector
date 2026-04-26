@@ -37,6 +37,8 @@ public function rules(): array
 **Getting started**
 - [Installation](#installation)
 - [Quick start](#quick-start)
+- [Versioning policy](#versioning-policy) — what's covered by SemVer
+- [Compatibility](#compatibility) — supported runtime + integration versions
 - [Rules shipped](#rules-shipped) — what gets converted and what stays
 
 **Usage**
@@ -46,8 +48,10 @@ public function rules(): array
 **Operation**
 - [Formatter integration](#formatter-integration) — what the rector emits and how Pint / PHP-CS-Fixer finish the job
 - [Diagnostics](#diagnostics) — skip log + verbosity tiers
+- [Parity](#parity) — runtime-equivalence harness for semantics-changing rectors
 
 **Reference**
+- [Public API](PUBLIC_API.md) — frozen surface (symbols, wire keys, behavior)
 - [Known limitations](#known-limitations)
 - [License](#license)
 
@@ -85,6 +89,58 @@ vendor/bin/pint                       # format
 ```
 
 The `ALL` set runs the full migration pipeline (converters + grouping + trait insertion) on every file under `app/`. For most codebases that's enough; the output is ready to commit after Pint runs. If you want finer control, pick subsets via [Sets](#sets) or register [individual rules](#individual-rules).
+
+## Versioning policy
+
+This package follows [SemVer 2.0](https://semver.org).
+
+**MAJOR (X.y.z)** — breaking changes to the public API:
+- Rename / remove a rector class
+- Rename / remove a `FluentValidationSetList` constant
+- Rename / remove / change-string-value of a rector configuration constant
+- Change the skip-log line prefix or the per-run header structure
+- Rename / remove the verbose-mode env var or its accepted values
+- Change either documented skip-log path
+
+**MINOR (x.Y.z)** — additive, non-breaking:
+- New rector class
+- New configuration constant on an existing rector
+- New skip-log diagnostic emit site
+- New configuration option value (additive enum extension)
+- Wider match conditions on an existing rector (transformations now apply to shapes that previously fell through)
+
+**PATCH (x.y.Z)** — bug fixes:
+- Correctness fixes to existing transformations
+- Diagnostic message text changes (the *content*, not the line format)
+- Internal refactors with no observable effect on output
+- Documentation updates
+
+The package's "public API" is the explicit list in [PUBLIC_API.md](PUBLIC_API.md). Symbols not on that list are `@internal` and may change in any release without a MAJOR bump.
+
+PATCH-level rector changes must not introduce parity violations against existing fixtures (see [Parity](#parity) below). Behavioral drift in semantics-changing rectors is a MINOR or MAJOR bump depending on whether existing consumers can opt in/out.
+
+## Compatibility
+
+### Tested matrix (CI)
+
+Every push runs the full cross-product below under both `prefer-lowest` and `prefer-stable` Composer resolutions:
+
+| OS              | PHP      | Laravel    |
+|-----------------|----------|------------|
+| ubuntu-latest   | 8.3, 8.4 | 11, 12, 13 |
+| windows-latest  | 8.3, 8.4 | 11, 12, 13 |
+
+Each Laravel-major leg pins the matching `orchestra/testbench` major (9.x / 10.x / 11.x). Underlying floor: PHP 8.2+ per `require.php`; Laravel range tracks `orchestra/testbench` constraint in `composer.json`.
+
+### Runtime-detected integrations (no direct dependency)
+
+| Integration | Detection mechanism                                                                  | Versions handled |
+|-------------|--------------------------------------------------------------------------------------|------------------|
+| Livewire    | `extends Livewire\Component` ancestry                                                | v3 + v4          |
+| Filament    | `InteractsWithForms` (v3/v4) / `InteractsWithSchemas` (v5) trait presence            | v3 + v4 + v5     |
+| Nova        | `extends Laravel\Nova\Resource` ancestry                                             | v4 + v5          |
+
+These integrations are **detected at rector-time**, not depended upon. The rector handles them when the consumer's project includes them; absent the host packages, the corresponding code paths are dormant.
 
 ## Rules shipped
 
@@ -430,6 +486,50 @@ The log is a file sink because Rector's `withParallel(...)` executor doesn't for
 
 > [!NOTE]
 > `ConvertLivewireRuleAttributeRector` verifies the generated `rules(): array` is syntactically correct, but it can't prove the converted rule is behaviorally equivalent to the source attribute. If a converted Livewire component has no feature test covering validation, review the diff by hand and watch for dropped `message:` (use [`MIGRATE_MESSAGES`](#convertlivewireruleattributerector-config) to opt in), explicit `onUpdate:`, or `translate: false` args (logged to the skip file) that need manual migration to Livewire's `messages(): array` hook or project config. `messages:` (plural, not a Livewire-documented arg) surfaces its own "unrecognized, likely typo for `message:`?" log entry.
+
+## Parity
+
+A small subset of rectors changes which Laravel rule object handles validation at runtime. The functional test suite proves source→source AST shape; the **parity harness** under `tests/Parity/` proves the resulting rule sets produce equivalent error bags when Laravel runs them. Together they cover both structural and behavioral correctness.
+
+**In-scope rectors** (semantics may change):
+
+- `SimplifyRuleWrappersRector` — promotes `field()->rule('accepted')` to typed factory chains.
+- `GroupWildcardRulesToEachRector` — folds wildcard sibling keys into `each(...)`.
+- `PromoteFieldFactoryRector` — rewrites `field()->required()->rule('string')` to `string()->required()`.
+
+Pure-refactor rectors (`Validation*ToFluentRule`, `AddHasFluent*Trait`, `ConvertLivewireRuleAttribute`, `Inline*`, `UpdateRulesReturnTypeDocblock`, `SimplifyFluentRule`) ship with structural coverage only — their transformations don't change which rule class handles validation.
+
+**Authoring a fixture.** Each fixture lives at `tests/Parity/Fixture/<RectorName>/<case>.php` and returns:
+
+```php
+return [
+    'rules_before' => ['field' => 'pre-rector-rule-shape'],
+    'rules_after'  => ['field' => FluentRule::typed()->...],
+    'payloads' => [
+        'descriptive name' => ['field' => 'value-to-test'],
+    ],
+    // optional, only when the divergence is intentional:
+    'allowed_divergences' => [
+        'descriptive name' => [
+            'category'  => DivergenceCategory::ImplicitTypeConstraint,
+            'rationale' => 'free-text explanation that lives next to the divergence',
+        ],
+    ],
+];
+```
+
+The harness runs `Validator::make($payload, $rules_before)` and `Validator::make($payload, $rules_after)`, then diffs the resulting error bags. Outcomes: `MATCH`, `BEFORE_REJECTS_AFTER_PASSES`, `AFTER_REJECTS_BEFORE_PASSES`, `BOTH_REJECT_DIFFERENT_MESSAGES`, `BOTH_REJECT_DIFFERENT_ORDER`, or `SKIPPED` (DB / closure denylist).
+
+**Allowed divergences.** Some transformations legitimately change behavior — e.g. `boolean()->accepted()` rejects `'yes' / 'on'` strings that bare `accepted` accepts because of `boolean()`'s implicit type pre-check. Categorize via `DivergenceCategory` enum:
+
+- `ImplicitTypeConstraint` — typed rule attaches an implicit constraint absent from the pre-rector form.
+- `MessageKeyDrift` — same fail outcome, different underlying message-key path.
+- `AttributeLabelDrift` — same fail, `:attribute` substitution renders differently.
+- `OrderDependentPipeline` — same messages, different per-field order.
+
+The category constrains the allowed runtime outcome; mismatched category fails the test. The free-text rationale lives next to the divergence so future readers see *why* it's acceptable.
+
+**Coverage gate.** `tests/Parity/CoverageTest.php` asserts every in-scope rector has ≥1 fixture. New semantics-changing rectors must extend the in-scope list AND ship at least one fixture before merging.
 
 ## Known limitations
 

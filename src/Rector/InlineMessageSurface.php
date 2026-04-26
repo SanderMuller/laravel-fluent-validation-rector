@@ -31,6 +31,8 @@ use SanderMuller\FluentValidation\Rules\StringRule;
  * The allowlist + factory-to-class map are static (process-lifetime cache);
  * pest's parallel runner isolates at the PHP-process level, so no
  * cross-worker contention.
+ *
+ * @internal
  */
 final class InlineMessageSurface
 {

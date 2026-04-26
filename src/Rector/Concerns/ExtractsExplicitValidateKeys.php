@@ -27,6 +27,8 @@ use SanderMuller\FluentValidation\RuleSet;
  * See spec `livewire-attribute-overlap-config.md` for the accepted-wrapper
  * list and the `unsafe` classification rules.
  *
+ * @internal
+ *
  * @phpstan-require-extends AbstractRector
  */
 trait ExtractsExplicitValidateKeys

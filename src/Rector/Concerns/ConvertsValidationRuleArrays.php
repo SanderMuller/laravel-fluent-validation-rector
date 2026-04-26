@@ -55,6 +55,8 @@ use Rector\Rector\AbstractRector;
  *
  * Entry point: `convertArrayToFluentRule(Array_ $rulesArray): ?Expr`.
  *
+ * @internal
+ *
  * @phpstan-require-extends AbstractRector
  */
 trait ConvertsValidationRuleArrays

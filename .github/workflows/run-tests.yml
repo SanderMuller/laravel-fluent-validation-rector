@@ -32,8 +32,19 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         php: [8.4, 8.3]
         stability: [prefer-lowest, prefer-stable]
+        laravel: ['11.*', '12.*', '13.*']
+        include:
+          - laravel: '11.*'
+            testbench: '^9.0'
+          - laravel: '12.*'
+            testbench: '^10.11'
+          - laravel: '13.*'
+            testbench: '^11.0'
 
-    name: P${{ matrix.php }} - ${{ matrix.stability }} - ${{ matrix.os }}
+    name: P${{ matrix.php }} - L${{ matrix.laravel }} - ${{ matrix.stability }} - ${{ matrix.os }}
+
+    env:
+      CI_LARAVEL_MAJOR: ${{ matrix.laravel }}
 
     steps:
       - name: Checkout code
@@ -51,6 +62,9 @@ jobs:
           echo "::add-matcher::${{ runner.tool_cache }}/php.json"
           echo "::add-matcher::${{ runner.tool_cache }}/phpunit.json"
 
+      - name: Pin Laravel + testbench versions
+        run: composer require --dev "orchestra/testbench:${{ matrix.testbench }}" --no-update --no-interaction
+
       - name: Install dependencies
         run: composer update --${{ matrix.stability }} --prefer-dist --no-interaction
 
@@ -61,8 +75,8 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .cache/phpunit/
-          key: phpunit-cache-${{ matrix.php }}-${{ matrix.stability }}-${{ matrix.os }}-${{ hashFiles('tests/**') }}
-          restore-keys: phpunit-cache-${{ matrix.php }}-${{ matrix.stability }}-${{ matrix.os }}-
+          key: phpunit-cache-${{ matrix.php }}-${{ matrix.laravel }}-${{ matrix.stability }}-${{ matrix.os }}-${{ hashFiles('tests/**') }}
+          restore-keys: phpunit-cache-${{ matrix.php }}-${{ matrix.laravel }}-${{ matrix.stability }}-${{ matrix.os }}-
 
       - name: Execute tests
         run: vendor/bin/pest --ci

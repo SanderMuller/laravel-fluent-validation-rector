@@ -26,6 +26,8 @@ use Rector\Rector\AbstractRector;
  * shared with the `parent::rules()` resolver path and kept on the rector
  * so the two resolvers see the same definitions.
  *
+ * @internal
+ *
  * @phpstan-require-extends AbstractRector
  */
 trait ResolvesVariableSpread

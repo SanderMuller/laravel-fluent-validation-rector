@@ -35,6 +35,8 @@ use ReflectionClass;
  * `update-rules-return-type-docblock-rector.md` for the Codex findings that
  * motivated these additions.
  *
+ * @internal
+ *
  * @phpstan-require-extends AbstractRector
  */
 trait DetectsInheritedTraits

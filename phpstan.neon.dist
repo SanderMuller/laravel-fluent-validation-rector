@@ -11,6 +11,9 @@ parameters:
     paths:
         - src
 
+    featureToggles:
+        internalTag: true
+
     level: max
 
     type_coverage:

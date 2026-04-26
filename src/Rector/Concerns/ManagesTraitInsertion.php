@@ -15,6 +15,8 @@ use Rector\Rector\AbstractRector;
  * Composes with `ManagesNamespaceImports` so consumers that add a class-level
  * trait typically also want the matching top-of-file `use` import.
  *
+ * @internal
+ *
  * @phpstan-require-extends AbstractRector
  */
 trait ManagesTraitInsertion

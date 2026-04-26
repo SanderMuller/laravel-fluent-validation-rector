@@ -29,6 +29,8 @@ use Rector\Rector\AbstractRector;
  * into a `(name, list<Arg>)` tuple. Rule-token argument shapes (single int,
  * comma-separated values, regex pattern verbatim) live here too.
  *
+ * @internal
+ *
  * @phpstan-require-extends AbstractRector
  */
 trait ParsesRulePayloads

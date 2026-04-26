@@ -66,6 +66,8 @@ use SanderMuller\FluentValidation\FluentRules;
  * validation-trait users / Livewire components / `#[FluentRules]`-
  * marked classes get the shape check.
  *
+ * @internal
+ *
  * @phpstan-require-extends AbstractRector
  */
 trait DetectsRulesShapedMethods

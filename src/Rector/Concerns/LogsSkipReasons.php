@@ -61,6 +61,8 @@ use SanderMuller\FluentValidationRector\Diagnostics;
  * adds complexity for no observed demand. Documented here so future
  * debugging finds the explanation quickly.
  *
+ * @internal
+ *
  * @phpstan-require-extends AbstractRector
  */
 trait LogsSkipReasons

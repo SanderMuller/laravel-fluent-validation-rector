@@ -48,6 +48,8 @@ use SanderMuller\FluentValidation\HasFluentValidationForFilament;
  * `anyAncestorExtends` + `currentOrAncestorUsesTrait`) and
  * `IdentifiesLivewireClasses` (provides `isLivewireClass`).
  *
+ * @internal
+ *
  * @phpstan-require-extends AbstractRector
  */
 trait QualifiesForRulesProcessing

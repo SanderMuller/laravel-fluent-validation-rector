@@ -30,6 +30,8 @@ use Rector\Rector\AbstractRector;
  *   itself would throw on an unknown arg at attribute parse time; the
  *   rector flags it so the user knows which attribute to fix.
  *
+ * @internal
+ *
  * @phpstan-require-extends AbstractRector
  */
 trait ReportsLivewireAttributeArgs

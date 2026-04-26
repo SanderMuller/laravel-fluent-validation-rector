@@ -24,6 +24,8 @@ use Rector\Rector\AbstractRector;
  * rectors that need the same closure-body invariant. Extraction also keeps
  * the consuming rector's class cognitive complexity under threshold.
  *
+ * @internal
+ *
  * @phpstan-require-extends AbstractRector
  */
 trait WalksConditionableProxies

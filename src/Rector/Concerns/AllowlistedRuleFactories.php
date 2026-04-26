@@ -43,6 +43,8 @@ use Rector\Rector\AbstractRector;
  *     `App\*\Rule` or a second exact entry for that. Zero-depth collapse is
  *     deferred; open a ROADMAP entry if needed.
  *
+ * @internal
+ *
  * @phpstan-require-extends AbstractRector
  */
 trait AllowlistedRuleFactories

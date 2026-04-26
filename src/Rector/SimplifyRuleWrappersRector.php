@@ -117,6 +117,8 @@ final class SimplifyRuleWrappersRector extends AbstractRector implements Configu
      * Public so `PromoteFieldFactoryRector` can reason about which typed
      * builders are compatible with a given rule-method without duplicating
      * the table.
+     *
+     * @internal
      */
     public const array V1_REWRITE_TARGETS = [
         'in', 'notIn', 'min', 'max', 'between', 'regex', 'exactly',
@@ -157,6 +159,8 @@ final class SimplifyRuleWrappersRector extends AbstractRector implements Configu
      * a literal zero — gating happens in the per-family parsing branch
      * because the AST literal is built before the rule-name-to-method
      * resolution runs.
+     *
+     * @internal
      */
     public const array RULE_NAME_TO_METHOD = [
         'in' => 'in',

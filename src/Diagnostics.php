@@ -30,6 +30,8 @@ use OutOfBoundsException;
  * that inherit OS-level env — setting `$_SERVER`/`$_ENV` in the parent
  * doesn't cross the process boundary. Shell-exported env inherits to
  * workers automatically; in-process mutation does not.
+ *
+ * @internal
  */
 final class Diagnostics
 {

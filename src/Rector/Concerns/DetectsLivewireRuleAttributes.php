@@ -15,6 +15,8 @@ use Rector\Rector\AbstractRector;
  * Livewire aliases `#[Rule]` historically but deprecated it in favour of
  * `#[Validate]` — the rector supports both.
  *
+ * @internal
+ *
  * @phpstan-require-extends AbstractRector
  */
 trait DetectsLivewireRuleAttributes

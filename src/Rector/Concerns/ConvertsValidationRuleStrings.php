@@ -80,6 +80,8 @@ use UnexpectedValueException;
  * only runs once per worker, only when layers 1 and 2 miss, and only when the
  * current file is actually a conversion candidate. In practice the scan
  * completes in sub-second time for typical Laravel apps.
+ *
+ * @internal
  */
 trait ConvertsValidationRuleStrings
 {

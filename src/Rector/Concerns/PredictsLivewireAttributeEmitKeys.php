@@ -26,6 +26,8 @@ use Rector\Rector\AbstractRector;
  *   - `isLivewireRuleAttribute(Attribute): bool` from `DetectsLivewireRuleAttributes`
  *   - `isKeyedArrayAttribute(Array_): bool` from `ExpandsKeyedAttributeArrays`
  *
+ * @internal
+ *
  * @phpstan-require-extends AbstractRector
  */
 trait PredictsLivewireAttributeEmitKeys

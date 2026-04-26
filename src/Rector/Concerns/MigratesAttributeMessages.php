@@ -39,6 +39,8 @@ use Rector\Rector\AbstractRector;
  * fire — preserving legacy behavior for consumers who centralize
  * messages in lang files.
  *
+ * @internal
+ *
  * @phpstan-require-extends AbstractRector
  */
 trait MigratesAttributeMessages

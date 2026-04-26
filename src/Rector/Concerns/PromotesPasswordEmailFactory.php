@@ -29,6 +29,8 @@ use WeakMap;
  * within threshold. Runtime semantics and safety gates are unchanged — see
  * `specs/password-email-factory-promotion.md` for the design.
  *
+ * @internal
+ *
  * @phpstan-require-extends AbstractRector
  */
 trait PromotesPasswordEmailFactory

@@ -17,6 +17,8 @@ use ReflectionClass;
  * because consumers occasionally alias Filament traits via composer autoload
  * or their own wrapper packages.
  *
+ * @internal
+ *
  * @phpstan-require-extends AbstractRector
  */
 trait DetectsFilamentForms

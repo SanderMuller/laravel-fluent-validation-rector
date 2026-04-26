@@ -31,6 +31,8 @@ use SanderMuller\FluentValidation\HasFluentValidationForFilament;
  * Falls back to false on reflection failure so the guarded rector can still
  * run when the consumer's autoloader doesn't know about the parent class.
  *
+ * @internal
+ *
  * @phpstan-require-extends AbstractRector
  */
 trait IdentifiesLivewireClasses

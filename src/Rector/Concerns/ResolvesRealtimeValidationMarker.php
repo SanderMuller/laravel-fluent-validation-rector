@@ -24,6 +24,8 @@ use Rector\Rector\AbstractRector;
  * Host rector must expose a `preserveRealtimeValidation` bool property that
  * this trait reads via the `shouldPreserveRealtimeValidation()` accessor.
  *
+ * @internal
+ *
  * @phpstan-require-extends AbstractRector
  */
 trait ResolvesRealtimeValidationMarker

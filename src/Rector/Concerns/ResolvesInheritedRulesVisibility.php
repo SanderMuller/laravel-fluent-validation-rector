@@ -31,6 +31,8 @@ use ReflectionClass;
  * to `MODIFIER_PROTECTED`; the covariance check at actual class-load time
  * would surface any real conflict.
  *
+ * @internal
+ *
  * @phpstan-require-extends AbstractRector
  */
 trait ResolvesInheritedRulesVisibility

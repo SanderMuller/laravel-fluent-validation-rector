@@ -30,6 +30,8 @@ use Rector\Rector\AbstractRector;
  * / `attribute: [key => label]`) applies per-entry to keyed-first-arg
  * expansions via `extractKeyedLabels()` + `applyKeyedLabels()`.
  *
+ * @internal
+ *
  * @phpstan-require-extends AbstractRector
  */
 trait ExtractsLivewireAttributeLabels

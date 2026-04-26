@@ -18,6 +18,8 @@ use PhpParser\Node\UseItem;
  * UseAddingPostRector prepends new imports to the top of the use block
  * regardless of existing alphabetical order. See ROADMAP.md and the Finding A
  * entry in the 0.2.0 release notes for context.
+ *
+ * @internal
  */
 trait ManagesNamespaceImports
 {

@@ -27,6 +27,8 @@ use Rector\Rector\AbstractRector;
  *   expanded in Phase 1; deferred to Phase 3 of the spec.
  * - `firstPropertyName(Property): string` — for skip-log messages.
  *
+ * @internal
+ *
  * @phpstan-require-extends AbstractRector
  */
 trait ExpandsKeyedAttributeArrays

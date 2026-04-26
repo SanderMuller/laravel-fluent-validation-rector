@@ -24,6 +24,8 @@ namespace SanderMuller\FluentValidationRector;
  * `--identifier` CLI arg — workers are spawned with `--identifier <uuid>`,
  * the parent is not. Parent-process emit sidesteps the `withParallel()`
  * STDERR-swallow problem that motivated the file sink in 0.4.2.
+ *
+ * @internal
  */
 final class RunSummary
 {
