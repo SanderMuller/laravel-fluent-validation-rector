@@ -2,6 +2,179 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 0.15.0 - 2026-04-26
+
+### Public API enumeration
+
+[`PUBLIC_API.md`](PUBLIC_API.md) is now the source of truth for what's
+semver-governed. It enumerates:
+
+- All 12 rector class FQNs (renames break `withRule(...)` /
+  `withConfiguredRule(...)` registrations).
+- All 6 `FluentValidationSetList` constants.
+- All 10 rector configuration constant *names AND string values* — both
+  forms are committed (constant symbol + literal wire-key string).
+- The `FLUENT_VALIDATION_RECTOR_VERBOSE` env var name + accepted values.
+- Both skip-log file paths (verbose-on `<cwd>/.cache/...`, verbose-off
+  hashed temp path).
+- The skip-log line format and per-run header shape.
+- The trait FQNs the trait-add rectors insert.
+
+The README's new [Versioning policy](README.md#versioning-policy) section
+documents which changes belong to MAJOR / MINOR / PATCH bumps, including
+the explicit commitment that PATCH-level rector changes must not introduce
+parity violations.
+
+### `@internal` boundary
+
+`SanderMuller\FluentValidationRector\Diagnostics` and
+`SanderMuller\FluentValidationRector\RunSummary` were never on the public
+API surface — they're internal helpers used by the rectors to emit
+skip-log diagnostics. 0.15.0 makes that status unambiguous via class-level
+`@internal` PHPDoc tags, which static analyzers (PHPStan strict mode,
+intelephense) emit warnings for on consumer references.
+
+If your code references `Diagnostics::*` or `RunSummary::*` symbols
+directly, switch to the public commitments instead:
+
+- `FLUENT_VALIDATION_RECTOR_VERBOSE` env var to control verbosity
+- The documented skip-log paths to read diagnostic output
+- The skip-log line format to grep / parse entries
+
+These are the contracts that survive across versions. The class symbols
+may move or change without notice.
+
+**Namespace move deferred.** The originally-planned move to a
+`SanderMuller\FluentValidationRector\Internal\` namespace is deferred to
+1.0. A reproducer confirmed Composer's `--classmap-authoritative` mode
+fatals on the moved FQN with a stale optimized classmap — common in
+production deploy pipelines and Docker images. Requiring consumers to
+run `composer dump-autoload` on a minor bump is too disruptive; the
+namespace move waits for the 1.0 major-bump where the action is
+acceptable.
+
+### Validation parity harness
+
+A new harness under `tests/Parity/` runs Laravel's validator over the
+**pre-rector** rule shape and the **post-rector** rule shape with the
+same payload, then diffs the resulting error bags. Catches the failure
+mode the rector's own functional tests can't see: structural correctness
+≠ behavioral equivalence. Same pass/fail outcome can mask different
+`:attribute` substitution, different message-key paths, or different
+error ordering — all user-visible regressions.
+
+**Scope: 3 in-scope rectors** that change which rule class handles
+validation:
+
+- `SimplifyRuleWrappersRector` — escape-hatch `->rule('accepted')` →
+  typed `->accepted()` calls.
+- `GroupWildcardRulesToEachRector` — wildcard sibling-key fold into
+  `each(...)`.
+- `PromoteFieldFactoryRector` — `field()->required()->rule(X)` →
+  `X()->required()` typed factory promotion.
+
+Pure-refactor rectors (string→fluent, array→fluent, trait-add,
+docblock-only, Livewire attribute conversion) ship with structural
+coverage only — their transformations don't change which rule class
+handles validation, so structural equivalence is sufficient.
+
+**14 fixtures shipped** covering documented full-match cases plus the
+documented divergences (e.g. `boolean()->accepted()` rejects `'yes' / 'on'`
+strings that bare `accepted` accepts — categorized as
+`ImplicitTypeConstraint`, narrowed to allow only the after-rejects
+direction so a future regression making a rule MORE permissive doesn't
+slot in silently).
+
+**Coverage gate** asserts every in-scope rector ships ≥1 parity fixture;
+adding a new semantics-changing rector must extend the in-scope list and
+ship at least one fixture.
+
+See the new [README §Parity](README.md#parity) section for fixture
+authoring + `DivergenceCategory` enum semantics.
+
+### Cross-Laravel-version CI matrix
+
+The CI matrix now exercises Laravel 11.x / 12.x / 13.x explicitly, each
+leg pinning the matching `orchestra/testbench` major (9.x / 10.x / 11.x).
+Combined with the existing PHP 8.3/8.4 × ubuntu/windows ×
+prefer-lowest/prefer-stable axes, every push runs against 24 cells.
+
+`composer.json`'s `orchestra/testbench` constraint widened to
+`^9.0||^10.11||^11.0` so a clean `composer install` in any leg resolves.
+
+`tests/CIMatrixSanityTest.php` enforces matrix-leg drift detection: each
+CI cell asserts the resolved `laravel/framework` major matches the
+`CI_LARAVEL_MAJOR` env var the matrix sets, catching the failure mode
+where a future change accidentally pins all legs to the same major.
+
+The README's `## Compatibility` section flips from "honest framing" to
+the full-matrix table that now matches CI reality.
+
+### Drift-detection tests
+
+Three new reflection-driven tests guard the boundary going forward:
+
+- **`InternalAuditTest`** asserts every class under `src/` is either on
+  the documented public list or carries a class-level `@internal`
+  PHPDoc tag. Catches the failure mode where someone adds a new
+  internal helper class and forgets the tag.
+- **`PublicApiSurfaceTest`** runs three audits against `PUBLIC_API.md`:
+  1. Every `public const` on a public class is documented.
+  2. Every literal `$configuration[<key>]` access in a configurable
+     rector references a documented wire key (PHP-Parser AST walk).
+  3. Every documented constant's runtime value matches its documented
+     wire-key string (lockstep-rename guard).
+  
+- **`ParityHarnessTest`** + **`DivergenceCategoryTest`** + the
+  fixture-driven `ParityTest` cover the parity harness itself: outcome
+  classification, denylists (DB rules, closures), locale pinning,
+  divergence-category invariants, and per-fixture stale-entry
+  detection.
+
+All run under the standard `vendor/bin/pest` invocation. New constants,
+wire keys, internal classes, or rector behavior shifts without the
+matching documentation / fixture / category fail CI.
+
+### Governance scaffolding
+
+- `CONTRIBUTING.md` — local setup, workflow, commit-message style,
+  public API discipline.
+- `SECURITY.md` — vulnerability reporting (GitHub Security Advisories
+  preferred), supported version window.
+- `.github/ISSUE_TEMPLATE/bug_report.md` — package version, PHP
+  version, Laravel version, rector config snippet, expected vs actual
+  output, minimal reproduction.
+- `.github/ISSUE_TEMPLATE/feature_request.md` — use case, proposed API
+  shape, alternatives.
+- `.github/PULL_REQUEST_TEMPLATE.md` — checklist with semver impact +
+  PUBLIC_API.md update prompts.
+
+### PHPStan `@internal` enforcement
+
+`phpstan.neon.dist` now explicitly pins
+`featureToggles.internalTag: true`. PHPStan was already enforcing it via
+bleeding-edge defaults; the explicit pin survives default churn between
+PHPStan releases.
+
+### Lesson from 0.14.1's `Diagnostics::VERBOSE_LOG_FILENAME` change
+
+That constant value changed silently. The lesson is *not* that
+`Diagnostics` symbols should be frozen going forward — they're internal
+and should remain free to evolve. The lesson is that the *observable
+behavior* (the on-disk filename consumers grep for, the env var they
+set, the line format they parse) is the public commitment. Code symbols
+are implementation; behavior is API. 0.15.0 freezes the behavioral
+surface and explicitly internalizes the implementation, so future
+symbol-value changes don't masquerade as breaking changes.
+
+### No code-output changes
+
+This release ships no rector behavior changes. The 12 rectors emit the
+same code as 0.14.1. All boundary work is via PHPDoc tags + tests +
+documentation; no class moves, no symbol renames, no behavior shifts.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/0.14.1...0.15.0
+
 ## 0.14.1 - 2026-04-26
 
 ### What's fixed
@@ -68,6 +241,7 @@ non-FormRequest plain class) plus 5 positive-confirming Livewire surfaces
    # verbose tier: actionable
    
    [fluent-validation:skip] ...
+   
    
    ```
    Lets consumers attribute skip-log diff shapes to specific releases
@@ -154,6 +328,7 @@ non-FormRequest plain class) plus 5 positive-confirming Livewire surfaces
    }
    
    
+   
    ```
 
 #### Class-qualification gate (shared)
@@ -203,6 +378,7 @@ FLUENT_VALIDATION_RECTOR_VERBOSE=actionable vendor/bin/rector process --clear-ca
 
 
 
+
 ```
 You'll now see entries like these for shapes the rector deliberately leaves alone:
 
@@ -221,6 +397,7 @@ You'll now see entries like these for shapes the rector deliberately leaves alon
 
 [fluent-validation:skip] GroupWildcardRulesToEachRector App\Http\Requests\DynamicKeyRequest:
   concat key too complex to parse for grouping — only static class-constant prefixes (e.g. self::FOO) followed by a dotted-string suffix are supported
+
 
 
 
@@ -255,11 +432,13 @@ SimplifyRuleWrappersRector App\Foo\CreateNewUser: accepted() not on FieldRule
 
 
 
+
 ```
 **After** (0.13.2):
 
 ```
 SimplifyRuleWrappersRector App\Foo\CreateNewUser: accepted() not on FieldRule — auto-promotion to FluentRule::boolean() blocked because boolean's implicit constraint rejects 'yes'/'on'/'true' which the accepted Laravel rule permits. Keep the field()->rule('accepted') escape hatch, OR use FluentRule::boolean()->accepted() explicitly if your form submits only 1/true/"1".
+
 
 
 
@@ -367,6 +546,7 @@ The bare skip line read like a rector bug. The same skip now includes candidate 
 
 
 
+
 ```
 ### Internal: complexity reductions
 
@@ -406,11 +586,13 @@ FluentRule::field()->rule('max:61')->rule('regex:/^[a-z]+$/');
 
 
 
+
 ```
 After the promotion + the next `SimplifyRuleWrappersRector` pass:
 
 ```php
 FluentRule::string()->max(61)->regex('/^[a-z]+$/');
+
 
 
 
@@ -440,6 +622,7 @@ The verbose-only `"rule payload not statically resolvable to a v1 shape"` skip l
 [fluent-validation:skip] SimplifyRuleWrappersRector App\Requests\Foo (rules): rule payload not statically resolvable to a v1 shape: StaticCall Password::default()
 [fluent-validation:skip] SimplifyRuleWrappersRector App\Requests\Bar (rules): rule payload not statically resolvable to a v1 shape: New_ App\Validation\CustomRule(…)
 [fluent-validation:skip] SimplifyRuleWrappersRector App\Requests\Baz (rules): rule payload not statically resolvable to a v1 shape: MethodCall …->withoutTrashed()
+
 
 
 
@@ -497,6 +680,7 @@ Livewire component has rules() but no FluentRule usage — convert string rules 
 
 
 
+
 ```
 ### `->rule(['required_array_keys', ...])` lowers to `->requiredArrayKeys(...)`
 
@@ -517,11 +701,13 @@ FluentRule::array()->requiredArrayKeys('id', 'slug')
 
 
 
+
 ```
 ### Opt back into verbose skip logging
 
 ```bash
 FLUENT_VALIDATION_RECTOR_VERBOSE=1 vendor/bin/rector process --clear-cache
+
 
 
 
@@ -562,6 +748,7 @@ Every silenced category in this release is restored. Useful when debugging why a
 
 
 
+
 ```
 Applied only to the fluent-method lowering (`['max', $x]` → `->max($x)`) and `->rule([...])` escape-hatch paths. COMMA_SEPARATED conditional rules (`requiredIf`, `excludeUnless`, …) keep the strict whitelist — their fluent signatures are overloaded (`Closure|bool|string $field`), so a dynamic expression that evaluated to a closure/bool at runtime would silently switch between field-comparison and closure/bool branches. Such tuples fall through to `->rule([...])` instead of `->requiredIf(...)`:
 
@@ -574,6 +761,7 @@ Applied only to the fluent-method lowering (`['max', $x]` → `->max($x)`) and `
 
 // After (escape hatch preserves array-form runtime semantics)
 'role' => FluentRule::string()->rule(['required_if', 'type', $this->roleResolver()]),
+
 
 
 
@@ -604,6 +792,7 @@ FluentRule::string()->rule(['required_if', 'subtitleSource', SubtitleSource::Pas
 
 // After
 FluentRule::string()->requiredIf('subtitleSource', SubtitleSource::Paste->value)
+
 
 
 
@@ -656,6 +845,7 @@ Tuple args written as explicit `PropertyFetch` on a `ClassConstFetch` (the Backe
 
 
 
+
 ```
 The match is narrow — only `->value` on a `ClassConstFetch` qualifies. Dynamic property names (`->$var`) and unrelated property fetches (`->name`, `->items`) still bail.
 
@@ -680,6 +870,7 @@ In-tuple variadic spread (`...Enum::list()`, `...$values`) is now preserved when
     ->bail()
     ->requiredUnless('type', ...InteractionType::getValuesWithoutDuration())
     ->rule(new DoesNotExceedVideoDurationRule($this->video())),
+
 
 
 
@@ -722,6 +913,7 @@ FluentRule::email(message: 'Bad email.')->required();
 
 
 
+
 ```
 Non-adjacent cases (`->email()->required()->message('x')`) stay chained — `->required()` mutates `$lastConstraint`, so the message binds to `'required'`, not `'email'`. Conditionable hops (`->when()` / `->unless()` / `->whenInput()`) reject the collapse for the same reason.
 
@@ -745,6 +937,7 @@ FluentRule::string()->min(3, message: 'Too short.');
 
 
 
+
 ```
 Emitted-key derivation: snake_case of the method name by default, with a hardcoded override table for the ≠ snake_case cases (`exactly` → `size`, `greaterThan` → `gt`, `alphaNumeric` → `alpha_num`, the `DateRule` wrapper aliases like `beforeToday` → `before`, etc.). Source: reading `addRule()` call sites in the vendor tree + peer handoff.
 
@@ -756,6 +949,7 @@ FluentRule::string()->rule(new In(['admin', 'user']))->messageFor('in', 'Pick a 
 
 // After
 FluentRule::string()->rule(new In(['admin', 'user']), message: 'Pick a valid role.');
+
 
 
 
@@ -848,6 +1042,7 @@ return RectorConfig::configure()
     ->withConfiguredRule(ConvertLivewireRuleAttributeRector::class, [
         ConvertLivewireRuleAttributeRector::MIGRATE_MESSAGES => true,
     ]);
+
 
 
 
@@ -983,6 +1178,7 @@ return RectorConfig::configure()
 
 
 
+
 ```
 #### What qualifies
 
@@ -1097,6 +1293,7 @@ protected function rules(): array
 
 
 
+
 ```
 Same for `new Unique(...)` → `->unique(...)` and `new Exists(...)` → `->exists(...)` against `Illuminate\Validation\Rules\Unique` / `Exists` (matching the existing `Rule::unique(...)` / `Rule::exists(...)` conversion).
 
@@ -1106,6 +1303,7 @@ Same for `new Unique(...)` → `->unique(...)` and `new Exists(...)` → `->exis
 // FormRequest::rules() — unchanged
 'password' => ['required', new Password(8)],
 // → FluentRule::field()->required()->rule(new Password(8))
+
 
 
 
@@ -1186,6 +1384,7 @@ protected function rules(): array
 
 
 
+
 ```
 Same shape for `new Unique(...)` and `new Exists(...)` against `Illuminate\Validation\Rules\Unique` / `Exists`, lowered to `->unique(...)` / `->exists(...)` chain methods (matching the existing `Rule::unique(...)` conversion).
 
@@ -1211,6 +1410,7 @@ Default runs still count skips and the end-of-run summary reports the total, but
 
 ```
 [fluent-validation] 42 skip entries. Re-run with FLUENT_VALIDATION_RECTOR_VERBOSE=1 and --clear-cache for details.
+
 
 
 
@@ -1258,11 +1458,13 @@ FLUENT_VALIDATION_RECTOR_VERBOSE=1 vendor/bin/rector process --clear-cache
 
 
 
+
 ```
 Env-only is deliberate — the flag has to reach parallel workers (fresh PHP processes spawned via `proc_open`) and shell-exported env inherits automatically, while in-process mutation would not. With verbose on, the log lands in the project root as before and the summary references it:
 
 ```
 [fluent-validation] 42 skip entries written to .rector-fluent-validation-skips.log — see for details
+
 
 
 
@@ -1334,6 +1536,7 @@ public function rules(): array
 
 
 
+
 ```
 Flat `.*` entries pass through `GroupWildcardRulesToEachRector` downstream for nested `->each(...)` folding. Fails closed on unconvertible values, numeric-string keys, and mixed keyed/positional shapes with a skip-log entry.
 
@@ -1369,6 +1572,7 @@ protected function rules(): array { /* ... */ }
 
 
 
+
 ```
 Deprecated `#[Rule]` (not `#[Validate]`) strips cleanly without a marker — the rector's scope is FluentRule migration, not the `#[Rule]` → `#[Validate]` upgrade. `#[Validate(onUpdate: false)]` also strips cleanly; if any `#[Validate]` on the property opts out of real-time, the marker is suppressed (aggregate veto, not first-wins).
 
@@ -1378,6 +1582,7 @@ Deprecated `#[Rule]` (not `#[Validate]`) strips cleanly without a marker — the
 ConvertLivewireRuleAttributeRector::class => [
     ConvertLivewireRuleAttributeRector::PRESERVE_REALTIME_VALIDATION => false,
 ]
+
 
 
 
@@ -1462,6 +1667,7 @@ Four rectors now normalize the annotation: `ConvertLivewireRuleAttributeRector` 
 
 
 
+
 ```
 This matches the annotation fresh-emitted on newly-generated `rules()` methods, so every `rules()` method this package touches now carries the same `@return` shape.
 
@@ -1503,6 +1709,7 @@ Four rectors now normalize the annotation: `ConvertLivewireRuleAttributeRector` 
 
 ```
 @return array<string, ValidationRule|string|array<mixed>>
+
 
 
 
@@ -1601,6 +1808,7 @@ use InteractsWithForms;
 
 
 
+
 ```
 `getMessages` is intentionally absent from the block — the trait defines it but Filament does not, so no collision to resolve.
 
@@ -1646,6 +1854,7 @@ vendor/bin/fluent-validation-migrate
 
 # custom paths
 vendor/bin/fluent-validation-migrate app/ src/Livewire/
+
 
 
 
@@ -1764,6 +1973,7 @@ protected function rules(): array { /* … */ }
 
 
 
+
 ```
 The annotation imports `Illuminate\Contracts\Validation\ValidationRule` via Rector's import-names pass (the same pass that handles `FluentRule` imports), so the pre-Pint output has a proper `use` statement + short-name reference.
 
@@ -1800,6 +2010,7 @@ Updated 10 fixtures under `tests/ConvertLivewireRuleAttribute/Fixture/` to match
  * @return array<string, FluentRule|string|array<string, mixed>>
  */
 protected function rules(): array { /* … */ }
+
 
 
 
@@ -1939,6 +2150,7 @@ class MyComponent extends Component {
 
 
 
+
 ```
 Removed from `GroupWildcardRulesToEachRector`:
 
@@ -2003,6 +2215,7 @@ Users running Rector on codebases with heavy trait-hoisting (abstract bases that
 
 ```
 [fluent-validation] 42 skip entries written to .rector-fluent-validation-skips.log — see for details
+
 
 
 
@@ -2147,6 +2360,7 @@ class MyRequest {
 
 
 
+
 ```
 Pint's `ordered_traits` continues to resort if a consumer's existing trait list wasn't already alphabetical, but on well-ordered class bodies Pint is typically a no-op now.
 
@@ -2211,6 +2425,7 @@ protected function rules(): array
         'email' => FluentRule::email()->nullable(),
     ];
 }
+
 
 
 
@@ -2422,6 +2637,7 @@ protected function rules(): array
 
 
 
+
 ```
 The union accurately describes what the generated array contains:
 
@@ -2479,6 +2695,7 @@ public string $description = '';
 #[Validate('min:1')]
 public int $count = 0;
 // → 'count' => FluentRule::integer()->min(1)
+
 
 
 
@@ -2617,6 +2834,7 @@ public int $count = 0;
 
 
 
+
 ```
 Maps:
 
@@ -2668,6 +2886,7 @@ final class Settings extends Component
         ];
     }
 }
+
 
 
 
@@ -2829,6 +3048,7 @@ Mirrors the 0.3.0 fix on `GroupWildcardRulesToEachRector`. Now every rector in t
 
 
 
+
 ```
 Reported by hihaho (gap note during 0.3.0 re-verification) and collectiq (Nit A).
 
@@ -2904,6 +3124,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 #### Flat wildcard `'items.*'` entries fold into parent `->each(<scalar>)`
 
@@ -2917,6 +3138,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
@@ -3050,6 +3272,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 Reported from a run against the hihaho codebase (20+ files).
 
@@ -3065,6 +3288,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
