@@ -63,13 +63,16 @@ final class DiagnosticsTest extends TestCase
         $this->assertStringNotContainsString(Diagnostics::VERBOSE_LOG_FILENAME, $path);
     }
 
-    public function testVerboseModePathInCwd(): void
+    public function testVerboseModePathInCacheSubdirOfCwd(): void
     {
         putenv(Diagnostics::VERBOSE_ENV . '=1');
 
         $cwd = getcwd();
         $this->assertNotFalse($cwd);
-        $this->assertSame($cwd . '/' . Diagnostics::VERBOSE_LOG_FILENAME, Diagnostics::skipLogPath());
+        $this->assertSame(
+            $cwd . '/' . Diagnostics::VERBOSE_LOG_DIR . '/' . Diagnostics::VERBOSE_LOG_FILENAME,
+            Diagnostics::skipLogPath(),
+        );
     }
 
     public function testSentinelSitsBesideLog(): void
@@ -126,12 +129,15 @@ final class DiagnosticsTest extends TestCase
         $this->assertSame(Diagnostics::TIER_ALL, Diagnostics::verbosityTier());
     }
 
-    public function testActionableTierUsesCwdLogPath(): void
+    public function testActionableTierUsesCacheSubdirLogPath(): void
     {
         putenv(Diagnostics::VERBOSE_ENV . '=actionable');
 
         $cwd = getcwd();
         $this->assertNotFalse($cwd);
-        $this->assertSame($cwd . '/' . Diagnostics::VERBOSE_LOG_FILENAME, Diagnostics::skipLogPath());
+        $this->assertSame(
+            $cwd . '/' . Diagnostics::VERBOSE_LOG_DIR . '/' . Diagnostics::VERBOSE_LOG_FILENAME,
+            Diagnostics::skipLogPath(),
+        );
     }
 }

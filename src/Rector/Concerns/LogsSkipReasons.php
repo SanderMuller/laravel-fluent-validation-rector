@@ -226,7 +226,14 @@ trait LogsSkipReasons
             $existing = $existing === false ? '' : trim($existing);
 
             if (self::isSessionStale($existing, $sessionMarker, $sentinelPath)) {
-                @file_put_contents($logPath, '', LOCK_EX);
+                // Write the per-run header at truncation time. Header
+                // includes package version + ISO-8601 UTC timestamp +
+                // verbose tier (GH #4). Always-emit on zero-entry runs
+                // is achieved by ensuring this write happens on first
+                // entry — and for zero-entry verbose runs by RunSummary's
+                // shutdown closure, which calls into here when the log
+                // file doesn't exist yet.
+                @file_put_contents($logPath, Diagnostics::skipLogHeader(), LOCK_EX);
 
                 ftruncate($handle, 0);
                 rewind($handle);

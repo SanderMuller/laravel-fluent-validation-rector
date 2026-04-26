@@ -32,7 +32,29 @@ final class Diagnostics
 {
     public const VERBOSE_ENV = 'FLUENT_VALIDATION_RECTOR_VERBOSE';
 
-    public const VERBOSE_LOG_FILENAME = '.rector-fluent-validation-skips.log';
+    /**
+     * Filename written under the verbose log directory. Kept stable
+     * across the .cache/ relocation so consumers grepping for the file
+     * still find it.
+     */
+    public const VERBOSE_LOG_FILENAME = 'rector-fluent-validation-skips.log';
+
+    /**
+     * Subdirectory under the project root where the verbose log lands.
+     * Most projects already gitignore `.cache/` (Rector itself
+     * recommends it as the default cache directory), so writing the log
+     * there avoids the gitignore footgun GH #3 reported. Auto-created
+     * by `verboseLogPath()` if missing; falls back to cwd root if the
+     * subdirectory can't be created (read-only mount, etc.).
+     */
+    public const VERBOSE_LOG_DIR = '.cache';
+
+    /**
+     * Legacy filename — used by `allSkipLogArtifacts()` so the cleanup
+     * sweep still removes pre-0.14.1 cwd-root logs that consumers may
+     * have inherited. Not written to by anything in 0.14.1+.
+     */
+    public const LEGACY_VERBOSE_LOG_FILENAME = '.rector-fluent-validation-skips.log';
 
     /**
      * Default tier — only always-on (non-`verboseOnly`) entries surface.
@@ -101,17 +123,42 @@ final class Diagnostics
     }
 
     /**
-     * Verbose mode's path: cwd. Exposed independently of
-     * `isVerbose()` so cleanup code can always target it (upgrade
-     * scenarios + mode toggles leave stale cwd files that the current-mode
-     * `skipLogPath()` would skip).
+     * Verbose mode's path: `<cwd>/.cache/<filename>`. Auto-creates the
+     * `.cache/` subdir if missing; falls back to cwd root if the
+     * subdir can't be created (read-only mount, restrictive perms).
+     * Exposed independently of `isVerbose()` so cleanup code can always
+     * target it (upgrade scenarios + mode toggles leave stale files
+     * that the current-mode `skipLogPath()` would skip).
      */
     public static function verboseLogPath(): string
     {
         $cwd = getcwd();
         $base = $cwd === false ? sys_get_temp_dir() : $cwd;
+        $cacheDir = $base . '/' . self::VERBOSE_LOG_DIR;
 
-        return $base . '/' . self::VERBOSE_LOG_FILENAME;
+        if (! is_dir($cacheDir) && ! @mkdir($cacheDir, 0755, true) && ! is_dir($cacheDir)) {
+            // Fall back to cwd root if .cache/ can't be created.
+            return $base . '/' . self::VERBOSE_LOG_FILENAME;
+        }
+
+        return $cacheDir . '/' . self::VERBOSE_LOG_FILENAME;
+    }
+
+    /**
+     * Path-relative-to-cwd label used in user-facing summary lines.
+     * Falls back to the bare filename when the resolved log path
+     * doesn't sit under cwd (off-mode tmp path, read-only-cwd fallback).
+     */
+    public static function verboseLogDisplayPath(): string
+    {
+        $cwd = getcwd();
+        $logPath = self::verboseLogPath();
+
+        if ($cwd !== false && str_starts_with($logPath, $cwd . '/')) {
+            return substr($logPath, strlen($cwd) + 1);
+        }
+
+        return self::VERBOSE_LOG_FILENAME;
     }
 
     /**
@@ -145,21 +192,101 @@ final class Diagnostics
 
     /**
      * Every path the package may have written at any point in its history
-     * or across mode toggles: both verbose and off-mode logs + their
-     * sentinels. Used by `RunSummary::unlinkLogArtifacts()` so a single
-     * parent-side cleanup sweep clears both upgrade detritus (0.4.x verbose
-     * log in cwd) and mode-toggle residue (old off-mode file in tmp when
-     * user flips to verbose, or vice versa).
+     * or across mode toggles: current verbose path (.cache/), legacy
+     * verbose path (cwd-root, pre-0.14.1), off-mode tmp path, and each
+     * file's `.session` sentinel. Used by `RunSummary::unlinkLogArtifacts()`
+     * so a single parent-side cleanup sweep clears upgrade detritus
+     * (legacy 0.4.x cwd-root log) AND post-0.14.1 .cache/ files AND
+     * mode-toggle residue (old off-mode file in tmp when user flips
+     * to verbose, or vice versa).
      *
      * @return list<string>
      */
     public static function allSkipLogArtifacts(): array
     {
+        $cwd = getcwd();
+        $base = $cwd === false ? sys_get_temp_dir() : $cwd;
+        $legacy = $base . '/' . self::LEGACY_VERBOSE_LOG_FILENAME;
+
         return [
             self::verboseLogPath(),
             self::verboseLogPath() . '.session',
+            $legacy,
+            $legacy . '.session',
             self::quietLogPath(),
             self::quietLogPath() . '.session',
         ];
+    }
+
+    /**
+     * Multi-line header written at the top of the verbose log on
+     * truncation (per-run reset). Includes the package version, ISO-8601
+     * UTC timestamp, and the resolved verbose tier. GH #4 + cross-version
+     * triage signal: lets a downstream consumer's CI diff identify which
+     * release produced a given log shape.
+     *
+     * The package version is read from the package's own composer.json
+     * via `__DIR__/../composer.json`. Falls back to "unknown" if the
+     * file is unreadable (rare — package's own composer.json should
+     * always be present in the installed tree).
+     */
+    public static function skipLogHeader(): string
+    {
+        $version = self::packageVersion();
+        $timestamp = gmdate('Y-m-d\TH:i:s\Z');
+        $tier = self::verbosityTier();
+
+        return sprintf(
+            "# laravel-fluent-validation-rector %s — generated %s\n# verbose tier: %s\n\n",
+            $version,
+            $timestamp,
+            $tier,
+        );
+    }
+
+    /**
+     * Best-effort read of the package version from the bundled
+     * composer.json. Returns "unknown" if unreadable or unparseable.
+     * Used in the skip-log header (GH #4) for cross-release triage.
+     */
+    private static function packageVersion(): string
+    {
+        $composerPath = __DIR__ . '/../composer.json';
+
+        if (! is_file($composerPath)) {
+            return 'unknown';
+        }
+
+        $contents = @file_get_contents($composerPath);
+
+        if ($contents === false) {
+            return 'unknown';
+        }
+
+        $decoded = json_decode($contents, true);
+
+        if (! is_array($decoded)) {
+            return 'unknown';
+        }
+
+        // composer.json may not declare `version` (the recommended
+        // shape — version is derived from git tags). Look for the
+        // `extra.branch-alias.dev-main` if present, else fall through.
+        if (isset($decoded['version']) && is_string($decoded['version'])) {
+            return $decoded['version'];
+        }
+
+        $extra = $decoded['extra'] ?? null;
+
+        if (is_array($extra) && isset($extra['branch-alias']) && is_array($extra['branch-alias'])) {
+            $aliases = $extra['branch-alias'];
+            $aliasValue = $aliases['dev-main'] ?? reset($aliases);
+
+            if (is_string($aliasValue)) {
+                return $aliasValue . '-dev';
+            }
+        }
+
+        return 'unknown';
     }
 }

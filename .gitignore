@@ -33,3 +33,7 @@ PEER_FEEDBACK.md
 # per-run log truncation across parallel workers.
 .rector-fluent-validation-skips.log
 .rector-fluent-validation-skips.log.session
+
+# Dogfood regression baselines from peer instances — saved here so
+# they're reachable from the worktree but kept out of git history.
+.dogfood-baselines/

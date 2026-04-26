@@ -58,6 +58,15 @@ final class RunSummaryTest extends TestCase
 
         chdir($this->originalCwd);
 
+        // 0.14.1: verbose mode auto-creates `.cache/` under cwd. Per-test
+        // tempDir must be cleaned recursively so rmdir doesn't trip on
+        // a non-empty .cache subdir.
+        $cacheDir = $this->tempDir . '/' . Diagnostics::VERBOSE_LOG_DIR;
+
+        if (is_dir($cacheDir)) {
+            @rmdir($cacheDir);
+        }
+
         if (is_dir($this->tempDir)) {
             rmdir($this->tempDir);
         }
@@ -141,9 +150,9 @@ final class RunSummaryTest extends TestCase
 
         $logPath = Diagnostics::skipLogPath();
         $this->assertSame(
-            getcwd() . '/' . Diagnostics::VERBOSE_LOG_FILENAME,
+            getcwd() . '/' . Diagnostics::VERBOSE_LOG_DIR . '/' . Diagnostics::VERBOSE_LOG_FILENAME,
             $logPath,
-            'Actionable tier must surface the log in cwd, like verbose mode.',
+            'Actionable tier must surface the log under the .cache/ subdir of cwd.',
         );
 
         file_put_contents($logPath, "[fluent-validation:skip] actionable entry\n");
@@ -266,7 +275,7 @@ final class RunSummaryTest extends TestCase
         // project root (or toggles verbose off after a verbose run). The
         // cleanup must reach the cwd artifact even though current mode is
         // off (skipLogPath points to /tmp).
-        $legacyLog = $this->tempDir . '/' . Diagnostics::VERBOSE_LOG_FILENAME;
+        $legacyLog = $this->tempDir . '/' . Diagnostics::LEGACY_VERBOSE_LOG_FILENAME;
         $legacySentinel = $legacyLog . '.session';
 
         file_put_contents($legacyLog, "[fluent-validation:skip] from a 0.4.x run\n");

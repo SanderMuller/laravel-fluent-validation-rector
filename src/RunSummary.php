@@ -66,6 +66,18 @@ final class RunSummary
         self::unlinkLogArtifacts();
 
         register_shutdown_function(static function (): void {
+            // Always-emit on zero-entry runs (P2 #9 / GH #4 follow-up):
+            // when verbose tier is on AND no worker wrote to the log,
+            // create the file with the header so CI can diff it across
+            // runs without seeing a "file missing → file present"
+            // transition the moment a single skip fires. Off-mode
+            // (TIER_OFF) skips this — the temp-mode log is intended to
+            // be invisible to the consumer.
+            if (Diagnostics::verbosityTier() !== Diagnostics::TIER_OFF
+                && ! is_file(Diagnostics::skipLogPath())) {
+                @file_put_contents(Diagnostics::skipLogPath(), Diagnostics::skipLogHeader(), LOCK_EX);
+            }
+
             $line = self::format();
 
             if ($line === null) {
@@ -131,7 +143,12 @@ final class RunSummary
             return null;
         }
 
-        $count = substr_count($contents, "\n");
+        // Count entry lines specifically — header lines start with `# `
+        // and are excluded by the `[fluent-validation:skip]` prefix
+        // match. Pre-0.14.1 the file was entries-only and `substr_count
+        // newline` worked; with the new header that count would be
+        // inflated by the header lines.
+        $count = substr_count($contents, '[fluent-validation:skip]');
 
         if ($count === 0) {
             return null;
@@ -144,7 +161,7 @@ final class RunSummary
                 "\n[fluent-validation] %d skip %s written to %s — see for details\n",
                 $count,
                 $noun,
-                Diagnostics::VERBOSE_LOG_FILENAME,
+                Diagnostics::verboseLogDisplayPath(),
             );
         }
 
