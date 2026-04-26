@@ -279,19 +279,19 @@ Wait until terminal. If red:
 
 ## Quick Reference
 
-| Step               | Command                                                                                  | Pass criteria                                 |
-|--------------------|------------------------------------------------------------------------------------------|-----------------------------------------------|
-| 1. Rector          | `vendor/bin/rector process \|\| true`                                                    | 0 files changed                               |
-| 2. Pint            | `vendor/bin/pint --dirty --format agent \|\| true`                                       | clean                                         |
-| 3. Tests           | `vendor/bin/pest \|\| true`                                                              | 0 failures                                    |
-| 4. PHPStan         | `vendor/bin/phpstan analyse --memory-limit=2G \|\| true`                                 | 0 errors                                      |
-| 5a. README         | manual scan vs `git log <last-tag>..HEAD`                                                | no stale claims; all changed rules listed     |
-| 5b. Boost docs     | `vendor/bin/testbench package-boost:sync \|\| true`                                      | `.ai/` ↔ generated files in sync              |
-| **commit + push**  | user confirms changes + `git push`                                                       | HEAD pushed to `origin/main`                  |
-| 6. CI green-light  | `gh run list --commit "$(git rev-parse HEAD)"` all complete + no failure                 | every run for the SHA in `{success, skipped}` |
-| 7. Release notes   | preflight (clean tree + pushed + CI green) → `Write internal/release-notes-<version>.md` | first line is `<!-- verified-sha: $SHA -->`   |
-| 8a. Pre-tag gate   | one-liner asserts SHA-drift, push state, CI-still-green immediately before `gh release create` | prints `OK to tag`                      |
-| 8b. Post-tag watch | `gh run list --commit "$TAG_SHA"` filtered by `headBranch == $TAG`                       | tag-ref + release-event workflows all green   |
+| Step               | Command                                                                                        | Pass criteria                                 |
+|--------------------|------------------------------------------------------------------------------------------------|-----------------------------------------------|
+| 1. Rector          | `vendor/bin/rector process \|\| true`                                                          | 0 files changed                               |
+| 2. Pint            | `vendor/bin/pint --dirty --format agent \|\| true`                                             | clean                                         |
+| 3. Tests           | `vendor/bin/pest \|\| true`                                                                    | 0 failures                                    |
+| 4. PHPStan         | `vendor/bin/phpstan analyse --memory-limit=2G \|\| true`                                       | 0 errors                                      |
+| 5a. README         | manual scan vs `git log <last-tag>..HEAD`                                                      | no stale claims; all changed rules listed     |
+| 5b. Boost docs     | `vendor/bin/testbench package-boost:sync \|\| true`                                            | `.ai/` ↔ generated files in sync              |
+| **commit + push**  | user confirms changes + `git push`                                                             | HEAD pushed to `origin/main`                  |
+| 6. CI green-light  | `gh run list --commit "$(git rev-parse HEAD)"` all complete + no failure                       | every run for the SHA in `{success, skipped}` |
+| 7. Release notes   | preflight (clean tree + pushed + CI green) → `Write internal/release-notes-<version>.md`       | first line is `<!-- verified-sha: $SHA -->`   |
+| 8a. Pre-tag gate   | one-liner asserts SHA-drift, push state, CI-still-green immediately before `gh release create` | prints `OK to tag`                            |
+| 8b. Post-tag watch | `gh run list --commit "$TAG_SHA"` filtered by `headBranch == $TAG`                             | tag-ref + release-event workflows all green   |
 
 ## Important
 
