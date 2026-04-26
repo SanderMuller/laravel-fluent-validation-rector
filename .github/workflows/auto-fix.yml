@@ -1,12 +1,11 @@
 name: Auto-fix
 
 on:
+  # No path filter — every push to main must be CI-validated so the
+  # pre-release green-light gate has evidence for docs-only release
+  # commits (README updates, etc.). Auto-fix is a no-op when there's
+  # nothing for Rector / Pint to fix.
   push:
-    paths:
-      - '**.php'
-      - 'rector.php'
-      - 'pint.json'
-      - '.github/workflows/auto-fix.yml'
 
 permissions:
   contents: write

@@ -4,12 +4,12 @@ permissions:
   contents: read
 
 on:
+  # No path filter on `push` — every commit to main must be
+  # CI-validated so the pre-release green-light gate has evidence
+  # for docs-only release commits (README updates, etc.). Path
+  # filters stay on `pull_request` to skip CI cycles on docs-only
+  # PRs.
   push:
-    paths:
-      - '**.php'
-      - 'phpstan.neon.dist'
-      - 'phpstan-baseline.neon'
-      - '.github/workflows/phpstan.yml'
   pull_request:
     paths:
       - '**.php'
