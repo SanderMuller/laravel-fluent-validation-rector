@@ -20,9 +20,13 @@ use PhpParser\Node\Stmt\Return_;
 use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\Rector\AbstractRector;
 use SanderMuller\FluentValidation\FluentRule;
+use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
+use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsRulesShapedMethods;
+use SanderMuller\FluentValidationRector\Rector\Concerns\IdentifiesLivewireClasses;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesNamespaceImports;
 use SanderMuller\FluentValidationRector\Rector\Concerns\NormalizesRulesDocblock;
+use SanderMuller\FluentValidationRector\Rector\Concerns\QualifiesForRulesProcessing;
 use SanderMuller\FluentValidationRector\RunSummary;
 use SanderMuller\FluentValidationRector\Tests\GroupWildcardRulesToEach\GroupWildcardRulesToEachRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
@@ -45,9 +49,13 @@ use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
  */
 final class GroupWildcardRulesToEachRector extends AbstractRector implements DocumentedRuleInterface
 {
+    use DetectsInheritedTraits;
+    use DetectsRulesShapedMethods;
+    use IdentifiesLivewireClasses;
     use LogsSkipReasons;
     use ManagesNamespaceImports;
     use NormalizesRulesDocblock;
+    use QualifiesForRulesProcessing;
 
     private const int MAX_NESTING_DEPTH = 4;
 
@@ -181,6 +189,13 @@ CODE_SAMPLE
     /** @phpstan-impure */
     private function refactorClass(Class_ $class): bool
     {
+        // Class-qualification gate (silent bail). Without this, every
+        // ClassLike with a `rules()` method gets walked — including
+        // unrelated Domain entities. See QualifiesForRulesProcessing.
+        if (! $this->qualifiesForRulesProcessing($class)) {
+            return false;
+        }
+
         // Build map of local string constants for resolving self::X keys
         $this->localConstants = $this->collectLocalStringConstants($class);
         $this->currentClass = $class;
@@ -188,8 +203,16 @@ CODE_SAMPLE
         try {
             $hasChanged = false;
 
+            // Auto-detect of rules-shaped methods is class-wide; gate
+            // it on the stricter qualifying signal so attribute-only
+            // classes don't expand a single `#[FluentRules]` opt-in
+            // into class-wide auto-detection (Codex 2026-04-26 catch).
+            $allowsAutoDetect = $this->qualifiesForRulesProcessingClassWide($class);
+
             foreach ($class->getMethods() as $method) {
-                if (! $this->isName($method, 'rules')) {
+                if (! $this->isName($method, 'rules')
+                    && ! $this->hasFluentRulesAttribute($method)
+                    && ! ($allowsAutoDetect && $this->isRulesShapedMethod($method))) {
                     continue;
                 }
 

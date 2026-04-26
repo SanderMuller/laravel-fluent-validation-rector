@@ -384,11 +384,12 @@ CODE_SAMPLE
     {
         $found = false;
 
+        // Walk every method on the class — see sibling
+        // AddHasFluentRulesTraitRector::usesFluentRule for rationale.
+        // Auto-detected rules-shaped helpers (`editorRules()`,
+        // `rulesWithoutPrefix()`) get FluentRule chains too; the trait
+        // rector must see those usages to decide on insertion.
         foreach ($class->getMethods() as $method) {
-            if (! $this->isName($method, 'rules')) {
-                continue;
-            }
-
             $this->traverseNodesWithCallable($method, function (Node $node) use (&$found): ?int {
                 if ($node instanceof StaticCall) {
                     $className = $this->getName($node->class);
@@ -402,6 +403,10 @@ CODE_SAMPLE
 
                 return null;
             });
+
+            if ($found) {
+                break;
+            }
         }
 
         return $found;

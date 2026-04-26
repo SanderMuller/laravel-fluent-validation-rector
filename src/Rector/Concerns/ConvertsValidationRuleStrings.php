@@ -23,9 +23,9 @@ use PhpParser\Node\Scalar\Int_;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassLike;
-use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Stmt\Namespace_;
 use PhpParser\Node\Stmt\Return_;
+use PhpParser\Node\Stmt\Unset_;
 use PHPStan\Type\ObjectType;
 use Rector\PhpParser\Node\FileNode;
 use RecursiveCallbackFilterIterator;
@@ -308,8 +308,19 @@ trait ConvertsValidationRuleStrings
 
         $hasChanged = false;
 
+        // Auto-detect of rules-shaped methods is only safe when a
+        // strong class-wide signal qualifies the class (FormRequest /
+        // fluent trait / Livewire). For attribute-only classes —
+        // qualifying solely because one method carries `#[FluentRules]`
+        // — restrict processing to literal `rules()` and the attributed
+        // method itself, otherwise sibling helpers with a stray rule
+        // token would be rewritten as rules. Codex 2026-04-26 catch.
+        $allowsAutoDetect = $this->qualifiesForRulesProcessingClassWide($classLike);
+
         foreach ($classLike->getMethods() as $classMethod) {
-            if (! $this->isName($classMethod, 'rules') && ! $this->hasFluentRulesAttribute($classMethod)) {
+            if (! $this->isName($classMethod, 'rules')
+                && ! $this->hasFluentRulesAttribute($classMethod)
+                && ! ($allowsAutoDetect && $this->isRulesShapedMethod($classMethod))) {
                 continue;
             }
 
@@ -362,25 +373,6 @@ trait ConvertsValidationRuleStrings
 
             if ($this->hasFluentRulesAttribute($method)) {
                 return true;
-            }
-        }
-
-        return false;
-    }
-
-    private function hasFluentRulesAttribute(ClassMethod $method): bool
-    {
-        // Referenced as a string (not ::class) so PHPStan doesn't require the
-        // class to exist at static-analysis time. FluentRules ships in newer
-        // laravel-fluent-validation releases but is absent from earlier
-        // versions that still satisfy our ^1.0 constraint.
-        $fluentRulesAttribute = 'SanderMuller\\FluentValidation\\FluentRules';
-
-        foreach ($method->attrGroups as $attrGroup) {
-            foreach ($attrGroup->attrs as $attr) {
-                if ($this->getName($attr->name) === $fluentRulesAttribute) {
-                    return true;
-                }
             }
         }
 
@@ -451,29 +443,43 @@ trait ConvertsValidationRuleStrings
     }
 
     /**
-     * Detect if a single class calls parent::rules() and manipulates the result
-     * with array functions or bracket assignment.
+     * Detect if a single class calls parent::<rules-bearing-method>() and
+     * manipulates the result with array functions or bracket assignment.
+     *
+     * Originally watched only `parent::rules()`. After the converter
+     * widened to auto-detect rules-shaped methods (Codex 2026-04-26
+     * catch), the same array-manipulation hazard applies to any method
+     * the converter would touch — `editorRules()`, `rulesWithoutPrefix()`,
+     * etc. So now we scan every method on the child whose body the
+     * converter would walk (literal `rules`, `#[FluentRules]`-attributed,
+     * or rules-shaped) and watch for any `parent::<sameOrRules>()` call
+     * combined with in-method array manipulation.
      */
     private function collectUnsafeParentClass(Class_ $class): void
     {
-        $hasParentRulesCall = false;
-        $hasArrayManipulation = false;
+        $hasUnsafeManipulation = false;
 
+        // Scan EVERY method on the child (was: only the child's `rules()`
+        // body) — after the converter widened to auto-detect rules-shaped
+        // methods, the array-manipulation hazard applies anywhere the
+        // child wraps a `parent::<anyMethod>()` call. Restricting to a
+        // single method name would let a child's `editorRules()` →
+        // `array_merge(parent::editorRules(), …)` slip through and
+        // corrupt the parent's still-rewritten body.
         foreach ($class->getMethods() as $method) {
-            if (! $this->isName($method, 'rules')) {
-                continue;
-            }
+            $hasParentCall = false;
+            $hasArrayManipulation = false;
 
-            $this->traverseNodesWithCallable($method, function (Node $node) use (&$hasParentRulesCall, &$hasArrayManipulation): null {
-                // Detect parent::rules()
+            $this->traverseNodesWithCallable($method, function (Node $node) use (
+                &$hasParentCall,
+                &$hasArrayManipulation,
+            ): null {
                 if ($node instanceof StaticCall
                     && $node->class instanceof Name
-                    && $this->isName($node->class, 'parent')
-                    && $this->isName($node->name, 'rules')) {
-                    $hasParentRulesCall = true;
+                    && $this->isName($node->class, 'parent')) {
+                    $hasParentCall = true;
                 }
 
-                // Detect array manipulation functions
                 if ($node instanceof FuncCall
                     && $node->name instanceof Name
                     && in_array($this->getName($node->name), [
@@ -482,12 +488,21 @@ trait ConvertsValidationRuleStrings
                         'array_shift', 'array_unshift', 'array_diff', 'array_intersect',
                         'array_filter', 'array_map', 'array_keys', 'array_values',
                         'array_combine', 'array_flip', 'array_reverse', 'array_slice',
-                        'array_unique', 'array_walk', 'in_array', 'unset', 'collect',
+                        'array_unique', 'array_walk', 'in_array', 'collect',
                     ], true)) {
                     $hasArrayManipulation = true;
                 }
 
-                // Detect bracket assignment: $rules['key'] = ...
+                // `unset($rules['x'])` is a language construct — PhpParser
+                // models it as `Stmt\Unset_`, not `FuncCall`. Codex
+                // 2026-04-26 catch: the legacy 'unset' string in the
+                // FuncCall list above was dead code, so a child doing
+                // `parent::editorRules()` + `unset(...)` slipped past
+                // the parent-safety guard.
+                if ($node instanceof Unset_) {
+                    $hasArrayManipulation = true;
+                }
+
                 if ($node instanceof Assign
                     && $node->var instanceof ArrayDimFetch) {
                     $hasArrayManipulation = true;
@@ -496,10 +511,13 @@ trait ConvertsValidationRuleStrings
                 return null;
             });
 
-            break;
+            if ($hasParentCall && $hasArrayManipulation) {
+                $hasUnsafeManipulation = true;
+                break;
+            }
         }
 
-        if (! $hasParentRulesCall || ! $hasArrayManipulation) {
+        if (! $hasUnsafeManipulation) {
             return;
         }
 
@@ -519,7 +537,7 @@ trait ConvertsValidationRuleStrings
      * Array manipulation functions that indicate a subclass treats parent::rules()
      * return values as plain arrays (not FluentRule objects).
      */
-    private const string ARRAY_MANIPULATION_PATTERN = '/\barray_(?:search|merge|merge_recursive|replace|splice|push|pop|shift|unshift|diff|intersect|filter|map|keys|values|combine|flip|reverse|slice|unique|walk)\s*\(|\bin_array\s*\(/';
+    private const string ARRAY_MANIPULATION_PATTERN = '/\barray_(?:search|merge|merge_recursive|replace|splice|push|pop|shift|unshift|diff|intersect|filter|map|keys|values|combine|flip|reverse|slice|unique|walk)\s*\(|\bin_array\s*\(|\bcollect\s*\(|\bunset\s*\(/';
 
     /** Whether the filesystem scan has been performed in this process */
     private static bool $filesystemScanDone = false;
@@ -599,7 +617,13 @@ trait ConvertsValidationRuleStrings
                 continue;
             }
 
-            if (! str_contains($content, 'parent::rules()')) {
+            // Match `parent::<anyMethod>(` — the converter now widens
+            // beyond `rules()`, so the parent-safety filesystem scan
+            // also has to consider any `parent::*()` call. The
+            // array-manipulation gate below keeps the false-skip rate
+            // low: a child with a parent-call AND array manipulation in
+            // the same file is the corruption-risk shape.
+            if (preg_match('/\bparent::\w+\s*\(/', $content) !== 1) {
                 continue;
             }
 
@@ -609,10 +633,11 @@ trait ConvertsValidationRuleStrings
                 continue;
             }
 
-            // Extract the parent class FQCN from the extends clause + use imports/namespace
-            $parentFqcn = $this->resolveParentFqcnFromSource($content);
-
-            if ($parentFqcn !== null) {
+            // Extract every parent FQCN from the extends clauses + use
+            // imports/namespace. Multi-class files mean a single
+            // `class X extends Y` match would miss later children's
+            // unsafe parents — mark all candidates.
+            foreach ($this->resolveParentFqcnsFromSource($content) as $parentFqcn) {
                 self::$unsafeParentClasses[$parentFqcn] = true;
                 $this->persistUnsafeParent($parentFqcn);
             }
@@ -691,35 +716,71 @@ trait ConvertsValidationRuleStrings
     }
 
     /**
-     * Resolve the FQCN of the parent class from raw PHP source code.
-     * Handles both fully-qualified extends (\App\Foo) and short names
-     * resolved via use imports or same-namespace.
+     * Resolve EVERY parent FQCN from raw PHP source. Multi-class files
+     * are common in test fixtures and small Laravel apps, so we walk
+     * every `class X extends Y` match instead of returning only the
+     * first (Codex 2026-04-26 catch — the file-level fallback would
+     * silently miss the unsafe parent of a later class). Each parent
+     * is resolved against the file's `use` imports + namespace exactly
+     * the way the AST resolver would; over-marking (returning all
+     * parents in the file even when only one child has the manipulation
+     * shape) is acceptable here — the regex pre-filter already proved
+     * the file has both a `parent::*()` call AND an array-manipulation
+     * primitive, so any parent in the same file is plausibly the one.
+     *
+     * @return list<string>
      */
-    private function resolveParentFqcnFromSource(string $content): ?string
+    private function resolveParentFqcnsFromSource(string $content): array
     {
-        if (preg_match('/class\s+\w+\s+extends\s+([\w\\\\]+)/', $content, $extendsMatch) !== 1) {
-            return null;
+        if (preg_match_all('/class\s+\w+\s+extends\s+([\w\\\\]+)/', $content, $extendsMatches) === false) {
+            return [];
         }
 
-        $parentRef = $extendsMatch[1];
+        $namespace = preg_match('/namespace\s+([\w\\\\]+)\s*;/', $content, $nsMatch) === 1
+            ? $nsMatch[1]
+            : null;
 
-        // Already fully qualified
-        if (str_contains($parentRef, '\\')) {
-            return ltrim($parentRef, '\\');
+        $resolved = [];
+
+        foreach ($extendsMatches[1] as $parentRef) {
+            // Already fully qualified
+            if (str_contains($parentRef, '\\')) {
+                $resolved[] = ltrim($parentRef, '\\');
+
+                continue;
+            }
+
+            // Aliased use import:
+            // `use App\Http\Requests\FooRequest as BaseRequest;`
+            // resolves `extends BaseRequest` to `App\Http\Requests\FooRequest`.
+            // Codex 2026-04-26 catch — pre-existing gap exposed by the
+            // widening: missed aliases let an unsafe parent slip past
+            // the cross-file scan.
+            if (preg_match('/use\s+([\w\\\\]+)\s+as\s+' . preg_quote($parentRef, '/') . '\s*;/', $content, $aliasMatch) === 1) {
+                $resolved[] = $aliasMatch[1];
+
+                continue;
+            }
+
+            // Direct use import: `use App\Http\Requests\FooRequest;`
+            if (preg_match('/use\s+([\w\\\\]+\\\\' . preg_quote($parentRef, '/') . ')\s*;/', $content, $useMatch) === 1) {
+                $resolved[] = $useMatch[1];
+
+                continue;
+            }
+
+            // Same namespace
+            if ($namespace !== null) {
+                $resolved[] = $namespace . '\\' . $parentRef;
+
+                continue;
+            }
+
+            // Global namespace
+            $resolved[] = $parentRef;
         }
 
-        // Check use imports: use App\Http\Requests\FooRequest;
-        if (preg_match('/use\s+([\w\\\\]+\\\\' . preg_quote($parentRef, '/') . ')\s*;/', $content, $useMatch) === 1) {
-            return $useMatch[1];
-        }
-
-        // Same namespace: namespace App\Http\Requests; class Child extends Parent
-        if (preg_match('/namespace\s+([\w\\\\]+)\s*;/', $content, $nsMatch) === 1) {
-            return $nsMatch[1] . '\\' . $parentRef;
-        }
-
-        // Global namespace
-        return $parentRef;
+        return array_values(array_unique($resolved));
     }
 
     /**

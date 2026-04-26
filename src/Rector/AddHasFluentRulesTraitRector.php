@@ -230,11 +230,15 @@ CODE_SAMPLE
     {
         $found = false;
 
+        // Walk every method on the class, not just `rules()`. The
+        // converter rectors auto-detect rules-shaped methods under any
+        // name (`editorRules()`, `rulesWithoutPrefix()`, etc.) and
+        // convert their string rules to FluentRule chains. Without
+        // walking those helpers here, the trait rector would skip
+        // trait insertion on classes whose only FluentRule usage lives
+        // in a custom-named helper — leaving the converted helpers
+        // without runtime trait support.
         foreach ($class->getMethods() as $method) {
-            if (! $this->isName($method, 'rules')) {
-                continue;
-            }
-
             $this->traverseNodesWithCallable($method, function (Node $node) use (&$found): ?int {
                 if ($node instanceof StaticCall) {
                     $className = $this->getName($node->class);
@@ -251,6 +255,10 @@ CODE_SAMPLE
 
                 return null;
             });
+
+            if ($found) {
+                break;
+            }
         }
 
         return $found;

@@ -2,7 +2,6 @@
 
 namespace SanderMuller\FluentValidationRector\Rector;
 
-use Illuminate\Foundation\Http\FormRequest;
 use PhpParser\Comment\Doc;
 use PhpParser\Node;
 use PhpParser\Node\ArrayItem;
@@ -24,13 +23,13 @@ use Rector\Contract\Rector\ConfigurableRectorInterface;
 use Rector\Rector\AbstractRector;
 use ReflectionClass;
 use SanderMuller\FluentValidation\FluentRule;
-use SanderMuller\FluentValidation\HasFluentRules;
-use SanderMuller\FluentValidation\HasFluentValidation;
-use SanderMuller\FluentValidation\HasFluentValidationForFilament;
 use SanderMuller\FluentValidationRector\Rector\Concerns\AllowlistedRuleFactories;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
+use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsRulesShapedMethods;
+use SanderMuller\FluentValidationRector\Rector\Concerns\IdentifiesLivewireClasses;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\NormalizesRulesDocblock;
+use SanderMuller\FluentValidationRector\Rector\Concerns\QualifiesForRulesProcessing;
 use SanderMuller\FluentValidationRector\RunSummary;
 use SanderMuller\FluentValidationRector\Tests\UpdateRulesReturnTypeDocblock\UpdateRulesReturnTypeDocblockRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
@@ -53,8 +52,11 @@ final class UpdateRulesReturnTypeDocblockRector extends AbstractRector implement
 {
     use AllowlistedRuleFactories;
     use DetectsInheritedTraits;
+    use DetectsRulesShapedMethods;
+    use IdentifiesLivewireClasses;
     use LogsSkipReasons;
     use NormalizesRulesDocblock;
+    use QualifiesForRulesProcessing;
 
     /**
      * Re-declared on the using class so static analyzers can resolve
@@ -90,19 +92,6 @@ final class UpdateRulesReturnTypeDocblockRector extends AbstractRector implement
      * resolved as a PHP class at rector-time.
      */
     private const string CONTRACT_ANNOTATION_BODY = 'array<string, \\SanderMuller\\FluentValidation\\Contracts\\FluentRuleContract>';
-
-    /**
-     * FQN list of traits that qualify a class for polish (condition 5). These
-     * are the three traits shipped by the fluent-validation package that
-     * replace `FormRequest` inheritance.
-     *
-     * @var list<string>
-     */
-    private const array QUALIFYING_TRAIT_FQNS = [
-        HasFluentRules::class,
-        HasFluentValidation::class,
-        HasFluentValidationForFilament::class,
-    ];
 
     public function __construct()
     {
@@ -168,7 +157,7 @@ CODE_SAMPLE
             return null;
         }
 
-        if (! $this->classQualifiesForPolish($node)) {
+        if (! $this->qualifiesForRulesProcessing($node)) {
             // Silent skip — logging here would spam for every unrelated class
             // in the codebase. Class-context is the qualifying gate; only
             // skips INSIDE a qualifying class are interesting signal.
@@ -177,8 +166,16 @@ CODE_SAMPLE
 
         $hasChanged = false;
 
+        // Auto-detect of rules-shaped methods is class-wide; gate it
+        // on the stricter qualifying signal so attribute-only classes
+        // don't expand a single `#[FluentRules]` opt-in into class-wide
+        // auto-detection (Codex 2026-04-26 catch).
+        $allowsAutoDetect = $this->qualifiesForRulesProcessingClassWide($node);
+
         foreach ($node->getMethods() as $method) {
-            if (! $this->isName($method, 'rules')) {
+            if (! $this->isName($method, 'rules')
+                && ! $this->hasFluentRulesAttribute($method)
+                && ! ($allowsAutoDetect && $this->isRulesShapedMethod($method))) {
                 continue;
             }
 
@@ -188,21 +185,6 @@ CODE_SAMPLE
         }
 
         return $hasChanged ? $node : null;
-    }
-
-    private function classQualifiesForPolish(Class_ $class): bool
-    {
-        if ($this->anyAncestorExtends($class, FormRequest::class)) {
-            return true;
-        }
-
-        foreach (self::QUALIFYING_TRAIT_FQNS as $traitFqn) {
-            if ($this->currentOrAncestorUsesTrait($class, $traitFqn)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private function processRulesMethod(Class_ $class, ClassMethod $method): bool
@@ -230,7 +212,8 @@ CODE_SAMPLE
                 $existingBody = $this->extractReturnAnnotationBody($method->getDocComment());
 
                 if ($existingBody !== null && trim($existingBody) === self::CONTRACT_ANNOTATION_BODY) {
-                    $this->logSkip($class, 'rules() now mixes FluentRule chains with allowlisted rule factories — existing narrowed @return may be stale (mixed-array types cannot be expressed as FluentRuleContract)');
+                    $methodName = $this->getName($method) ?? 'rules';
+                    $this->logSkip($class, sprintf('%s() now mixes FluentRule chains with allowlisted rule factories — existing narrowed @return may be stale (mixed-array types cannot be expressed as FluentRuleContract)', $methodName));
                 }
             }
 
@@ -247,7 +230,8 @@ CODE_SAMPLE
     private function hasQualifyingReturnType(Class_ $class, ClassMethod $method): bool
     {
         if ($method->returnType instanceof NullableType) {
-            $this->logSkip($class, 'method rules() has nullable array return — cannot narrow contract');
+            $methodName = $this->getName($method) ?? 'rules';
+            $this->logSkip($class, sprintf('method %s() has nullable array return — cannot narrow contract', $methodName));
 
             return false;
         }
@@ -272,7 +256,8 @@ CODE_SAMPLE
         });
 
         if (count($returns) !== 1) {
-            $this->logSkip($class, 'method rules() has multi-stmt return — cannot narrow contract');
+            $methodName = $this->getName($method) ?? 'rules';
+            $this->logSkip($class, sprintf('method %s() has multi-stmt return — cannot narrow contract', $methodName));
 
             return null;
         }
