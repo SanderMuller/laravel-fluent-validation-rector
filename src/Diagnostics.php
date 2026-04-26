@@ -2,6 +2,9 @@
 
 namespace SanderMuller\FluentValidationRector;
 
+use Composer\InstalledVersions;
+use OutOfBoundsException;
+
 /**
  * Centralises the on/off gate for the skip-log diagnostic sink and resolves
  * the file path the log should live at given the current verbosity.
@@ -245,48 +248,28 @@ final class Diagnostics
     }
 
     /**
-     * Best-effort read of the package version from the bundled
-     * composer.json. Returns "unknown" if unreadable or unparseable.
-     * Used in the skip-log header (GH #4) for cross-release triage.
+     * Best-effort read of the installed package version. Composer's
+     * `InstalledVersions` is populated at install time from the
+     * resolved git tags / dev-branch refs, so it gives the actual
+     * shipped version even when composer.json itself doesn't declare
+     * a `version` field (the recommended Composer pattern). Falls back
+     * to "unknown" if Composer's runtime API isn't available (rare —
+     * shipped with Composer 2+) or if this package isn't registered
+     * (impossible for an installed dep, possible during local
+     * development before `composer install`).
      */
     private static function packageVersion(): string
     {
-        $composerPath = __DIR__ . '/../composer.json';
-
-        if (! is_file($composerPath)) {
+        if (! class_exists(InstalledVersions::class)) {
             return 'unknown';
         }
 
-        $contents = @file_get_contents($composerPath);
-
-        if ($contents === false) {
+        try {
+            $version = InstalledVersions::getPrettyVersion('sandermuller/laravel-fluent-validation-rector');
+        } catch (OutOfBoundsException) {
             return 'unknown';
         }
 
-        $decoded = json_decode($contents, true);
-
-        if (! is_array($decoded)) {
-            return 'unknown';
-        }
-
-        // composer.json may not declare `version` (the recommended
-        // shape — version is derived from git tags). Look for the
-        // `extra.branch-alias.dev-main` if present, else fall through.
-        if (isset($decoded['version']) && is_string($decoded['version'])) {
-            return $decoded['version'];
-        }
-
-        $extra = $decoded['extra'] ?? null;
-
-        if (is_array($extra) && isset($extra['branch-alias']) && is_array($extra['branch-alias'])) {
-            $aliases = $extra['branch-alias'];
-            $aliasValue = $aliases['dev-main'] ?? reset($aliases);
-
-            if (is_string($aliasValue)) {
-                return $aliasValue . '-dev';
-            }
-        }
-
-        return 'unknown';
+        return is_string($version) ? $version : 'unknown';
     }
 }

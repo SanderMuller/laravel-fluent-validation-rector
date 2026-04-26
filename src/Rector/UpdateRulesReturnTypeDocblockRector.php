@@ -226,7 +226,12 @@ CODE_SAMPLE
             if ($sawAllowlistedItem) {
                 $existingBody = $this->extractReturnAnnotationBody($method->getDocComment());
 
-                if ($existingBody !== null && trim($existingBody) === self::CONTRACT_ANNOTATION_BODY) {
+                // Compare against ALREADY_NARROWED_BODIES so the warning
+                // also fires for files narrowed by pre-0.14.1 releases
+                // (legacy FQN form). Without the legacy entry, an upgraded
+                // codebase's stale FQN-narrowed annotations would survive
+                // silently when the method body adds an allowlisted item.
+                if ($existingBody !== null && in_array(trim($existingBody), self::ALREADY_NARROWED_BODIES, true)) {
                     $methodName = $this->getName($method) ?? 'rules';
                     $this->logSkip($class, sprintf('%s() now mixes FluentRule chains with allowlisted rule factories — existing narrowed @return may be stale (mixed-array types cannot be expressed as FluentRuleContract)', $methodName));
                 }
@@ -418,16 +423,22 @@ CODE_SAMPLE
     }
 
     /**
-     * Docblock bodies that equal the rule's emission target and therefore
-     * must not be rewritten. Covers both the FQN form this rector emits and
-     * the short-name form that results when a consumer adds a `use` import
-     * for `FluentRuleContract` post-conversion.
+     * Docblock bodies that equal a previously-emitted narrowed
+     * annotation and therefore must not be rewritten. Covers both the
+     * 0.14.1+ short-name form (current `CONTRACT_ANNOTATION_BODY`) AND
+     * the legacy FQN form pre-0.14.1 emitted (`array<string,
+     * \SanderMuller\FluentValidation\Contracts\FluentRuleContract>`).
+     * Without the legacy entry, files narrowed by older releases would
+     * not be recognized as already-narrowed, and the mixed-array
+     * stale-annotation skip log would miss them when the method body
+     * later mixes FluentRule chains with allowlisted rule factories
+     * (Codex 2026-04-26 catch).
      *
      * @var list<string>
      */
     private const array ALREADY_NARROWED_BODIES = [
         self::CONTRACT_ANNOTATION_BODY,
-        'array<string, FluentRuleContract>',
+        'array<string, \\SanderMuller\\FluentValidation\\Contracts\\FluentRuleContract>',
     ];
 
     private function isFluentRuleChainValue(Expr $value): bool

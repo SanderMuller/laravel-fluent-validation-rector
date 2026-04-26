@@ -421,6 +421,18 @@ CODE_SAMPLE
      */
     private function hasLivewireValidationSurface(Class_ $class): bool
     {
+        // Direct Filament trait presence is its own surface signal.
+        // Filament's `InteractsWithForms` / `InteractsWithSchemas`
+        // invokes validation through the form/schema builder pipeline
+        // — not via a local `$this->validate(...)` or `rules()` method —
+        // yet `HasFluentValidationForFilament`'s overrides DO get hit
+        // through the trait composition. Without this signal, Filament
+        // components with FluentRule-bearing schema/form builders would
+        // be silently skipped (Codex 2026-04-26 catch).
+        if ($this->classHasFilamentTraitDirectly($class)) {
+            return true;
+        }
+
         foreach ($class->getMethods() as $method) {
             if ($this->isName($method, 'rules')) {
                 return true;
