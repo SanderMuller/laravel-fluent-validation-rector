@@ -343,9 +343,8 @@ CODE_SAMPLE
         // because it identifies items by reference (ArrayItem identity), so
         // index shifts from the existing fold don't matter.
         if ($wildcardPrefixConstEntries !== []
-            && $this->applyWildcardPrefixConstFold($array, $wildcardPrefixConstEntries, $entries)
-        ) {
-            $hasChanged = true;
+            && $this->applyWildcardPrefixConstFold($wildcardPrefixConstEntries, $entries)) {
+            return true;
         }
 
         return $hasChanged;
@@ -853,7 +852,7 @@ CODE_SAMPLE
      *
      * @phpstan-ignore return.tooWideBool
      */
-    private function applyWildcardPrefixConstFold(Array_ $array, array $entries, array $stringEntries): bool
+    private function applyWildcardPrefixConstFold(array $entries, array $stringEntries): bool
     {
         // Case (d) — sibling non-wildcard `'*'` rule already exists.
         // The fold target is `'*' => …`; we can't clobber it. Bail.
