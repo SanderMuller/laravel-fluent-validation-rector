@@ -196,6 +196,25 @@ CODE_SAMPLE
             return false;
         }
 
+        // Shape-change gate. The wildcard-fold transformation rewrites
+        // sibling `'*.foo'` keys into `'*' => array()->children([...])`
+        // — a structurally correct equivalent under FormRequest /
+        // fluent-trait / Livewire dispatch, but a runtime break for
+        // Validator subclasses qualifying solely via `#[FluentRules]`
+        // whose parent class postprocesses `rulesWithoutPrefix()`
+        // output (e.g. prefix-prepend walks). The fold's nested-key
+        // shape doesn't round-trip through such postprocessors.
+        // Surfaced on hihaho's JsonAdaptiveSubjectImportValidator,
+        // 2026-04-27. Skip-and-log so the user knows why.
+        if (! $this->qualifiesForShapeChange($class)) {
+            $this->logSkip(
+                $class,
+                'shape-changing rector skipped on Validator subclass — parent class may postprocess rules() output and the each()/children() shape is incompatible. Wrap manually if you have audited the parent\'s behavior.',
+            );
+
+            return false;
+        }
+
         // Build map of local string constants for resolving self::X keys
         $this->localConstants = $this->collectLocalStringConstants($class);
         $this->currentClass = $class;

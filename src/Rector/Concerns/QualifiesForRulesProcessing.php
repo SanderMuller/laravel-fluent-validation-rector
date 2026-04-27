@@ -207,6 +207,42 @@ trait QualifiesForRulesProcessing
         return $this->isLivewireClass($class);
     }
 
+    /**
+     * Returns true when the class qualifies for shape-changing
+     * transformations — `each()` / `children()` folds, typed-factory
+     * promotions, escape-hatch lowerings — that assume the rule array
+     * is consumed directly by Laravel's validator on the class itself
+     * (FormRequest dispatch, fluent-trait `validateResolved()`,
+     * Livewire `validate()`).
+     *
+     * Validator subclasses qualifying solely via `#[FluentRules]` are
+     * EXCLUDED. The attribute opts the method into rule-conversion, but
+     * a parent Validator class may postprocess `rulesWithoutPrefix()`
+     * output (e.g. `JsonImportValidator::rulesWithPrefix()` walks the
+     * array and prepends a prefix to each top-level key). Shape-changing
+     * folds like `'*.title' + '*.sort_order' → '*' => array()->children([…])`
+     * round-trip cleanly through FormRequest dispatch but break the
+     * postprocessor's prepend-walk, which then sees nested keys as
+     * top-level fields with int indices.
+     *
+     * Hihaho 0.17.0 dogfood, 2026-04-27, surfaced this on
+     * `JsonAdaptiveSubjectImportValidator`: 5/5 of its tests failed
+     * after `GroupWildcardRulesToEachRector` produced a structurally
+     * correct fold that broke the prefix-postprocessor chain. The
+     * predicate exists to refuse shape changes on these shapes.
+     *
+     * Today this is identical to `qualifiesForRulesProcessingClassWide`.
+     * Kept as a sibling predicate (not an alias) so the consumer
+     * rectors' intent stays explicit at the call site, and so future
+     * divergence (e.g. excluding Livewire too if a similar
+     * postprocessor pattern surfaces) doesn't have to thread through
+     * the auto-detect path.
+     */
+    private function qualifiesForShapeChange(Class_ $class): bool
+    {
+        return $this->qualifiesForRulesProcessingClassWide($class);
+    }
+
     private function hasFluentRulesAttributeOnAnyMethod(Class_ $class): bool
     {
         foreach ($class->getMethods() as $method) {
