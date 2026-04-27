@@ -87,6 +87,8 @@ trait ConvertsValidationRuleStrings
 {
     use LogsSkipReasons;
 
+    use NonRulesMethodNames;
+
     use NormalizesRulesDocblock;
 
     /**
@@ -288,12 +290,26 @@ trait ConvertsValidationRuleStrings
 
         // Abstract classes are designed to be extended. Subclasses may use
         // collect(parent::rules())->mergeRecursive(...) which breaks when the
-        // parent returns FluentRule objects instead of plain arrays. Gate on
-        // hasMethod('rules') so we don't log skips for every abstract class
-        // in the codebase (Events, Exceptions, DataObjects, Commands with no
-        // validation surface at all — 150+ false skips observed in the wild).
-        if ($classLike->isAbstract() && $this->hasRulesMethod($classLike)) {
-            $this->logSkip($classLike, 'abstract class with rules() (subclasses may manipulate parent::rules() as plain arrays)');
+        // parent returns FluentRule objects instead of plain arrays.
+        //
+        // Gate on a LITERAL `rules()` method, not the broader
+        // `hasRulesMethod()` (which also returns true on
+        // `#[FluentRules]`-attributed siblings). Without this narrowing,
+        // an abstract class with only an attributed helper (e.g.
+        // `#[FluentRules] rulesWithoutPrefix()`) and no `rules()` method
+        // would fire this guard and emit a misleading "Add #[FluentRules]
+        // to the rules() method" log even though no rules() method exists
+        // to attribute.
+        //
+        // Method-scoped opt-in. An attribute on a sibling method does not
+        // lift this guard — the audit assertion is per-method. If any-method
+        // attribution lifted the guard, an unrelated `#[FluentRules]` on
+        // (e.g.) `rulesWithoutPrefix()` would silently unlock conversion of
+        // the abstract `rules()` body, reopening the
+        // `array_merge(parent::rules(), [...])` hazard. The attribute on
+        // `rules()` itself is the user's audit assertion.
+        if ($classLike->isAbstract() && $this->hasLiteralRulesMethod($classLike) && ! $this->rulesMethodCarriesFluentRulesAttribute($classLike)) {
+            $this->logSkip($classLike, 'abstract class with rules() (subclasses may manipulate parent::rules() as plain arrays). Add #[FluentRules] to the rules() method itself to assert audit-safety and opt in.');
 
             return null;
         }
@@ -320,6 +336,15 @@ trait ConvertsValidationRuleStrings
         $allowsAutoDetect = $this->qualifiesForRulesProcessingClassWide($classLike);
 
         foreach ($classLike->getMethods() as $classMethod) {
+            // Denylist always wins. A `#[FluentRules]` attribute on
+            // `casts()`, `messages()`, etc. is a mistake — Layer-2
+            // (`warnDenylistedAttributedMethods` above) emits the
+            // warning; the conversion path must skip the body
+            // regardless of the attribute.
+            if ($this->isNonRulesMethodName($this->getName($classMethod))) {
+                continue;
+            }
+
             if (! $this->isName($classMethod, 'rules')
                 && ! $this->hasFluentRulesAttribute($classMethod)
                 && ! ($allowsAutoDetect && $this->isRulesShapedMethod($classMethod))) {
@@ -360,6 +385,27 @@ trait ConvertsValidationRuleStrings
     private static ?string $lastScannedFile = null;
 
     /**
+     * Returns true when the class declares a method literally named
+     * `rules` (case-insensitive per PHP method-name semantics).
+     * Narrower than `hasRulesMethod()`, which also returns true for any
+     * method carrying `#[FluentRules]` — that broader signal is the
+     * right one for "is this class a rules-bearing candidate at all?",
+     * but the abstract-with-rules safety guard cares specifically about
+     * a literal `rules()` body whose subclasses might array-manipulate
+     * `parent::rules()`.
+     */
+    private function hasLiteralRulesMethod(Class_ $class): bool
+    {
+        foreach ($class->getMethods() as $method) {
+            if ($this->isName($method, 'rules')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * Check if a method is marked with the #[FluentRules] attribute.
      *
      * Opt-in detection for methods that hold validation rules under a name
@@ -376,6 +422,29 @@ trait ConvertsValidationRuleStrings
             if ($this->hasFluentRulesAttribute($method)) {
                 return true;
             }
+        }
+
+        return false;
+    }
+
+    /**
+     * Strict per-method check: does the method literally named `rules`
+     * carry `#[FluentRules]`? Returns false if no `rules()` method exists
+     * or if it exists without the attribute. Used by the abstract-with-
+     * rules guard to recognize the method-scoped audit-safe opt-in.
+     *
+     * Do NOT generalize to "any method on the class has the attribute" —
+     * the audit assertion is per-method, and a sibling-method attribute
+     * must not lift the guard for the unattributed `rules()`.
+     */
+    private function rulesMethodCarriesFluentRulesAttribute(Class_ $class): bool
+    {
+        foreach ($class->getMethods() as $method) {
+            if (! $this->isName($method, 'rules')) {
+                continue;
+            }
+
+            return $this->hasFluentRulesAttribute($method);
         }
 
         return false;

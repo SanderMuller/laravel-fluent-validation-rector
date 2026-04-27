@@ -210,6 +210,16 @@ CODE_SAMPLE
             $allowsAutoDetect = $this->qualifiesForRulesProcessingClassWide($class);
 
             foreach ($class->getMethods() as $method) {
+                // Denylist always wins. A `#[FluentRules]` attribute on
+                // `casts()`, `messages()`, etc. is a mistake — the
+                // shared layer-2 warning fires from
+                // `QualifiesForRulesProcessing::warnDenylistedAttributedMethods()`;
+                // this gate refuses to walk the body regardless of the
+                // attribute.
+                if ($this->isNonRulesMethodName($this->getName($method))) {
+                    continue;
+                }
+
                 if (! $this->isName($method, 'rules')
                     && ! $this->hasFluentRulesAttribute($method)
                     && ! ($allowsAutoDetect && $this->isRulesShapedMethod($method))) {

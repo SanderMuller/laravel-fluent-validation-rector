@@ -54,6 +54,8 @@ use SanderMuller\FluentValidation\HasFluentValidationForFilament;
  */
 trait QualifiesForRulesProcessing
 {
+    use NonRulesMethodNames;
+
     /**
      * The fluent-validation traits that mark a class as a rules-bearing
      * candidate even when it doesn't extend FormRequest. Mirrors the
@@ -69,6 +71,16 @@ trait QualifiesForRulesProcessing
     ];
 
     /**
+     * Static dedup set for layer-2 misapplied-`#[FluentRules]` warnings.
+     * Keyed by class FQCN. Ensures each class emits the warning at most
+     * once across the rector run, even when multiple rectors all call
+     * `qualifiesForRulesProcessing()` on the same class.
+     *
+     * @var array<string, true>
+     */
+    private static array $denylistedAttributedWarnings = [];
+
+    /**
      * Returns true when the class qualifies as a rules-bearing class.
      *
      * Qualifying conditions (any one is sufficient):
@@ -82,6 +94,14 @@ trait QualifiesForRulesProcessing
      */
     private function qualifiesForRulesProcessing(Class_ $class): bool
     {
+        // Layer-2 misapplied-attribute warning. Runs unconditionally —
+        // if a class has `#[FluentRules]` on a denylisted method
+        // (`casts()`, `messages()`, etc.) the user gets the diagnostic
+        // regardless of whether the class otherwise qualifies. Static
+        // dedup keys on class FQCN so each class emits at most once
+        // across the 5 rectors that call this gate.
+        $this->warnDenylistedAttributedMethods($class);
+
         if ($this->anyAncestorExtends($class, FormRequest::class)) {
             return true;
         }
@@ -101,6 +121,61 @@ trait QualifiesForRulesProcessing
         // the class to exist at static-analysis time — `FluentRules`
         // ships in newer laravel-fluent-validation releases.
         return $this->hasFluentRulesAttributeOnAnyMethod($class);
+    }
+
+    /**
+     * Layer-2 denylist warning. Emits one skip-log entry per
+     * denylisted-method-with-`#[FluentRules]` per class, deduped by
+     * class FQCN so the same class doesn't generate 5 identical
+     * warnings as it passes through 5 rectors. Lives here (in the
+     * shared qualification gate) rather than in the converter trait so
+     * the warning fires even when the class fails layer-1 qualification
+     * (i.e. the misapplied attribute was the only would-be qualifier).
+     */
+    private function warnDenylistedAttributedMethods(Class_ $class): void
+    {
+        $fqcn = $this->getName($class);
+
+        if ($fqcn === null || isset(self::$denylistedAttributedWarnings[$fqcn])) {
+            return;
+        }
+
+        $hasAnyAttribute = false;
+
+        foreach ($class->getMethods() as $method) {
+            if ($method->attrGroups !== []) {
+                $hasAnyAttribute = true;
+                break;
+            }
+        }
+
+        if (! $hasAnyAttribute) {
+            self::$denylistedAttributedWarnings[$fqcn] = true;
+
+            return;
+        }
+
+        foreach ($class->getMethods() as $method) {
+            $methodName = $this->getName($method);
+
+            if (! $this->isNonRulesMethodName($methodName)) {
+                continue;
+            }
+
+            if (! $this->hasFluentRulesAttribute($method)) {
+                continue;
+            }
+
+            $this->logSkip(
+                $class,
+                sprintf(
+                    '#[FluentRules] on method "%s" — this method name is in the non-rules denylist (Eloquent / Laravel framework method). The attribute is silently ignored. Did you mean to apply it to a different method?',
+                    $methodName ?? '<unknown>',
+                ),
+            );
+        }
+
+        self::$denylistedAttributedWarnings[$fqcn] = true;
     }
 
     /**
@@ -135,6 +210,20 @@ trait QualifiesForRulesProcessing
     private function hasFluentRulesAttributeOnAnyMethod(Class_ $class): bool
     {
         foreach ($class->getMethods() as $method) {
+            // Skip denylisted method names — `#[FluentRules]` on
+            // Eloquent's `casts()`, Laravel's `messages()`, etc. is a
+            // mistake. The qualification signal is invalid; pretend the
+            // attribute isn't there for class-qualification purposes.
+            // Without this, a class qualifying ONLY via a misapplied
+            // `#[FluentRules]` on `casts()` would unlock class-wide
+            // auto-detect of unrelated helpers — exactly the regression
+            // class 0.14.1 closed for non-attributed paths.
+            // `DetectsRulesShapedMethods::isRulesShapedMethod()` also
+            // honours the denylist at the per-method shape check.
+            if ($this->isNonRulesMethodName($this->getName($method))) {
+                continue;
+            }
+
             foreach ($method->attrGroups as $attrGroup) {
                 foreach ($attrGroup->attrs as $attr) {
                     if ($this->getName($attr->name) === FluentRules::class) {

@@ -49,6 +49,7 @@ public function rules(): array
 - [Formatter integration](#formatter-integration) — what the rector emits and how Pint / PHP-CS-Fixer finish the job
 - [Diagnostics](#diagnostics) — skip log + verbosity tiers
 - [Parity](#parity) — runtime-equivalence harness for semantics-changing rectors
+- [`#[FluentRules]` opt-in](#opting-in-fluentrules-attribute) — per-method opt-in attribute
 
 **Reference**
 - [Public API](PUBLIC_API.md) — frozen surface (symbols, wire keys, behavior)
@@ -312,6 +313,22 @@ Narrows the `@return` PHPDoc annotation on `rules()` methods from the wide `arra
   - The method has `): ?array` or unkeyed items.
 - **Run as a separate pass after `CONVERT` stabilizes**. Rector's multi-pass convergence means it eventually fires on the final shape, but a single-invocation rector run that mixes `CONVERT` + `POLISH` may require a second invocation if any file had string-rule items mid-convert.
 
+### Opting in: `#[FluentRules]` attribute
+
+`#[FluentRules]` is a per-method opt-in attribute (defined in [`sandermuller/laravel-fluent-validation`](https://github.com/sandermuller/laravel-fluent-validation)) that signals "convert this method's rule array, even though my class doesn't fall under one of the auto-qualifying shapes (FormRequest / fluent-validation trait / Livewire)." It also lifts the abstract-class safety guard when applied to `rules()` itself, treating the attribute as the user's audit assertion that subclasses don't manipulate `parent::rules()` as a plain array.
+
+**Use `#[FluentRules]` when:**
+
+- You have a method on a non-FormRequest / non-Livewire / non-trait class that holds rules under a name other than `rules()` — e.g. a custom Validator subclass's `rulesWithoutPrefix()`. The attribute qualifies the class for processing and tells the converter to walk that specific method's body.
+- You have an abstract class with `rules()` whose subclasses you have **audited** to confirm none manipulate `parent::rules()` with array merges. The attribute is your assertion of audit-safety; the package's safety guard for abstract classes is bypassed for the attributed `rules()` method.
+
+**Do NOT use `#[FluentRules]` on:**
+
+- Methods named after Eloquent / Laravel framework hooks (`casts()`, `messages()`, `attributes()`, `toArray()`, `jsonSerialize()`, etc.) — the denylist guard catches misapplied attributes, drops them silently for class-qualification AND conversion purposes, and emits a skip-log warning so you notice the mistake.
+- Abstract methods whose subclasses you have NOT audited. Converting the parent silently breaks subclasses that do `array_merge(parent::rules(), [...])`. The attribute is per-method: applying it to a sibling helper does NOT lift the abstract-with-`rules()` guard for the unattributed `rules()` itself.
+
+**Per-method scoping.** The audit assertion is per-method, not class-wide. `#[FluentRules]` on `rulesWithoutPrefix()` qualifies the class for processing and converts that specific method, but does not enable class-wide auto-detection of unrelated rule-shaped helpers — those would still need their own `#[FluentRules]` attribute to convert. This narrowing prevents "stray rule token in an unrelated helper gets rewritten as validation rules" regressions.
+
 ## Sets
 
 | Set        | Rules                                                                                                                                                                                                                                                                                                                          |
@@ -411,6 +428,81 @@ return RectorConfig::configure()
     ->withConfiguredRule(ConvertLivewireRuleAttributeRector::class, [
         ConvertLivewireRuleAttributeRector::PRESERVE_REALTIME_VALIDATION => false,
     ]);
+```
+
+#### Typed configuration (DTO builders)
+
+Each configurable rector has an opt-in DTO builder under
+`SanderMuller\FluentValidationRector\Config\` that produces the same wire-key array
+via a `->toArray()` terminal step. The builders give you compile-time type safety,
+IDE autocomplete, and immutable composition without changing anything on the rector
+side — the rector's `configure(array)` signature is unchanged and the array shape is
+identical. The constant-array form keeps working alongside the DTO form; pick whichever
+fits your `rector.php` style.
+
+| Rector                                     | DTO                                                       | Shared types                                              |
+|--------------------------------------------|-----------------------------------------------------------|-----------------------------------------------------------|
+| `ConvertLivewireRuleAttributeRector`       | `Config\LivewireConvertOptions`                           | `Config\Shared\OverlapBehavior` (enum)                    |
+| `SimplifyRuleWrappersRector`               | `Config\RuleWrapperSimplifyOptions`                       | `Config\Shared\AllowlistedFactories`                      |
+| `UpdateRulesReturnTypeDocblockRector`      | `Config\DocblockNarrowOptions`                            | `Config\Shared\AllowlistedFactories`                      |
+| `AddHasFluentRulesTraitRector`             | `Config\HasFluentRulesTraitOptions`                       | `Config\Shared\BaseClassRegistry`                         |
+
+```php
+use Rector\Config\RectorConfig;
+use SanderMuller\FluentValidationRector\Config\HasFluentRulesTraitOptions;
+use SanderMuller\FluentValidationRector\Config\LivewireConvertOptions;
+use SanderMuller\FluentValidationRector\Config\RuleWrapperSimplifyOptions;
+use SanderMuller\FluentValidationRector\Config\Shared\AllowlistedFactories;
+use SanderMuller\FluentValidationRector\Config\Shared\BaseClassRegistry;
+use SanderMuller\FluentValidationRector\Config\Shared\OverlapBehavior;
+use SanderMuller\FluentValidationRector\Rector\AddHasFluentRulesTraitRector;
+use SanderMuller\FluentValidationRector\Rector\ConvertLivewireRuleAttributeRector;
+use SanderMuller\FluentValidationRector\Rector\SimplifyRuleWrappersRector;
+
+return RectorConfig::configure()
+    ->withConfiguredRule(
+        ConvertLivewireRuleAttributeRector::class,
+        LivewireConvertOptions::default()
+            ->withMessageMigration()
+            ->withOverlapBehavior(OverlapBehavior::Partial)
+            ->toArray(),
+    )
+    ->withConfiguredRule(
+        SimplifyRuleWrappersRector::class,
+        RuleWrapperSimplifyOptions::default()
+            ->withAllowlistedFactories(
+                AllowlistedFactories::none()
+                    ->withFactories(['App\\Rules\\CustomRule'])
+                    ->allowingChainTail(),
+            )
+            ->toArray(),
+    )
+    ->withConfiguredRule(
+        AddHasFluentRulesTraitRector::class,
+        HasFluentRulesTraitOptions::default()
+            ->withBaseClasses(BaseClassRegistry::of(['App\\Http\\Requests\\BaseRequest']))
+            ->toArray(),
+    );
+```
+
+The shared `AllowlistedFactories` DTO is consumed by both
+`RuleWrapperSimplifyOptions` and `DocblockNarrowOptions`, so the simplify and
+docblock rectors stay in lockstep on what counts as "fluent-compatible":
+
+```php
+$allowlist = AllowlistedFactories::none()
+    ->withFactories(['App\\Rules\\CustomRule'])
+    ->allowingChainTail();
+
+return RectorConfig::configure()
+    ->withConfiguredRule(
+        SimplifyRuleWrappersRector::class,
+        RuleWrapperSimplifyOptions::default()->withAllowlistedFactories($allowlist)->toArray(),
+    )
+    ->withConfiguredRule(
+        UpdateRulesReturnTypeDocblockRector::class,
+        DocblockNarrowOptions::default()->withAllowlistedFactories($allowlist)->toArray(),
+    );
 ```
 
 ## Formatter integration

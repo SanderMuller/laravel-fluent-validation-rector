@@ -72,6 +72,8 @@ use SanderMuller\FluentValidation\FluentRules;
  */
 trait DetectsRulesShapedMethods
 {
+    use NonRulesMethodNames;
+
     /**
      * Recognized Laravel rule names. A pipe-delimited string with at
      * least one segment matching any of these counts as a rule string.
@@ -132,46 +134,6 @@ trait DetectsRulesShapedMethods
     ];
 
     /**
-     * Method names that look rules-shaped (string-keyed `return [...]`
-     * with values that match `KNOWN_RULE_NAMES`) but aren't validation
-     * rules. Auto-detection short-circuits to false when the method's
-     * name appears here, preventing the converters from rewriting
-     * Eloquent attribute casts, Livewire/Eloquent message tables, etc.
-     *
-     * Codex review (2026-04-26) caught this gap. `casts(): array { return
-     * ['active' => 'boolean']; }` matches the rules-shape signature
-     * because `'boolean'` is in KNOWN_RULE_NAMES — without this
-     * denylist, the converters would silently rewrite Eloquent cast
-     * declarations as FluentRule chains, corrupting model behavior.
-     *
-     * The denylist lives here (alongside the shape predicate) rather
-     * than at the call site so future denylist additions only need to
-     * update one place.
-     *
-     * @var array<string, true>
-     */
-    private const array NON_RULES_METHOD_NAMES_DENYLIST = [
-        // Keys MUST be lowercase — PHP method names are case-insensitive
-        // at runtime, so the lookup site lowercases the source-cased
-        // method name before checking. Storing lowercase here keeps the
-        // table comparable to that normalized key.
-        'casts' => true,
-        'getcasts' => true,
-        'getdates' => true,
-        'attributes' => true,
-        'validationattributes' => true,
-        'messages' => true,
-        'validationmessages' => true,
-        'middleware' => true,
-        'getroutekeyname' => true,
-        'broadcaston' => true,
-        'broadcastwith' => true,
-        'toarray' => true,
-        'tojson' => true,
-        'jsonserialize' => true,
-    ];
-
-    /**
      * The `#[FluentRules]` attribute FQN. String-referenced (not
      * `::class`) so PHPStan doesn't require the class to exist at
      * static-analysis time — `FluentRules` ships in newer
@@ -214,15 +176,11 @@ trait DetectsRulesShapedMethods
         // returns can satisfy the structural shape check by accident
         // when their values overlap with rule tokens. Bail before the
         // shape check so the converters never touch these methods.
-        $methodName = $this->getName($method);
-
-        // PHP method names are case-insensitive at runtime — `Casts()` and
-        // `casts()` are the same method. Codex 2026-04-26 caught the gap:
-        // a literal-cased `getName()` would let `Casts()` slip past the
-        // lowercase denylist and reopen the Eloquent-cast corruption
-        // surface. Normalize to lowercase before the lookup; the
-        // denylist itself is stored lowercase.
-        if ($methodName !== null && isset(self::NON_RULES_METHOD_NAMES_DENYLIST[strtolower($methodName)])) {
+        // Lookup is via the shared `NonRulesMethodNames` trait helper —
+        // PHP method names are case-insensitive at runtime, so the
+        // helper lowercases before checking against the (lowercase)
+        // denylist.
+        if ($this->isNonRulesMethodName($this->getName($method))) {
             return false;
         }
 
