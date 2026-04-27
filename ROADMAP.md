@@ -6,7 +6,7 @@ What's coming up. Release history lives in `CHANGELOG.md`.
 
 Scoped and ready to ship; waiting on a signal (consumer request or bandwidth).
 
-- **Validation parity tool.** Per-FormRequest harness that runs Laravel validation against pre-rector and post-rector rule shapes with fixture payloads and diffs the resulting error bags. Catches attribute-label and message-key drift that a rector's functional test suite misses: converted rules may produce the same pass/fail outcome but different `:attribute` substitution or different message-key paths, which is a user-visible regression. Main-package has no pre-rector notion, so the harness lives rector-side next to the codemods that caused the drift.
+_Nothing queued. Awaiting 0.19 dogfood feedback before committing to the next increment. Open candidates: 1.0 cut, `Internal\Diagnostics` namespace move (deferred from 0.15.0 / 0.18.0), magic-constant config deprecation cycle for 2.0._
 
 ## Parked
 
