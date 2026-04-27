@@ -343,7 +343,7 @@ CODE_SAMPLE
         // because it identifies items by reference (ArrayItem identity), so
         // index shifts from the existing fold don't matter.
         if ($wildcardPrefixConstEntries !== []
-            && $this->applyWildcardPrefixConstFold($wildcardPrefixConstEntries, $entries)) {
+            && $this->applyWildcardPrefixConstFold($array, $wildcardPrefixConstEntries, $entries)) {
             return true;
         }
 
@@ -837,22 +837,29 @@ CODE_SAMPLE
     // ─── Wildcard-prefix concat fold (0.19.0) ────────────────────────────
 
     /**
-     * Phase 2/3 of 0.19.0: fold sibling rule keys shaped
-     * `'*.' . CONST` into `'*' => array()->children([CONST => …])`.
+     * Fold sibling rule keys shaped `'*.' . CONST` into
+     * `'*' => FluentRule::array()->children([CONST => …, CONST_2 => …])`.
      *
-     * Phase 2 ships the indexer + collision/conflict detection
-     * (case (c) const value collision, case (d) sibling `'*'` rule).
-     * Phase 3 (next commit) wires the actual emit. For now, this method
-     * runs the validation passes and returns false (no array mutation).
-     * Consumers using the new shape continue to see flat-wildcard-keyed
-     * source until Phase 3 lands.
+     * Validates per spec §2 cases (c) + (d) before folding:
+     *
+     * - Case (d) — sibling `'*'` rule already exists. Bail-and-log.
+     * - Case (c) — const value collision (two consts resolving to same
+     *   string). Bail-and-log.
+     *
+     * On clean validation, builds the children() emit. Children's
+     * `ClassConstFetch` keys are preserved VERBATIM (identity-equal,
+     * not cloned) — refactor safety: a consumer renaming the const
+     * value reflects in the rector's output without re-running, and
+     * the call site reader sees the const reference instead of a
+     * stringified value.
+     *
+     * Children appear in source order. Per spec §3: deterministic,
+     * faithful to author intent, no git-blame archaeology cost.
      *
      * @param  list<array{item: ArrayItem, constExpr: ClassConstFetch, value: Expr}>  $entries
      * @param  array<string, array{index: int, value: Expr}>  $stringEntries
-     *
-     * @phpstan-ignore return.tooWideBool
      */
-    private function applyWildcardPrefixConstFold(array $entries, array $stringEntries): bool
+    private function applyWildcardPrefixConstFold(Array_ $array, array $entries, array $stringEntries): bool
     {
         // Case (d) — sibling non-wildcard `'*'` rule already exists.
         // The fold target is `'*' => …`; we can't clobber it. Bail.
@@ -892,14 +899,46 @@ CODE_SAMPLE
             $seenValues[$resolvedValue] = $entry['constExpr'];
         }
 
-        // Phase 3 emit lands in the next commit. Validation passed; the
-        // collection is clean for fold. Skip-log so consumers see the
-        // progress signal until Phase 3 ships.
-        $this->logGroupSkip(
-            'wildcard-prefix concat key recognized + validated — children() emit lands in Phase 3 of 0.19.0',
+        // Build the children([...]) inner array. Each entry produces
+        // `ArrayItem(key: <ClassConstFetch verbatim>, value: <Expr verbatim>)`.
+        // Source order preserved: $entries was filled in iteration order
+        // during indexing.
+        $childItems = [];
+
+        foreach ($entries as $entry) {
+            $childItems[] = new ArrayItem($entry['value'], $entry['constExpr']);
+        }
+
+        $foldExpr = new MethodCall(
+            $this->buildFluentRuleFactoryCall('array'),
+            new Identifier('children'),
+            [new Arg($this->multilineArray($childItems))],
         );
 
-        return false;
+        $foldItem = new ArrayItem($foldExpr, new String_('*'));
+
+        // Splice: identify by AST identity (===), not by index (which
+        // may have shifted from the existing fold's prior pass).
+        $matchedItems = array_column($entries, 'item');
+        $newItems = [];
+        $foldInserted = false;
+
+        foreach ($array->items as $item) {
+            if (in_array($item, $matchedItems, true)) {
+                if (! $foldInserted) {
+                    $newItems[] = $foldItem;
+                    $foldInserted = true;
+                }
+
+                continue;
+            }
+
+            $newItems[] = $item;
+        }
+
+        $array->items = $newItems;
+
+        return true;
     }
 
     private function formatClassConstFetch(ClassConstFetch $expr): string
