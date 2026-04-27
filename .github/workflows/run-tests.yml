@@ -62,6 +62,20 @@ jobs:
           echo "::add-matcher::${{ runner.tool_cache }}/php.json"
           echo "::add-matcher::${{ runner.tool_cache }}/phpunit.json"
 
+      - name: Get composer cache directory
+        id: composer-cache
+        shell: bash
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache composer dependencies
+        uses: actions/cache@v5
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ matrix.os }}-${{ matrix.php }}-${{ matrix.laravel }}-${{ matrix.stability }}-${{ hashFiles('composer.json') }}
+          restore-keys: |
+            composer-${{ matrix.os }}-${{ matrix.php }}-${{ matrix.laravel }}-${{ matrix.stability }}-
+            composer-${{ matrix.os }}-${{ matrix.php }}-${{ matrix.laravel }}-
+
       - name: Pin Laravel + testbench versions
         run: composer require --dev "orchestra/testbench:${{ matrix.testbench }}" --no-update --no-interaction
 
@@ -71,12 +85,14 @@ jobs:
       - name: List Installed Dependencies
         run: composer show -D
 
-      - name: Cache PHPUnit results
-        uses: actions/cache@v5
-        with:
-          path: .cache/phpunit/
-          key: phpunit-cache-${{ matrix.php }}-${{ matrix.laravel }}-${{ matrix.stability }}-${{ matrix.os }}-${{ hashFiles('tests/**') }}
-          restore-keys: phpunit-cache-${{ matrix.php }}-${{ matrix.laravel }}-${{ matrix.stability }}-${{ matrix.os }}-
+      # Linux: `pest --parallel` is safe and ~halves test time.
+      # Windows: stay serial — `pest --parallel` has a documented FS
+      # race in `PackageManifest::write()` → `rename()` on
+      # `prefer-lowest` (1.17.1 incident).
+      - name: Execute tests (Linux, parallel)
+        if: runner.os == 'Linux'
+        run: vendor/bin/pest --ci --parallel
 
-      - name: Execute tests
+      - name: Execute tests (Windows, serial)
+        if: runner.os == 'Windows'
         run: vendor/bin/pest --ci
