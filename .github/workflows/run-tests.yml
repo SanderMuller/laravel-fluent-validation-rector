@@ -85,14 +85,13 @@ jobs:
       - name: List Installed Dependencies
         run: composer show -D
 
-      # Linux: `pest --parallel` is safe and ~halves test time.
-      # Windows: stay serial — `pest --parallel` has a documented FS
-      # race in `PackageManifest::write()` → `rename()` on
-      # `prefer-lowest` (1.17.1 incident).
-      - name: Execute tests (Linux, parallel)
-        if: runner.os == 'Linux'
-        run: vendor/bin/pest --ci --parallel
-
-      - name: Execute tests (Windows, serial)
-        if: runner.os == 'Windows'
+      # `pest --parallel` is unsafe in this matrix:
+      #  - Windows: known FS race in `PackageManifest::write()` →
+      #    `rename()` on `prefer-lowest` (1.17.1 incident).
+      #  - Linux `prefer-lowest`: paratest workers load both
+      #    top-level and rector-bundled `nikic/php-parser`,
+      #    triggering "Cannot declare interface PhpParser\Node"
+      #    fatals (observed on f62a661).
+      # Stay serial on the matrix; composer cache is the safe win.
+      - name: Execute tests
         run: vendor/bin/pest --ci
