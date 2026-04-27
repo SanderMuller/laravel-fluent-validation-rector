@@ -204,6 +204,7 @@ Folds flat wildcard and dotted keys into nested `each()` / `children()` calls. A
 - **Notes**:
   - On Livewire, the `HasFluentValidation` trait's `getRules()` override flattens the nested form back to wildcard keys at runtime, so grouping is safe.
   - When a dot-notation key has no explicit parent rule, synthesizes a bare `FluentRule::array()` parent so nested `required` children still fire.
+  - Wildcard-prefix concat keys (`'*.' . CONST_NAME => …`) fold into `'*' => array()->children([CONST_NAME => …, …])` when every sibling in the group resolves the suffix from a self/static class constant. Mixed groups with literal `'*.foo'` siblings keep the literal-keyed entries unchanged and bail-and-log the const branch (no rule loss; partial conversion).
 
 ### Traits (set `TRAITS`)
 

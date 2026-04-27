@@ -861,15 +861,36 @@ CODE_SAMPLE
      */
     private function applyWildcardPrefixConstFold(Array_ $array, array $entries, array $stringEntries): bool
     {
-        // Case (d) — sibling non-wildcard `'*'` rule already exists.
-        // The fold target is `'*' => …`; we can't clobber it. Bail.
-        if (isset($stringEntries['*'])) {
+        // Case (d) — `'*'` already exists at the top level of the
+        // current array. Scan the LIVE `$array->items` (not the
+        // stale `$entries` snapshot) so the check covers two
+        // routes the snapshot misses:
+        //
+        // 1. The existing fold may have synthesized a `'*' => …`
+        //    parent earlier in this pass (from literal `'*.foo'`
+        //    keys). The snapshot was taken before that pass; the
+        //    live scan sees the synthesized parent.
+        // 2. Direct `ClassConstFetch` keys whose self/static const
+        //    resolves to `'*'` (e.g. `self::STAR = '*'`) — the
+        //    snapshot indexed those under a synthetic name, so
+        //    the snapshot's `'*'` key check missed them.
+        //
+        // External consts with non-resolvable runtime values still
+        // bypass the check; documented limitation in spec §2(c).
+        if ($this->arrayHasTopLevelStarKey($array)) {
             $this->logGroupSkip(
                 "wildcard fold target '*' is already used by a non-wildcard sibling rule; folding would clobber it. Move the '*' rule into the wildcard set's children([...]) body explicitly, or rename the wildcard parent.",
             );
 
             return false;
         }
+
+        // Reference $stringEntries so PHPStan doesn't flag it as
+        // unused. The live scan above replaces the snapshot lookup,
+        // but the parameter stays in the signature for symmetry
+        // with the existing-fold pipeline (potentially used by
+        // future validation passes).
+        unset($stringEntries);
 
         // Case (c) — const value collision. Two consts evaluating to the
         // same string would both produce key '<value>' in children([…]),
@@ -936,9 +957,58 @@ CODE_SAMPLE
             $newItems[] = $item;
         }
 
+        // Defensive: if no captured items survived to this pass (the
+        // existing fold's mutations or some other path removed them),
+        // don't overwrite $array->items with a no-op assignment AND
+        // don't claim a change that didn't happen — `$hasChanged`
+        // propagating true would mark the file as mutated when it
+        // wasn't, which Rector caches against. Should not trigger in
+        // normal flow (the existing fold and the new fold are disjoint
+        // by AST shape) but defends against future indexer changes.
+        if (! $foldInserted) {
+            return false;
+        }
+
         $array->items = $newItems;
 
         return true;
+    }
+
+    /**
+     * Live-scan check for case (d) clobber detection. Walks the
+     * current `$array->items` and returns true if any item's key
+     * resolves to the literal string `'*'`. Catches:
+     *
+     * - String_('*') literal keys (most common case)
+     * - ClassConstFetch keys whose self/static const resolves to
+     *   '*' (rare but possible — `self::STAR = '*'`)
+     * - Synthesized `'*' => …` parents from a prior fold pass
+     *   (the existing fold's `applyGroups` may emit these from
+     *   literal `'*.foo'` siblings; the new fold must not collide)
+     *
+     * External-class consts whose runtime value is `'*'` aren't
+     * resolved here (per spec §2(c) implementation scope) — those
+     * fall outside the check, accepted as documented limitation.
+     */
+    private function arrayHasTopLevelStarKey(Array_ $array): bool
+    {
+        foreach ($array->items as $item) {
+            if (! $item instanceof ArrayItem) {
+                continue;
+            }
+
+            if ($item->key instanceof String_ && $item->key->value === '*') {
+                return true;
+            }
+
+            if ($item->key instanceof ClassConstFetch
+                && $this->resolveClassConstToString($item->key) === '*'
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function formatClassConstFetch(ClassConstFetch $expr): string
