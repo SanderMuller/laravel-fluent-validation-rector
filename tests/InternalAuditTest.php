@@ -8,6 +8,13 @@ use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use ReflectionClass;
 use ReflectionException;
+use SanderMuller\FluentValidationRector\Config\DocblockNarrowOptions;
+use SanderMuller\FluentValidationRector\Config\HasFluentRulesTraitOptions;
+use SanderMuller\FluentValidationRector\Config\LivewireConvertOptions;
+use SanderMuller\FluentValidationRector\Config\RuleWrapperSimplifyOptions;
+use SanderMuller\FluentValidationRector\Config\Shared\AllowlistedFactories;
+use SanderMuller\FluentValidationRector\Config\Shared\BaseClassRegistry;
+use SanderMuller\FluentValidationRector\Config\Shared\OverlapBehavior;
 use SanderMuller\FluentValidationRector\Rector\AddHasFluentRulesTraitRector;
 use SanderMuller\FluentValidationRector\Rector\AddHasFluentValidationTraitRector;
 use SanderMuller\FluentValidationRector\Rector\ConvertLivewireRuleAttributeRector;
@@ -50,6 +57,15 @@ final class InternalAuditTest extends TestCase
         UpdateRulesReturnTypeDocblockRector::class,
         ValidationArrayToFluentRuleRector::class,
         ValidationStringToFluentRuleRector::class,
+        // Typed config DTO builders — opt-in alternative to the constant-array
+        // configuration shape; produce the same wire-key array via ->toArray().
+        DocblockNarrowOptions::class,
+        HasFluentRulesTraitOptions::class,
+        LivewireConvertOptions::class,
+        RuleWrapperSimplifyOptions::class,
+        AllowlistedFactories::class,
+        BaseClassRegistry::class,
+        OverlapBehavior::class,
     ];
 
     public function testEverySrcSymbolIsEitherPublicOrInternal(): void
