@@ -30,6 +30,17 @@ final readonly class RuleWrapperSimplifyOptions
         return new self(AllowlistedFactories::none());
     }
 
+    /**
+     * Named constructor for the common "build with explicit allowlist"
+     * shape. Reads more naturally than `default()->withAllowlistedFactories(...)`
+     * — `default()` implies "give me defaults" but the immediate
+     * `with*()` chain says we're not really after defaults.
+     */
+    public static function with(AllowlistedFactories $factories): self
+    {
+        return new self($factories);
+    }
+
     public function withAllowlistedFactories(AllowlistedFactories $factories): self
     {
         return new self($factories);

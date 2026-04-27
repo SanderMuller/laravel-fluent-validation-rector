@@ -42,4 +42,14 @@ final class HasFluentRulesTraitOptionsTest extends TestCase
         $this->assertSame([], $dto->baseClasses->baseClasses);
         $this->assertSame(['App\\Foo'], $next->baseClasses->baseClasses);
     }
+
+    public function testWithNamedConstructorMatchesDefaultThenWithChain(): void
+    {
+        $registry = BaseClassRegistry::of(['App\\Http\\Requests\\BaseRequest']);
+
+        $viaNamedConstructor = HasFluentRulesTraitOptions::with($registry);
+        $viaBuilderChain = HasFluentRulesTraitOptions::default()->withBaseClasses($registry);
+
+        $this->assertSame($viaNamedConstructor->toArray(), $viaBuilderChain->toArray());
+    }
 }

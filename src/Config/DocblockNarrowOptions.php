@@ -20,6 +20,20 @@ final readonly class DocblockNarrowOptions
         return new self(AllowlistedFactories::none());
     }
 
+    /**
+     * Named constructor — see `RuleWrapperSimplifyOptions::with()`. Both
+     * DTOs accept the same shared `AllowlistedFactories` so the
+     * cross-rector consolidation pattern reads identically:
+     *
+     *     $allowlist = AllowlistedFactories::none()->withFactories([…]);
+     *     RuleWrapperSimplifyOptions::with($allowlist)->toArray();
+     *     DocblockNarrowOptions::with($allowlist)->toArray();
+     */
+    public static function with(AllowlistedFactories $factories): self
+    {
+        return new self($factories);
+    }
+
     public function withAllowlistedFactories(AllowlistedFactories $factories): self
     {
         return new self($factories);

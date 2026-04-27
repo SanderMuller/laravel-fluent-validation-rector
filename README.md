@@ -491,9 +491,7 @@ return RectorConfig::configure()
     );
 ```
 
-The shared `AllowlistedFactories` DTO is consumed by both
-`RuleWrapperSimplifyOptions` and `DocblockNarrowOptions`, so the simplify and
-docblock rectors stay in lockstep on what counts as "fluent-compatible":
+**Cross-rector shared DTOs are the canonical multi-rector form.** When you configure both `SimplifyRuleWrappersRector` and `UpdateRulesReturnTypeDocblockRector`, build the `AllowlistedFactories` once and feed both options DTOs from the same instance. The two rectors stay in lockstep on what counts as "fluent-compatible" — adding a class to the allowlist updates both surfaces atomically:
 
 ```php
 $allowlist = AllowlistedFactories::none()
@@ -503,17 +501,37 @@ $allowlist = AllowlistedFactories::none()
 return RectorConfig::configure()
     ->withConfiguredRule(
         SimplifyRuleWrappersRector::class,
-        RuleWrapperSimplifyOptions::default()->withAllowlistedFactories($allowlist)->toArray(),
+        RuleWrapperSimplifyOptions::with($allowlist)->toArray(),
     )
     ->withConfiguredRule(
         UpdateRulesReturnTypeDocblockRector::class,
-        DocblockNarrowOptions::default()->withAllowlistedFactories($allowlist)->toArray(),
+        DocblockNarrowOptions::with($allowlist)->toArray(),
+    );
+```
+
+The `::with(...)` named constructor is shorthand for `::default()->withAllowlistedFactories(...)` — both produce identical output. Use whichever reads better at the call site; mixed-style is fine.
+
+Same pattern for the trait-add rector's base-class allowlist:
+
+```php
+return RectorConfig::configure()
+    ->withConfiguredRule(
+        AddHasFluentRulesTraitRector::class,
+        HasFluentRulesTraitOptions::with(
+            BaseClassRegistry::of(['App\\Http\\Requests\\BaseRequest']),
+        )->toArray(),
     );
 ```
 
 ## Formatter integration
 
-The rector's output is valid PHP but has three cosmetic seams that a formatter resolves automatically. The fixer names below are from PHP-CS-Fixer; Pint ships the same set under the same names as part of its default Laravel preset.
+**The rector emit is not formatter-clean by design.** Run a formatter (Pint, PHP-CS-Fixer, or equivalent) after `vendor/bin/rector process` to normalize output. The recommended pipeline:
+
+```bash
+vendor/bin/rector process && vendor/bin/pint --dirty
+```
+
+Three cosmetic seams a formatter resolves automatically. The fixer names below are from PHP-CS-Fixer; Pint ships the same set under the same names as part of its default Laravel preset.
 
 1. Imports are inserted at prepend position (not alphabetical). The `ordered_imports` fixer resolves.
 2. Unused imports may be left in place (e.g. a `Livewire\Attributes\Rule` import after the attribute is stripped). The `no_unused_imports` fixer resolves.

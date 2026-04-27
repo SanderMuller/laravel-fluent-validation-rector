@@ -55,4 +55,16 @@ final class RuleWrapperSimplifyOptionsTest extends TestCase
         $this->assertSame([], $dto->allowlistedFactories->factories);
         $this->assertSame(['App\\Rules\\X'], $next->allowlistedFactories->factories);
     }
+
+    public function testWithNamedConstructorMatchesDefaultThenWithChain(): void
+    {
+        $allowlist = AllowlistedFactories::none()
+            ->withFactories(['App\\Rules\\Custom'])
+            ->allowingChainTail();
+
+        $viaNamedConstructor = RuleWrapperSimplifyOptions::with($allowlist);
+        $viaBuilderChain = RuleWrapperSimplifyOptions::default()->withAllowlistedFactories($allowlist);
+
+        $this->assertSame($viaNamedConstructor->toArray(), $viaBuilderChain->toArray());
+    }
 }

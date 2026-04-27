@@ -55,4 +55,16 @@ final class DocblockNarrowOptionsTest extends TestCase
         $this->assertSame([], $dto->allowlistedFactories->factories);
         $this->assertSame(['App\\Rules\\X'], $next->allowlistedFactories->factories);
     }
+
+    public function testWithNamedConstructorMatchesDefaultThenWithChain(): void
+    {
+        $allowlist = AllowlistedFactories::none()
+            ->withFactories(['App\\Rules\\Custom'])
+            ->allowingChainTail();
+
+        $viaNamedConstructor = DocblockNarrowOptions::with($allowlist);
+        $viaBuilderChain = DocblockNarrowOptions::default()->withAllowlistedFactories($allowlist);
+
+        $this->assertSame($viaNamedConstructor->toArray(), $viaBuilderChain->toArray());
+    }
 }

@@ -24,6 +24,14 @@ final readonly class HasFluentRulesTraitOptions
         return new self(BaseClassRegistry::none());
     }
 
+    /**
+     * Named constructor — see `RuleWrapperSimplifyOptions::with()`.
+     */
+    public static function with(BaseClassRegistry $baseClasses): self
+    {
+        return new self($baseClasses);
+    }
+
     public function withBaseClasses(BaseClassRegistry $baseClasses): self
     {
         return new self($baseClasses);
