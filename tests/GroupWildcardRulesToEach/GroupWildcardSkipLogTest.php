@@ -162,9 +162,14 @@ final class GroupWildcardSkipLogTest extends AbstractRectorTestCase
             'concat key too complex to parse for grouping',
         ];
 
-        yield 'wildcard-prefix concat (Phase 1 — parser recognized, fold deferred to Phase 2)' => [
+        yield 'wildcard-prefix concat (Phase 2 — parser + indexer wired, emit deferred to Phase 3)' => [
             $base . 'skip_wildcard_prefix_concat_phase_1.php.inc',
-            'wildcard-prefix concat key not yet folded',
+            'wildcard-prefix concat key recognized + validated',
+        ];
+
+        yield 'wildcard-prefix concat strict prefix routing (`*. `, `*.foo.`, `**.` all fall through to existing parser)' => [
+            $base . 'skip_wildcard_prefix_concat_strict_prefix.php.inc',
+            'concat key too complex to parse for grouping',
         ];
     }
 

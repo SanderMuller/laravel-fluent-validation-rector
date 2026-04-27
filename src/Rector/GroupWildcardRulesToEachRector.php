@@ -315,25 +315,40 @@ CODE_SAMPLE
         /** @var array<string, array{prefix: Expr, suffixKey: string}> */
         $concatEntries = [];
 
+        /** @var list<array{item: ArrayItem, constExpr: ClassConstFetch, value: Expr}> */
+        $wildcardPrefixConstEntries = [];
+
         foreach ($array->items as $index => $item) {
             if (! $item instanceof ArrayItem) {
                 continue;
             }
 
-            $this->indexRuleItem($item, $index, $entries, $concatEntries);
+            $this->indexRuleItem($item, $index, $entries, $concatEntries, $wildcardPrefixConstEntries);
         }
 
-        if ($entries === []) {
-            return false;
+        $hasChanged = false;
+
+        // Existing fold pipeline. Operates on `$entries` + `$concatEntries`.
+        // The new-kind items (wildcard-prefix-const) aren't in `$entries`,
+        // so this pass ignores them; the two folds are disjoint.
+        if ($entries !== []) {
+            $groups = $this->findTopLevelGroups($entries);
+
+            if ($groups !== []) {
+                $hasChanged = $this->applyGroups($array, $groups, $entries, $concatEntries);
+            }
         }
 
-        $groups = $this->findTopLevelGroups($entries);
-
-        if ($groups === []) {
-            return false;
+        // 0.19.0 wildcard-prefix concat fold. Runs after the existing fold
+        // because it identifies items by reference (ArrayItem identity), so
+        // index shifts from the existing fold don't matter.
+        if ($wildcardPrefixConstEntries !== []
+            && $this->applyWildcardPrefixConstFold($array, $wildcardPrefixConstEntries, $entries)
+        ) {
+            $hasChanged = true;
         }
 
-        return $this->applyGroups($array, $groups, $entries, $concatEntries);
+        return $hasChanged;
     }
 
     /**
@@ -342,8 +357,9 @@ CODE_SAMPLE
      *
      * @param  array<string, array{index: int, value: Expr}>  $entries
      * @param  array<string, array{prefix: Expr, suffixKey: string}>  $concatEntries
+     * @param  list<array{item: ArrayItem, constExpr: ClassConstFetch, value: Expr}>  $wildcardPrefixConstEntries
      */
-    private function indexRuleItem(ArrayItem $item, int $index, array &$entries, array &$concatEntries): void
+    private function indexRuleItem(ArrayItem $item, int $index, array &$entries, array &$concatEntries, array &$wildcardPrefixConstEntries): void
     {
         if ($item->key instanceof String_) {
             $entries[$item->key->value] = ['index' => $index, 'value' => $item->value];
@@ -358,7 +374,7 @@ CODE_SAMPLE
         }
 
         if ($item->key instanceof Concat) {
-            $this->indexConcatKey($item->key, $item->value, $index, $entries, $concatEntries);
+            $this->indexConcatKey($item->key, $item->value, $index, $item, $entries, $concatEntries, $wildcardPrefixConstEntries);
         }
     }
 
@@ -381,8 +397,9 @@ CODE_SAMPLE
     /**
      * @param  array<string, array{index: int, value: Expr}>  $entries
      * @param  array<string, array{prefix: Expr, suffixKey: string}>  $concatEntries
+     * @param  list<array{item: ArrayItem, constExpr: ClassConstFetch, value: Expr}>  $wildcardPrefixConstEntries
      */
-    private function indexConcatKey(Concat $keyExpr, Expr $value, int $index, array &$entries, array &$concatEntries): void
+    private function indexConcatKey(Concat $keyExpr, Expr $value, int $index, ArrayItem $item, array &$entries, array &$concatEntries, array &$wildcardPrefixConstEntries): void
     {
         $parsed = $this->parseConcatKey($keyExpr);
 
@@ -394,16 +411,16 @@ CODE_SAMPLE
             return;
         }
 
-        // Phase 1 of 0.19.0 widens the parser to recognize the
-        // `'*.' . CONST` shape but the indexer/grouper/emitter for
-        // that kind lands in Phase 2. Until then, log-and-skip so
-        // consumers using the new shape get a coherent diagnostic
-        // rather than the (now-misleading) "too complex" generic
-        // bail. Phase 2 replaces this with the children() fold.
         if ($parsed['kind'] === 'string_prefix_const_suffix') {
-            $this->logGroupSkip(
-                'wildcard-prefix concat key not yet folded — recognized but the children() fold output lands in Phase 2 of 0.19.0',
-            );
+            // 0.19.0 wildcard-prefix concat fold. Capture the ArrayItem
+            // by reference so applyWildcardPrefixConstFold can identify
+            // and replace it later, regardless of any index shifts from
+            // the parallel existing-shape fold.
+            $wildcardPrefixConstEntries[] = [
+                'item' => $item,
+                'constExpr' => $parsed['constExpr'],
+                'value' => $value,
+            ];
 
             return;
         }
@@ -816,6 +833,82 @@ CODE_SAMPLE
             'subFixed' => $subFixed,
             'subWildcardParent' => $subWildcardParent,
         ];
+    }
+
+    // ─── Wildcard-prefix concat fold (0.19.0) ────────────────────────────
+
+    /**
+     * Phase 2/3 of 0.19.0: fold sibling rule keys shaped
+     * `'*.' . CONST` into `'*' => array()->children([CONST => …])`.
+     *
+     * Phase 2 ships the indexer + collision/conflict detection
+     * (case (c) const value collision, case (d) sibling `'*'` rule).
+     * Phase 3 (next commit) wires the actual emit. For now, this method
+     * runs the validation passes and returns false (no array mutation).
+     * Consumers using the new shape continue to see flat-wildcard-keyed
+     * source until Phase 3 lands.
+     *
+     * @param  list<array{item: ArrayItem, constExpr: ClassConstFetch, value: Expr}>  $entries
+     * @param  array<string, array{index: int, value: Expr}>  $stringEntries
+     *
+     * @phpstan-ignore return.tooWideBool
+     */
+    private function applyWildcardPrefixConstFold(Array_ $array, array $entries, array $stringEntries): bool
+    {
+        // Case (d) — sibling non-wildcard `'*'` rule already exists.
+        // The fold target is `'*' => …`; we can't clobber it. Bail.
+        if (isset($stringEntries['*'])) {
+            $this->logGroupSkip(
+                "wildcard fold target '*' is already used by a non-wildcard sibling rule; folding would clobber it. Move the '*' rule into the wildcard set's children([...]) body explicitly, or rename the wildcard parent.",
+            );
+
+            return false;
+        }
+
+        // Case (c) — const value collision. Two consts evaluating to the
+        // same string would both produce key '<value>' in children([…]),
+        // and the fold can't deterministically pick which CONST to keep.
+        // Resolved values for collision check ONLY; the emit preserves
+        // the ClassConstFetch node verbatim.
+        $seenValues = [];
+
+        foreach ($entries as $entry) {
+            $resolvedValue = $this->resolveClassConstToString($entry['constExpr']);
+
+            if ($resolvedValue === null) {
+                continue;
+            }
+
+            if (isset($seenValues[$resolvedValue])) {
+                $this->logGroupSkip(sprintf(
+                    "const value collision in wildcard fold: %s and %s both evaluate to '%s'. Refactor to use literal string keys, or remove the duplicate.",
+                    $this->formatClassConstFetch($seenValues[$resolvedValue]),
+                    $this->formatClassConstFetch($entry['constExpr']),
+                    $resolvedValue,
+                ));
+
+                return false;
+            }
+
+            $seenValues[$resolvedValue] = $entry['constExpr'];
+        }
+
+        // Phase 3 emit lands in the next commit. Validation passed; the
+        // collection is clean for fold. Skip-log so consumers see the
+        // progress signal until Phase 3 ships.
+        $this->logGroupSkip(
+            'wildcard-prefix concat key recognized + validated — children() emit lands in Phase 3 of 0.19.0',
+        );
+
+        return false;
+    }
+
+    private function formatClassConstFetch(ClassConstFetch $expr): string
+    {
+        $className = $this->getName($expr->class) ?? 'unknown';
+        $constName = $this->getName($expr->name) ?? 'unknown';
+
+        return $className . '::' . $constName;
     }
 
     // ─── Apply groups ────────────────────────────────────────────────────
