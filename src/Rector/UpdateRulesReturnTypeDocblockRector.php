@@ -465,7 +465,19 @@ CODE_SAMPLE
 
         $className = $this->getName($current->class);
 
-        return $className === FluentRule::class;
+        // Match both the fully-qualified `FluentRule` and the short
+        // `FluentRule` name. `GroupWildcardRulesToEachRector` emits
+        // short-name `StaticCall(new Name('FluentRule'), …)` nodes when
+        // it folds wildcard groups; the post-rector pipeline queues the
+        // `use SanderMuller\FluentValidation\FluentRule;` import but it
+        // isn't in scope when this predicate runs in the same set-list
+        // pass. Without the short-name accept, the docblock-narrow skips
+        // every fold output with `value at key '*' is not a FluentRule
+        // chain (shape: MethodCall)`. Matches the same widening pattern
+        // already in GroupWildcardRulesToEachRector::getFluentRuleFactory.
+        // Diagnosed via tests/FullPipeline/Fixture/post_fold_docblock_narrow_children.php.inc
+        // (0.19.1 hihaho dogfood reproduction).
+        return $className === FluentRule::class || $className === 'FluentRule';
     }
 
     /**

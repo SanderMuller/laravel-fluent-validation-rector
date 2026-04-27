@@ -7,19 +7,26 @@ use PhpParser\Node\Arg;
 use PhpParser\Node\ArrayItem;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Array_;
+use PhpParser\Node\Expr\ArrowFunction;
 use PhpParser\Node\Expr\BinaryOp\Concat;
 use PhpParser\Node\Expr\ClassConstFetch;
+use PhpParser\Node\Expr\Closure;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\Class_;
+use PhpParser\Node\Stmt\ClassLike;
+use PhpParser\Node\Stmt\ClassMethod;
+use PhpParser\Node\Stmt\Function_;
 use PhpParser\Node\Stmt\Namespace_;
 use PhpParser\Node\Stmt\Return_;
+use PhpParser\NodeVisitor;
 use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\Rector\AbstractRector;
 use SanderMuller\FluentValidation\FluentRule;
+use SanderMuller\FluentValidation\RuleSet;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsRulesShapedMethods;
 use SanderMuller\FluentValidationRector\Rector\Concerns\IdentifiesLivewireClasses;
@@ -245,21 +252,7 @@ CODE_SAMPLE
                     continue;
                 }
 
-                $methodChanged = false;
-
-                $this->traverseNodesWithCallable($method, function (Node $inner) use (&$methodChanged): ?Return_ {
-                    if (! $inner instanceof Return_ || ! $inner->expr instanceof Array_) {
-                        return null;
-                    }
-
-                    if ($this->groupRulesArray($inner->expr)) {
-                        $methodChanged = true;
-
-                        return $inner;
-                    }
-
-                    return null;
-                });
+                $methodChanged = $this->refactorRulesMethodBody($method, $class);
 
                 if ($methodChanged) {
                     $hasChanged = true;
@@ -1334,6 +1327,171 @@ CODE_SAMPLE
     private function isFluentRuleChain(Expr $expr): bool
     {
         return $this->getFluentRuleFactory($expr) !== null;
+    }
+
+    /**
+     * Locate the rules() return value's array literal and fold it.
+     *
+     * Anchor rules (codex-review 2026-04-27, both HIGH findings):
+     *  - Inspect ONLY direct-child `Return_` statements in
+     *    `$method->stmts`. Closure / arrow-function / nested-function /
+     *    anonymous-class returns are NOT the rules() return value and
+     *    must not trigger fold or skip-log emit.
+     *  - Branched control flow (multiple top-level returns) bails-with-log
+     *    UNIFORMLY — both bare-array and `RuleSet::from()` branches —
+     *    before any branch-specific rewrite. Without the unified guard,
+     *    a method with `if () return [...]; return RuleSet::from([...]);`
+     *    would partially rewrite (bare branch folds, RuleSet branch logs)
+     *    and leave the consumer's rules half-migrated across paths.
+     *
+     * Returns true iff at least one array was successfully folded.
+     */
+    private function refactorRulesMethodBody(ClassMethod $method, Class_ $class): bool
+    {
+        $directReturns = $this->collectDirectChildReturns($method);
+
+        if ($directReturns === []) {
+            return false;
+        }
+
+        if (count($directReturns) > 1) {
+            // Bail uniformly across all return shapes. Consumer audit required
+            // before per-branch fold ships (OQ#1 conservative resolution,
+            // specs/0.19.1-…). Reopens on consumer signal.
+            $this->logSkip(
+                $class,
+                'rules() body has multiple top-level return statements — fold target ambiguous; consumer audit required',
+            );
+
+            return false;
+        }
+
+        $return = $directReturns[0];
+        $expr = $return->expr;
+
+        if ($expr instanceof Array_) {
+            return $this->groupRulesArray($expr);
+        }
+
+        if ($expr === null || ! $this->isRuleSetFromCall($expr)) {
+            return false;
+        }
+
+        $rulesetArray = $this->extractArrayFromRuleSetFrom($expr);
+
+        if (! $rulesetArray instanceof Array_) {
+            $this->logSkip(
+                $class,
+                'RuleSet::from() argument is not a literal array — fold target must be a statically-determinable Array_; consumer audit required',
+            );
+
+            return false;
+        }
+
+        return $this->groupRulesArray($rulesetArray);
+    }
+
+    /**
+     * Collect `Return_` statements that influence `$method`'s return value
+     * — direct children of `$method->stmts` plus those nested inside non-
+     * function-like control-flow stmts (If_, ElseIf_, Else_, Switch_, etc.).
+     * Closures, arrow functions, named functions, and anonymous classes are
+     * scope boundaries and are NOT walked into.
+     *
+     * The list distinguishes branched control flow (multiple returns ⇒
+     * `if/else`-shape, ternary, switch, etc.) from straight-line
+     * single-return bodies. Empty list ⇒ no return statement reachable from
+     * `$method`'s scope (e.g. `void`, abstract).
+     *
+     * @return list<Return_>
+     */
+    private function collectDirectChildReturns(ClassMethod $method): array
+    {
+        if ($method->stmts === null) {
+            return [];
+        }
+
+        $returns = [];
+
+        foreach ($method->stmts as $stmt) {
+            $this->collectScopeLocalReturns($stmt, $returns);
+        }
+
+        return $returns;
+    }
+
+    /**
+     * @param  list<Return_>  $returns
+     * @param-out list<Return_> $returns
+     */
+    private function collectScopeLocalReturns(Node $node, array &$returns): void
+    {
+        $this->traverseNodesWithCallable($node, function (Node $child) use (&$returns): ?int {
+            if ($child instanceof Closure
+                || $child instanceof ArrowFunction
+                || $child instanceof Function_
+                || $child instanceof ClassLike) {
+                return NodeVisitor::DONT_TRAVERSE_CHILDREN;
+            }
+
+            if ($child instanceof Return_) {
+                $returns[] = $child;
+            }
+
+            return null;
+        });
+    }
+
+    /**
+     * Returns true when $expr is a `RuleSet::from(...)` static call, ignoring
+     * argument shape. Matches both FQN and short-name `RuleSet` references.
+     *
+     * Caller pairs this with `extractArrayFromRuleSetFrom()` to differentiate
+     * "not a RuleSet::from() return at all" (silent — out of scope) from
+     * "RuleSet::from() with a non-array argument" (log — actionable).
+     */
+    private function isRuleSetFromCall(Expr $expr): bool
+    {
+        if (! $expr instanceof StaticCall) {
+            return false;
+        }
+
+        $className = $this->getName($expr->class);
+
+        if ($className !== RuleSet::class && $className !== 'RuleSet') {
+            return false;
+        }
+
+        return $expr->name instanceof Identifier && $expr->name->name === 'from';
+    }
+
+    /**
+     * If $expr is `RuleSet::from(<Array_>)` with a single literal-Array_
+     * argument, return the wrapped Array_; else null.
+     *
+     * Returns null for `RuleSet::from($injected)`, `RuleSet::from(self::base())`,
+     * multi-arg, etc. Pair with `isRuleSetFromCall()` to log when the descent
+     * target is non-literal vs silently skip when it isn't a from() call at
+     * all.
+     */
+    private function extractArrayFromRuleSetFrom(Expr $expr): ?Array_
+    {
+        if (! $this->isRuleSetFromCall($expr)) {
+            return null;
+        }
+
+        /** @var StaticCall $expr — narrowed by isRuleSetFromCall */
+        if (count($expr->args) !== 1) {
+            return null;
+        }
+
+        $arg = $expr->args[0];
+
+        if (! $arg instanceof Arg || ! $arg->value instanceof Array_) {
+            return null;
+        }
+
+        return $arg->value;
     }
 
     /**

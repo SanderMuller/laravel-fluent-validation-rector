@@ -176,6 +176,21 @@ final class GroupWildcardSkipLogTest extends AbstractRectorTestCase
             $base . 'skip_wildcard_prefix_concat_const_collision.php.inc',
             'const value collision in wildcard fold',
         ];
+
+        yield '0.19.1 RuleSet::from() with non-literal argument' => [
+            $base . 'skip_ruleset_from_non_literal_argument.php.inc',
+            'RuleSet::from() argument is not a literal array',
+        ];
+
+        yield '0.19.1 RuleSet::from() inside rules() with multiple top-level returns' => [
+            $base . 'skip_ruleset_from_multi_return.php.inc',
+            'rules() body has multiple top-level return statements',
+        ];
+
+        yield '0.19.1 codex-review #2 — bare-array branch + bare-array branch (mixed-branch unified bail)' => [
+            $base . 'skip_mixed_branch_returns.php.inc',
+            'rules() body has multiple top-level return statements',
+        ];
     }
 
     public function provideConfigFilePath(): string

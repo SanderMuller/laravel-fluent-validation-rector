@@ -205,6 +205,7 @@ Folds flat wildcard and dotted keys into nested `each()` / `children()` calls. A
   - On Livewire, the `HasFluentValidation` trait's `getRules()` override flattens the nested form back to wildcard keys at runtime, so grouping is safe.
   - When a dot-notation key has no explicit parent rule, synthesizes a bare `FluentRule::array()` parent so nested `required` children still fire.
   - Wildcard-prefix concat keys (`'*.' . CONST_NAME => …`) fold into `'*' => array()->children([CONST_NAME => …, …])` when every sibling in the group resolves the suffix from a self/static class constant. Mixed groups with literal `'*.foo'` siblings keep the literal-keyed entries unchanged and bail-and-log the const branch (no rule loss; partial conversion).
+  - `rules()` methods returning `RuleSet::from([...])` (the canonical `sandermuller/laravel-fluent-validation` shape) are folded by descending into the array argument. The `RuleSet::from(...)` wrapper stays intact; only the wrapped array is rewritten. Branched-return bodies (multiple top-level returns) bail-with-log uniformly to avoid partial cross-branch rewrites.
 
 ### Traits (set `TRAITS`)
 
