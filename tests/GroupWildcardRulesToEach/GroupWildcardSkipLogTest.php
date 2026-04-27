@@ -161,6 +161,11 @@ final class GroupWildcardSkipLogTest extends AbstractRectorTestCase
             $base . 'skip_complex_concat_key.php.inc',
             'concat key too complex to parse for grouping',
         ];
+
+        yield 'wildcard-prefix concat (Phase 1 — parser recognized, fold deferred to Phase 2)' => [
+            $base . 'skip_wildcard_prefix_concat_phase_1.php.inc',
+            'wildcard-prefix concat key not yet folded',
+        ];
     }
 
     public function provideConfigFilePath(): string

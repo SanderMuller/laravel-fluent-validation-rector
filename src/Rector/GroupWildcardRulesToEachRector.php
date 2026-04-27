@@ -394,6 +394,20 @@ CODE_SAMPLE
             return;
         }
 
+        // Phase 1 of 0.19.0 widens the parser to recognize the
+        // `'*.' . CONST` shape but the indexer/grouper/emitter for
+        // that kind lands in Phase 2. Until then, log-and-skip so
+        // consumers using the new shape get a coherent diagnostic
+        // rather than the (now-misleading) "too complex" generic
+        // bail. Phase 2 replaces this with the children() fold.
+        if ($parsed['kind'] === 'string_prefix_const_suffix') {
+            $this->logGroupSkip(
+                'wildcard-prefix concat key not yet folded — recognized but the children() fold output lands in Phase 2 of 0.19.0',
+            );
+
+            return;
+        }
+
         $resolved = $this->resolveConcatToString($parsed) ?? $parsed['prefixId'] . $parsed['suffix'];
 
         $entries[$resolved] = ['index' => $index, 'value' => $value];
@@ -431,14 +445,15 @@ CODE_SAMPLE
     /**
      * Resolve a parsed concat key to a full string if its prefix expression resolves to a constant.
      *
-     * @param  array{prefixExpr: Expr, prefix: string, suffix: string, prefixId: string}  $parsed
+     * Only handles the `const_prefix_string_suffix` kind. Callers
+     * MUST gate on `$parsed['kind'] === 'const_prefix_string_suffix'`
+     * before invoking; the `string_prefix_const_suffix` kind has
+     * different fields and a different fold semantic.
+     *
+     * @param  array{kind: 'const_prefix_string_suffix', prefixExpr: ClassConstFetch, prefix: string, suffix: string, prefixId: string}  $parsed
      */
     private function resolveConcatToString(array $parsed): ?string
     {
-        if (! $parsed['prefixExpr'] instanceof ClassConstFetch) {
-            return null;
-        }
-
         $prefixValue = $this->resolveClassConstToString($parsed['prefixExpr']);
 
         if ($prefixValue === null) {
@@ -461,21 +476,40 @@ CODE_SAMPLE
     }
 
     /**
-     * Parse a Concat key expression into a prefix expression + string suffix.
+     * Parse a Concat key expression into one of two shape kinds.
      *
-     * Example: `self::INTERACTIONS . '.*.type'`
-     * → prefixExpr: ClassConstFetch(self, INTERACTIONS)
-     * → suffix: '.*.type'
-     * → prefixId: '__concat_self::INTERACTIONS__'
+     * **Kind `const_prefix_string_suffix`** — existing supported shape:
+     *   `self::INTERACTIONS . '.*.type'`
+     *   → prefixExpr: ClassConstFetch(self, INTERACTIONS)
+     *   → suffix: '.*.type'
+     *   → prefixId: '__concat_self::INTERACTIONS__'
      *
-     * @return array{prefixExpr: Expr, prefix: string, suffix: string, prefixId: string}|null
+     * **Kind `string_prefix_const_suffix`** — new in 0.19, peer-shared:
+     *   `'*.' . InteractionGroup::NAME`
+     *   → prefix: '*.'
+     *   → constExpr: ClassConstFetch(InteractionGroup, NAME)
+     *
+     * The two kinds drive different fold output paths in the
+     * indexer/grouper/emitter chain. The new kind folds to
+     * `'*' => array()->children([CONST => ..., CONST_2 => ...])` with
+     * the `ClassConstFetch` preserved verbatim as the children-array
+     * key (NOT string-literalized — refactor safety + intent
+     * preservation).
+     *
+     * @return array{kind: 'const_prefix_string_suffix', prefixExpr: ClassConstFetch, prefix: string, suffix: string, prefixId: string}|array{kind: 'string_prefix_const_suffix', prefix: string, constExpr: ClassConstFetch}|null
      */
     private function parseConcatKey(Concat $concat): ?array
     {
         // Flatten the concat chain into parts
         $parts = $this->flattenConcat($concat);
 
-        // Find the split point: first non-expression part with a dot
+        $stringPrefixConstSuffix = $this->matchStringPrefixConstSuffix($parts);
+
+        if ($stringPrefixConstSuffix !== null) {
+            return $stringPrefixConstSuffix;
+        }
+
+        // Existing shape: ClassConstFetch . String_('.suffix') [. String_('.more')]…
         $prefixExpr = null;
         $prefixId = '';
         $suffix = '';
@@ -524,10 +558,41 @@ CODE_SAMPLE
         }
 
         return [
+            'kind' => 'const_prefix_string_suffix',
             'prefixExpr' => $prefixExpr,
             'prefix' => $prefixId,
             'suffix' => $suffix,
             'prefixId' => $prefixId,
+        ];
+    }
+
+    /**
+     * Match the `String_('*.') . ClassConstFetch` shape. Strict on the
+     * prefix value — `'*. ' . CONST` (trailing space) or
+     * `'*.foo.' . CONST` falls through to the existing parser path so
+     * we don't silently accept malformed wildcard prefixes.
+     *
+     * @param  list<Expr>  $parts
+     * @return array{kind: 'string_prefix_const_suffix', prefix: string, constExpr: ClassConstFetch}|null
+     */
+    private function matchStringPrefixConstSuffix(array $parts): ?array
+    {
+        if (count($parts) !== 2) {
+            return null;
+        }
+
+        if (! $parts[0] instanceof String_ || $parts[0]->value !== '*.') {
+            return null;
+        }
+
+        if (! $parts[1] instanceof ClassConstFetch) {
+            return null;
+        }
+
+        return [
+            'kind' => 'string_prefix_const_suffix',
+            'prefix' => '*.',
+            'constExpr' => $parts[1],
         ];
     }
 
