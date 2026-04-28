@@ -6,7 +6,7 @@ use Iterator;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Rector\Testing\PHPUnit\AbstractRectorTestCase;
 use ReflectionClass;
-use SanderMuller\FluentValidationRector\Diagnostics;
+use SanderMuller\FluentValidationRector\Internal\Diagnostics;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\GroupWildcardRulesToEachRector;
 
@@ -152,19 +152,24 @@ final class GroupWildcardSkipLogTest extends AbstractRectorTestCase
             "wildcard group has non-FluentRule entries — cannot fold to each() (parent: 'interactions')",
         ];
 
-        yield 'wrong parent factory type' => [
+        yield 'wrong parent factory type for each()' => [
             $base . 'skip_wrong_parent_type.php.inc',
-            "parent factory string() doesn't support each()/children()",
+            "parent factory string() doesn't support each() — only array() does",
         ];
 
-        yield 'complex concat key' => [
+        yield 'complex concat key (variable prefix — non-static part)' => [
             $base . 'skip_complex_concat_key.php.inc',
-            'concat key too complex to parse for grouping',
+            'concat key contains a non-static part (variable / method call)',
         ];
 
-        yield 'wildcard-prefix concat strict prefix routing (`*. `, `*.foo.`, `**.` all fall through to existing parser)' => [
+        yield "0.20.0 mijntp dogfood — literal-prefix concat key 'credentials.' isn't `'*.'` wildcard form" => [
+            $base . 'skip_literal_prefix_concat.php.inc',
+            "concat-key prefix 'credentials.' isn't the canonical `'*.'` wildcard form",
+        ];
+
+        yield 'wildcard-prefix concat strict prefix routing (`*. `, `*.foo.`, `**.` all fall through to non-canonical-prefix path)' => [
             $base . 'skip_wildcard_prefix_concat_strict_prefix.php.inc',
-            'concat key too complex to parse for grouping',
+            "isn't the canonical `'*.'` wildcard form",
         ];
 
         yield 'wildcard-prefix concat case (d) clobber — sibling non-wildcard `*` rule already exists' => [

@@ -25,7 +25,7 @@ Run the checks **in this order**. Each must pass before moving to the next. Fix 
 
 Always append `|| true` to verification commands so output is captured even on failure (per repo `CLAUDE.md` rule). Pass/fail is determined from the captured output, not the exit status alone.
 
-**The order is 1 → 2 → 3 → 4 → 5 → commit → push → 6 → 7 (draft notes) → user cuts tag → 8a (pre-tag gate, just before `gh release create`) → 8b (post-tag watch).** Do not jump from step 5 straight to drafting release notes. The release-notes file is written only after the changes have been committed, pushed, and CI is green on that exact SHA (step 6). Writing notes earlier claims facts ("tests pass on CI matrix", "2,092 tests / 2,941 assertions") that are not yet proven. If you find yourself about to `Write` a file under `internal/release-notes-<version>.md` and the last thing you did was a local quality check, stop — you skipped commit/push/CI. And if the tag is cut without step 8a's live-remote + CI re-check, or without waiting on step 8b's tag-ref runs, the release ships on unverified facts even if steps 1-7 all passed.
+**The order is 1 → 2 → 3 → 4 → 5a → 5b → 5c → commit → push → 6 → 7 (draft notes) → user cuts tag → 8a (pre-tag gate, just before `gh release create`) → 8b (post-tag watch).** Do not jump from step 5 straight to drafting release notes. The release-notes file is written only after the changes have been committed, pushed, and CI is green on that exact SHA (step 6). Writing notes earlier claims facts ("tests pass on CI matrix", "2,092 tests / 2,941 assertions") that are not yet proven. If you find yourself about to `Write` a file under `internal/release-notes-<version>.md` and the last thing you did was a local quality check, stop — you skipped commit/push/CI. And if the tag is cut without step 8a's live-remote + CI re-check, or without waiting on step 8b's tag-ref runs, the release ships on unverified facts even if steps 1-7 all passed.
 
 ### 1. Rector
 
@@ -96,6 +96,55 @@ git status --short .claude/ .github/ CLAUDE.md AGENTS.md
 ```
 
 All generated files must be committed together with their `.ai/` sources (per the `ai-guidelines` skill).
+
+### 5c. Public API audit (`PUBLIC_API.md`)
+
+`PUBLIC_API.md` enumerates every symbol the package promises to keep stable
+under SemVer. Two failure modes silently break consumers:
+
+1. **Public symbol vanishes / signature changes** — a class, constant, or
+   wire-key disappears or renames between releases. Consumers pinned to
+   `^N.0` get a fatal `class not found` or `undefined constant` on the
+   bump. Detection: every entry in `PUBLIC_API.md` must still resolve in
+   `src/` to a class/trait/interface/enum or a documented constant.
+2. **New public symbol ships undocumented** — a class added under `src/`
+   outside the `Internal\` namespace is implicitly public surface. Without
+   a `PUBLIC_API.md` entry, the SemVer promise is ambiguous (consumers
+   import it; future renames break them silently because nothing said it
+   was off-limits). Detection: every class under `src/` not in `Internal\`
+   namespace must either appear in `PUBLIC_API.md` or be in
+   `tests/InternalAuditTest::PUBLIC_CLASSES`.
+
+The `InternalAuditTest` test (run in step 3) catches the *namespace
+boundary* — it asserts every src/ class is either explicitly public or
+`@internal` / `Internal\`. Step 5c catches the *documentation boundary*
+— a class on the public list might still be missing from
+`PUBLIC_API.md`, and PUBLIC_API.md entries might point at symbols that
+moved or vanished.
+
+```bash
+# Cross-check every class in InternalAuditTest::PUBLIC_CLASSES is also
+# documented in PUBLIC_API.md. Manual audit; no programmatic check yet
+# (would require parsing PUBLIC_API.md sections + reflection over
+# PUBLIC_CLASSES).
+grep -E "^- |^### " PUBLIC_API.md | head -40
+
+# Cross-check no class under src/ outside Internal\ silently slipped
+# in without InternalAuditTest awareness:
+vendor/bin/pest tests/InternalAuditTest.php || true
+```
+
+If a symbol moved (e.g. `Diagnostics` → `Internal\Diagnostics`),
+`PUBLIC_API.md` must reflect the new location AND the deprecation cycle
+for the old location (when shim ships, when removal lands). See
+0.20.0 for the canonical example: namespace move + class_alias shim +
+removal slated for 1.0, all three documented in the namespace-structure
+section of `PUBLIC_API.md`.
+
+This step has no automated assertion yet — it's a manual audit by the
+release author. Open follow-up: bake into a `PublicApiSurfaceTest`
+data-provider that reads `PUBLIC_API.md` headings and asserts each
+named symbol resolves.
 
 ### 6. CI green-light gate (after push, before release notes + tag)
 
@@ -287,6 +336,7 @@ Wait until terminal. If red:
 | 4. PHPStan         | `vendor/bin/phpstan analyse --memory-limit=2G \|\| true`                                       | 0 errors                                      |
 | 5a. README         | manual scan vs `git log <last-tag>..HEAD`                                                      | no stale claims; all changed rules listed     |
 | 5b. Boost docs     | `vendor/bin/testbench package-boost:sync \|\| true`                                            | `.ai/` ↔ generated files in sync              |
+| 5c. PUBLIC_API.md  | manual audit: every entry resolves in src/, every public src/ class listed                     | no stale entries; no undocumented public surface |
 | **commit + push**  | user confirms changes + `git push`                                                             | HEAD pushed to `origin/main`                  |
 | 6. CI green-light  | `gh run list --commit "$(git rev-parse HEAD)"` all complete + no failure                       | every run for the SHA in `{success, skipped}` |
 | 7. Release notes   | preflight (clean tree + pushed + CI green) → `Write internal/release-notes-<version>.md`       | first line is `<!-- verified-sha: $SHA -->`   |

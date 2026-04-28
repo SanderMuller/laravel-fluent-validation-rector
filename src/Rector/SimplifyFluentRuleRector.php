@@ -13,7 +13,7 @@ use PhpParser\Node\Scalar\String_;
 use PHPStan\Type\ObjectType;
 use Rector\Rector\AbstractRector;
 use SanderMuller\FluentValidation\FluentRule;
-use SanderMuller\FluentValidationRector\RunSummary;
+use SanderMuller\FluentValidationRector\Internal\RunSummary;
 use SanderMuller\FluentValidationRector\Tests\SimplifyFluentRule\SimplifyFluentRuleRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;

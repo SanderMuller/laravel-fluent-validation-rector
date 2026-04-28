@@ -100,6 +100,19 @@ trait ConvertsValidationRuleStrings
      */
     private static array $unsafeParentClasses = [];
 
+    /**
+     * Captured offender details for unsafe parent classes — keyed by parent
+     * FQCN, value is the (descendant FQCN, method name, matched op) the
+     * detector flagged. Populated alongside `$unsafeParentClasses` from the
+     * file-level AST scan; not persisted across processes (cross-process
+     * unsafety propagates via the boolean set in the temp file, the
+     * detail map is best-effort populated when the scan happens
+     * in-process).
+     *
+     * @var array<string, array{descendant: string, method: string, op: string}>
+     */
+    private static array $unsafeParentDetails = [];
+
     /** @var array<string, string> */
     private const array TYPE_MAP = [
         'email' => 'email',
@@ -319,7 +332,7 @@ trait ConvertsValidationRuleStrings
         $className = $this->getName($classLike);
 
         if ($className !== null && $this->isUnsafeParentClass($className)) {
-            $this->logSkip($classLike, 'unsafe parent: a subclass manipulates parent::rules() with array functions');
+            $this->logSkip($classLike, $this->describeUnsafeParentSkip($className));
 
             return null;
         }
@@ -537,13 +550,16 @@ trait ConvertsValidationRuleStrings
         // single method name would let a child's `editorRules()` →
         // `array_merge(parent::editorRules(), …)` slip through and
         // corrupt the parent's still-rewritten body.
+        $matchedMethod = null;
+        $matchedOp = null;
+
         foreach ($class->getMethods() as $method) {
             $hasParentCall = false;
-            $hasArrayManipulation = false;
+            $matchedOpInMethod = null;
 
             $this->traverseNodesWithCallable($method, function (Node $node) use (
                 &$hasParentCall,
-                &$hasArrayManipulation,
+                &$matchedOpInMethod,
             ): null {
                 if ($node instanceof StaticCall
                     && $node->class instanceof Name
@@ -551,39 +567,17 @@ trait ConvertsValidationRuleStrings
                     $hasParentCall = true;
                 }
 
-                if ($node instanceof FuncCall
-                    && $node->name instanceof Name
-                    && in_array($this->getName($node->name), [
-                        'array_search', 'array_merge', 'array_merge_recursive',
-                        'array_replace', 'array_splice', 'array_push', 'array_pop',
-                        'array_shift', 'array_unshift', 'array_diff', 'array_intersect',
-                        'array_filter', 'array_map', 'array_keys', 'array_values',
-                        'array_combine', 'array_flip', 'array_reverse', 'array_slice',
-                        'array_unique', 'array_walk', 'in_array', 'collect',
-                    ], true)) {
-                    $hasArrayManipulation = true;
-                }
-
-                // `unset($rules['x'])` is a language construct — PhpParser
-                // models it as `Stmt\Unset_`, not `FuncCall`. Codex
-                // 2026-04-26 catch: the legacy 'unset' string in the
-                // FuncCall list above was dead code, so a child doing
-                // `parent::editorRules()` + `unset(...)` slipped past
-                // the parent-safety guard.
-                if ($node instanceof Unset_) {
-                    $hasArrayManipulation = true;
-                }
-
-                if ($node instanceof Assign
-                    && $node->var instanceof ArrayDimFetch) {
-                    $hasArrayManipulation = true;
+                if ($matchedOpInMethod === null) {
+                    $matchedOpInMethod = $this->matchArrayManipulationOp($node);
                 }
 
                 return null;
             });
 
-            if ($hasParentCall && $hasArrayManipulation) {
+            if ($hasParentCall && $matchedOpInMethod !== null) {
                 $hasUnsafeManipulation = true;
+                $matchedMethod = $this->getName($method);
+                $matchedOp = $matchedOpInMethod;
                 break;
             }
         }
@@ -601,6 +595,15 @@ trait ConvertsValidationRuleStrings
         if ($parentName !== null) {
             self::$unsafeParentClasses[$parentName] = true;
             $this->persistUnsafeParent($parentName);
+
+            $descendantName = $this->getName($class);
+            if ($descendantName !== null && $matchedMethod !== null && $matchedOp !== null) {
+                self::$unsafeParentDetails[$parentName] = [
+                    'descendant' => $descendantName,
+                    'method' => $matchedMethod,
+                    'op' => $matchedOp,
+                ];
+            }
         }
     }
 
@@ -610,8 +613,96 @@ trait ConvertsValidationRuleStrings
      */
     private const string ARRAY_MANIPULATION_PATTERN = '/\barray_(?:search|merge|merge_recursive|replace|splice|push|pop|shift|unshift|diff|intersect|filter|map|keys|values|combine|flip|reverse|slice|unique|walk)\s*\(|\bin_array\s*\(|\bcollect\s*\(|\bunset\s*\(/';
 
+    /**
+     * If the node is an array-manipulation operation that signals a
+     * subclass treats `parent::rules()` return values as plain arrays,
+     * return a human-readable label naming the matched op (used in the
+     * unsafe-parent skip-log to identify which class of operation
+     * triggered the heuristic). Otherwise null.
+     *
+     * Covers four shapes:
+     *  - Free functions (`array_merge`, `in_array`, `collect`, etc.)
+     *  - `Illuminate\Support\Arr` static helpers (`Arr::except`, `Arr::only`, etc.)
+     *  - `unset($rules[...])` language construct
+     *  - `$rules['key'] = $value` array-dim assignment
+     */
+    private function matchArrayManipulationOp(Node $node): ?string
+    {
+        if ($node instanceof FuncCall
+            && $node->name instanceof Name
+            && in_array($funcName = $this->getName($node->name), [
+                'array_search', 'array_merge', 'array_merge_recursive',
+                'array_replace', 'array_splice', 'array_push', 'array_pop',
+                'array_shift', 'array_unshift', 'array_diff', 'array_intersect',
+                'array_filter', 'array_map', 'array_keys', 'array_values',
+                'array_combine', 'array_flip', 'array_reverse', 'array_slice',
+                'array_unique', 'array_walk', 'in_array', 'collect',
+            ], true)) {
+            return $funcName . '()';
+        }
+
+        // 0.20.0 mijntp catch: Laravel's `Arr::except()` / `Arr::only()` and
+        // similar `Illuminate\Support\Arr` helpers are the same hazard class
+        // as `array_*` free functions but use static-call shape.
+        if ($node instanceof StaticCall
+            && $node->class instanceof Name
+            && in_array($this->getName($node->class), ['Arr', 'Illuminate\\Support\\Arr'], true)
+            && $node->name instanceof Identifier
+            && in_array($node->name->name, ['except', 'only', 'add', 'forget', 'set', 'pull'], true)) {
+            return 'Arr::' . $node->name->name . '()';
+        }
+
+        // `unset($rules['x'])` is a language construct — PhpParser models
+        // it as `Stmt\Unset_`, not `FuncCall`. Codex 2026-04-26 catch: the
+        // legacy 'unset' string in the FuncCall list above was dead code,
+        // so a child doing `parent::editorRules()` + `unset(...)` slipped
+        // past the parent-safety guard.
+        if ($node instanceof Unset_) {
+            return 'unset()';
+        }
+
+        if ($node instanceof Assign && $node->var instanceof ArrayDimFetch) {
+            return 'array-dim assignment';
+        }
+
+        return null;
+    }
+
     /** Whether the filesystem scan has been performed in this process */
     private static bool $filesystemScanDone = false;
+
+    /**
+     * Build the unsafe-parent skip-log message. When the in-process detail
+     * map has captured a specific descendant + method + op, names them so
+     * the consumer can jump straight to the offender. When the cross-
+     * process boolean set knows the parent is unsafe but no in-process
+     * detail was captured (e.g. another worker scanned the descendant in
+     * a different file we never visited), falls back to a hedged generic
+     * message acknowledging the heuristic uncertainty.
+     *
+     * The hedge matters: the detector flags a parent unsafe when ANY
+     * descendant method has BOTH a `parent::*()` call AND an array op,
+     * even if the array op doesn't operate on the parent's return value.
+     * mijntp 2026-04-27 dogfood caught this on a Filament base class
+     * with `parent::canAccess()` + unrelated `array_map()` in the same
+     * method. Naming the offender lets the consumer verify; hedging
+     * avoids overclaiming when the detail map is empty.
+     */
+    private function describeUnsafeParentSkip(string $parentClassName): string
+    {
+        $details = self::$unsafeParentDetails[$parentClassName] ?? null;
+
+        if ($details !== null) {
+            return sprintf(
+                "unsafe parent: descendant `%s::%s()` calls `parent::*()` and uses `%s` in the same method body — converting the parent could change the merged shape if the array op operates on the parent's return value (heuristic doesn't trace data flow; verify before treating as actionable)",
+                $details['descendant'],
+                $details['method'],
+                $details['op'],
+            );
+        }
+
+        return 'unsafe parent: a descendant in this codebase calls `parent::*()` and uses an array op (`array_*()` / `Arr::*()` / `unset()` / array-dim assignment) in the same method body — exact descendant not visible in this process; re-run with `vendor/bin/rector process` to materialize the in-process detail. The detector does not trace data flow, so a `parent::*()` call coexisting with unrelated array ops in the same method is a possible false positive — verify the descendant before treating as actionable.';
+    }
 
     /**
      * Check if a class FQCN is marked as unsafe to convert, checking:

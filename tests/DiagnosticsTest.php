@@ -3,7 +3,7 @@
 namespace SanderMuller\FluentValidationRector\Tests;
 
 use PHPUnit\Framework\TestCase;
-use SanderMuller\FluentValidationRector\Diagnostics;
+use SanderMuller\FluentValidationRector\Internal\Diagnostics;
 
 final class DiagnosticsTest extends TestCase
 {

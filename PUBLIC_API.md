@@ -10,7 +10,31 @@ listed are `@internal` and may change in any release without a MAJOR bump.
 > accepted values).
 >
 > **What's NOT API:** symbol-internal logic, return types of `@internal`
-> methods, skip-log reason text content, classmap layout on disk.
+> methods, skip-log reason text content, classmap layout on disk, anything
+> under the `SanderMuller\FluentValidationRector\Internal\` namespace.
+
+## Namespace structure
+
+The package's namespace tree is split into three tiers:
+
+- **Public**: `SanderMuller\FluentValidationRector\` (root) — rector class
+  FQNs, set list, top-level entry points listed below.
+- **Public, scoped**: `SanderMuller\FluentValidationRector\Set\`,
+  `…\Config\`, `…\Config\Shared\` — narrowly-scoped public surfaces (set
+  list constants, typed-config DTO builders, shared value objects). Every
+  symbol must appear under one of the sections below.
+- **Internal**: `SanderMuller\FluentValidationRector\Internal\` (added in
+  0.20.0) — implementation-detail classes whose namespace placement IS
+  the do-not-import signal. May change in any release without a MAJOR
+  bump. Do not import. Pre-0.20.0 these classes lived at the root with
+  `@internal` PHPDoc tags only; deprecation shims at the root will be
+  removed in 1.0.
+
+`Rector\Concerns\` traits are also implementation detail (intended to be
+mixed into rector classes only); they have always been `@internal` by
+PHPDoc and are not under the `Internal\` namespace for path-stability
+reasons (Rector's autoloader expects `Rector\` prefix for rector
+discovery).
 
 ## Set list constants
 
@@ -124,8 +148,8 @@ Two paths, mode-dependent. Both are committed observable contracts.
   `.cache/` cannot be created).
 - **Verbose tier off** (default, env unset):
   `sys_get_temp_dir() . '/rector-fluent-validation-skips-<cwd-hash>.log'`
-  (hashed temp path scoped per-cwd; unlinked by `RunSummary` after the
-  end-of-run summary line emits, so no artifact persists).
+  (hashed temp path scoped per-cwd; unlinked by the package's internal
+  end-of-run summary handler, so no artifact persists).
 
 Collapsing both to a single path is a MAJOR-bump event.
 

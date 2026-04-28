@@ -3,8 +3,8 @@
 namespace SanderMuller\FluentValidationRector\Tests;
 
 use PHPUnit\Framework\TestCase;
-use SanderMuller\FluentValidationRector\Diagnostics;
-use SanderMuller\FluentValidationRector\RunSummary;
+use SanderMuller\FluentValidationRector\Internal\Diagnostics;
+use SanderMuller\FluentValidationRector\Internal\RunSummary;
 
 /**
  * Verifies the end-of-run summary emit for the skip log. Covers both verbose

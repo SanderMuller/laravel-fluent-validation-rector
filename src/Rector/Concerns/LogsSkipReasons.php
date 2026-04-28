@@ -6,7 +6,7 @@ use PhpParser\Node\Identifier;
 use PhpParser\Node\Stmt\Class_;
 use Rector\Rector\AbstractRector;
 use ReflectionClass;
-use SanderMuller\FluentValidationRector\Diagnostics;
+use SanderMuller\FluentValidationRector\Internal\Diagnostics;
 
 /**
  * Writes `[fluent-validation:skip]` entries to a log file. Location depends

@@ -26,6 +26,7 @@ use Rector\PostRector\Collector\UseNodesToAddCollector;
 use Rector\Rector\AbstractRector;
 use Rector\StaticTypeMapper\ValueObject\Type\FullyQualifiedObjectType;
 use SanderMuller\FluentValidation\FluentRule;
+use SanderMuller\FluentValidationRector\Internal\RunSummary;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ConvertsValidationRuleArrays;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsLivewireRuleAttributes;
@@ -41,7 +42,6 @@ use SanderMuller\FluentValidationRector\Rector\Concerns\QualifiesForRulesProcess
 use SanderMuller\FluentValidationRector\Rector\Concerns\ReportsLivewireAttributeArgs;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ResolvesInheritedRulesVisibility;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ResolvesRealtimeValidationMarker;
-use SanderMuller\FluentValidationRector\RunSummary;
 use SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute\ConvertLivewireRuleAttributeRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;

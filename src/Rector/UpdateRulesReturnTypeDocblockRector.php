@@ -26,6 +26,7 @@ use Rector\StaticTypeMapper\ValueObject\Type\FullyQualifiedObjectType;
 use ReflectionClass;
 use SanderMuller\FluentValidation\Contracts\FluentRuleContract;
 use SanderMuller\FluentValidation\FluentRule;
+use SanderMuller\FluentValidationRector\Internal\RunSummary;
 use SanderMuller\FluentValidationRector\Rector\Concerns\AllowlistedRuleFactories;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsRulesShapedMethods;
@@ -33,7 +34,6 @@ use SanderMuller\FluentValidationRector\Rector\Concerns\IdentifiesLivewireClasse
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\NormalizesRulesDocblock;
 use SanderMuller\FluentValidationRector\Rector\Concerns\QualifiesForRulesProcessing;
-use SanderMuller\FluentValidationRector\RunSummary;
 use SanderMuller\FluentValidationRector\Tests\UpdateRulesReturnTypeDocblock\UpdateRulesReturnTypeDocblockRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;

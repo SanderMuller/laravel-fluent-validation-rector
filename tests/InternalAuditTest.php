@@ -78,6 +78,16 @@ final class InternalAuditTest extends TestCase
                 continue;
             }
 
+            // 0.20.0+: classes under the `Internal\` namespace are
+            // automatically `@internal` by namespace placement — the
+            // namespace is the structural commitment, the docblock tag
+            // is redundant. Skip the docblock check; the namespace
+            // assertion in `testEveryClassUnderInternalNamespaceIsThere`
+            // catches misplaced files.
+            if (str_starts_with($fqn, 'SanderMuller\\FluentValidationRector\\Internal\\')) {
+                continue;
+            }
+
             try {
                 $reflection = new ReflectionClass($fqn);
             } catch (ReflectionException $e) {
@@ -103,8 +113,49 @@ final class InternalAuditTest extends TestCase
             [],
             $offenders,
             'Each non-public symbol under src/ must carry a class-level @internal '
-            . 'PHPDoc tag. Either add @internal or extend '
+            . 'PHPDoc tag (or live under Internal\\ namespace). Either add @internal or extend '
             . self::class . "::PUBLIC_CLASSES.\n\nOffenders:\n  - "
+            . implode("\n  - ", $offenders),
+        );
+    }
+
+    public function testEveryClassUnderInternalNamespaceIsThereByNamespace(): void
+    {
+        $offenders = [];
+
+        foreach ($this->discoverSrcSymbols() as $fqn) {
+            // The Internal\ filesystem path implies the Internal\ namespace.
+            // Detect via filesystem location, not FQN, so a file under
+            // src/Internal/ with the wrong namespace declaration is caught.
+            $internalNamespace = 'SanderMuller\\FluentValidationRector\\Internal\\';
+
+            if (! str_starts_with($fqn, $internalNamespace)) {
+                continue;
+            }
+
+            try {
+                $reflection = new ReflectionClass($fqn);
+            } catch (ReflectionException $e) {
+                $offenders[] = "{$fqn}: ReflectionException ({$e->getMessage()})";
+
+                continue;
+            }
+
+            $namespace = $reflection->getNamespaceName();
+            $expected = rtrim($internalNamespace, '\\');
+
+            if ($namespace !== $expected && ! str_starts_with($namespace, $internalNamespace)) {
+                $offenders[] = "{$fqn}: lives under src/Internal/ but namespace is '{$namespace}' (expected start: '{$internalNamespace}')";
+            }
+        }
+
+        $this->assertSame(
+            [],
+            $offenders,
+            'Every class file under src/Internal/ must declare a namespace '
+            . "starting with 'SanderMuller\\FluentValidationRector\\Internal'. "
+            . 'Catches the failure mode where a contributor moves a file into '
+            . "src/Internal/ without updating its namespace declaration.\n\nOffenders:\n  - "
             . implode("\n  - ", $offenders),
         );
     }

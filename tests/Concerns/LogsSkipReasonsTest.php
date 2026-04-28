@@ -4,7 +4,7 @@ namespace SanderMuller\FluentValidationRector\Tests\Concerns;
 
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
-use SanderMuller\FluentValidationRector\Diagnostics;
+use SanderMuller\FluentValidationRector\Internal\Diagnostics;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Tests\Concerns\Support\LogsSkipReasonsHarness;
 

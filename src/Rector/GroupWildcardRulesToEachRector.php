@@ -27,6 +27,7 @@ use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\Rector\AbstractRector;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidation\RuleSet;
+use SanderMuller\FluentValidationRector\Internal\RunSummary;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsRulesShapedMethods;
 use SanderMuller\FluentValidationRector\Rector\Concerns\IdentifiesLivewireClasses;
@@ -34,7 +35,6 @@ use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesNamespaceImports;
 use SanderMuller\FluentValidationRector\Rector\Concerns\NormalizesRulesDocblock;
 use SanderMuller\FluentValidationRector\Rector\Concerns\QualifiesForRulesProcessing;
-use SanderMuller\FluentValidationRector\RunSummary;
 use SanderMuller\FluentValidationRector\Tests\GroupWildcardRulesToEach\GroupWildcardRulesToEachRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
@@ -396,9 +396,7 @@ CODE_SAMPLE
         $parsed = $this->parseConcatKey($keyExpr);
 
         if ($parsed === null) {
-            $this->logGroupSkip(
-                'concat key too complex to parse for grouping — only static class-constant prefixes (e.g. self::FOO) followed by a dotted-string suffix are supported',
-            );
+            $this->logGroupSkip($this->describeConcatKeyFailure($keyExpr));
 
             return;
         }
@@ -506,6 +504,63 @@ CODE_SAMPLE
      * preservation).
      *
      * @return array{kind: 'const_prefix_string_suffix', prefixExpr: ClassConstFetch, prefix: string, suffix: string, prefixId: string}|array{kind: 'string_prefix_const_suffix', prefix: string, constExpr: ClassConstFetch}|null
+     */
+    /**
+     * Specific failure reason for a concat key that `parseConcatKey()`
+     * couldn't parse. Walks the same flatten + classify path as the parser,
+     * but returns a consumer-actionable string per failure kind:
+     *  - `'literal.' . CONST` — non-wildcard literal prefix (mijntp-shape).
+     *    Wraps the actual literal prefix in single quotes so the consumer
+     *    can grep for it.
+     *  - `'*.' . CONST . '.suffix'` — multi-part suffix in wildcard concat.
+     *  - `Class::A . '.' . Class::B` — multiple const-fetch parts.
+     *  - `$var . '.' . CONST` — variable or method-call part (non-static).
+     *
+     * Each kind has a different remediation, so the message reflects which
+     * one fired. mijntp dogfood (2026-04-27) caught the original message
+     * inverting which side was the disqualifier on the literal-prefix case.
+     */
+    private function describeConcatKeyFailure(Concat $concat): string
+    {
+        $parts = $this->flattenConcat($concat);
+
+        // Variable / method call / other non-static expression.
+        foreach ($parts as $part) {
+            if (! $part instanceof String_ && ! $part instanceof ClassConstFetch) {
+                return 'concat key contains a non-static part (variable / method call) — only `String_` and `ClassConstFetch` parts can be statically resolved for grouping';
+            }
+        }
+
+        // Two-part `String_ . ClassConstFetch` shape — the
+        // wildcard-prefix-concat fold's territory. If we got here, the
+        // prefix wasn't '*.' (matchStringPrefixConstSuffix rejected it).
+        if (count($parts) === 2 && $parts[0] instanceof String_ && $parts[1] instanceof ClassConstFetch) {
+            return sprintf(
+                "concat-key prefix '%s' isn't the canonical `'*.'` wildcard form — only the canonical wildcard prefix folds into `array()->children([...])`; other prefix shapes (literal, malformed-wildcard) stay flat by design",
+                $parts[0]->value,
+            );
+        }
+
+        // Multiple ClassConstFetch parts (e.g. Class::A . '.' . Class::B).
+        $constFetchCount = 0;
+
+        foreach ($parts as $part) {
+            if ($part instanceof ClassConstFetch) {
+                ++$constFetchCount;
+            }
+        }
+
+        if ($constFetchCount > 1) {
+            return 'concat key has multiple ClassConstFetch parts — only one statically-resolvable const reference is supported per key';
+        }
+
+        // ClassConstFetch as prefix, but the suffix isn't a single
+        // `String_` starting with '.' (or it's missing entirely).
+        return "concat key suffix must be a `String_` starting with `.` after the const prefix (e.g. `self::FOO . '.bar'`); other shapes fall through";
+    }
+
+    /**
+     * @return array{kind: 'string_prefix_const_suffix', prefix: string, constExpr: ClassConstFetch}|array{kind: 'const_prefix_string_suffix', prefixExpr: ClassConstFetch, prefix: string, suffix: string, prefixId: string}|null
      */
     private function parseConcatKey(Concat $concat): ?array
     {
@@ -1142,11 +1197,20 @@ CODE_SAMPLE
 
         if (! $this->parentFactoryAllowsChain($parentValue, $eachItems, $childrenItems, $eachScalar)) {
             $factory = $parentValue instanceof Expr ? ($this->getFluentRuleFactory($parentValue) ?? 'unknown') : 'unknown';
-            $this->logGroupSkip(sprintf(
-                "parent factory %s() doesn't support each()/children() — only array() and field() do (parent: '%s')",
-                $factory,
-                $parentKey,
-            ));
+            $needsEach = $eachItems !== [] || $eachScalar instanceof Expr;
+
+            // Two distinct bail cases conflated under one message pre-0.20.0:
+            // an each() bail with `field()` parent rendered as "parent factory
+            // field() doesn't support each()/children() — only array() and
+            // field() do", which reads contradictory because `field()` IS one
+            // of the supported children() factories — it just doesn't support
+            // each(). Split per-case for accuracy. (0.20.0 hihaho dogfood
+            // 2026-04-27.)
+            $reason = $needsEach
+                ? sprintf("parent factory %s() doesn't support each() — only array() does (parent: '%s')", $factory, $parentKey)
+                : sprintf("parent factory %s() doesn't support children() — only array() and field() do (parent: '%s')", $factory, $parentKey);
+
+            $this->logGroupSkip($reason);
 
             return null;
         }
