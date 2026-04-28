@@ -178,7 +178,7 @@ Collapsing both to a single path is a MAJOR-bump event.
 ## Skip-log line format
 
 ```
-[fluent-validation:skip] <RectorShortName> <ClassFQCN> (<file-path>): <reason>
+[fluent-validation:skip] <RectorShortName> <ClassFQCN> (<file-path>[:<line>]): <reason>
 ```
 
 Slot semantics:
@@ -186,15 +186,23 @@ Slot semantics:
 - `[fluent-validation:skip]` — fixed prefix; consumers grep on it.
 - `<RectorShortName>` — `(new ReflectionClass($this))->getShortName()`.
 - `<ClassFQCN>` — fully-qualified name of the class the skip applies to.
-- `(<file-path>)` — path to the source file. Parenthesized,
-  single-spaced from the FQCN.
+- `(<file-path>[:<line>])` — path to the source file, with an optional
+  `:<line>` suffix when the skip-emit site has a known AST node
+  position (added 0.21.0). Parenthesized, single-spaced from the FQCN.
+  IDE click-to-open supports both forms (PhpStorm / VS Code terminal /
+  vim quickfix all parse `path:42` inside parens correctly). Per-key /
+  per-item skips emit the offending node's line; class-wide skips emit
+  the `class Foo` declaration line. Skips emitted from name-only call
+  sites (no AST node available) omit the `:<line>` suffix.
 - `:` — colon separator before the reason text.
 - `<reason>` — free-text reason. Text content is implementation; do not
   parse beyond the colon.
 
 Removing or rearranging slots, removing parenthesization, changing the
 prefix, or inserting new fields between existing slots is a MAJOR-bump
-event. Reason text changes are not breaking.
+event. Reason text changes are not breaking. The `:<line>` suffix is
+optional — its presence/absence on a given entry is implementation
+detail (depends on whether the emit site had AST positioning info).
 
 ## Skip-log header shape
 

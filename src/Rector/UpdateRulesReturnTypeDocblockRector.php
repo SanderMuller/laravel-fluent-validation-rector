@@ -314,8 +314,13 @@ CODE_SAMPLE
         $sawAllowlistedItem = false;
 
         foreach ($arrayNode->items as $index => $item) {
+            // 0.21.0 #44: pass the offending ArrayItem (or, when not yet an
+            // ArrayItem, the surrounding Array_ node) as the skip-log
+            // location so the entry includes `:<line>` on the file path —
+            // click-to-open jumps straight to the failing entry instead of
+            // the consumer having to count to index N.
             if (! $item instanceof ArrayItem) {
-                $this->logSkip($class, sprintf('ArrayItem at index %d is malformed', $index));
+                $this->logSkip($class, sprintf('ArrayItem at index %d is malformed', $index), location: $arrayNode);
 
                 return false;
             }
@@ -326,13 +331,13 @@ CODE_SAMPLE
             // "key is not String_ / ClassConstFetch" reason — the real issue
             // is spread semantics (keys can't be determined statically).
             if ($item->unpack) {
-                $this->logSkip($class, sprintf('encountered spread at index %d — cannot determine keys statically', $index));
+                $this->logSkip($class, sprintf('encountered spread at index %d — cannot determine keys statically', $index), location: $item);
 
                 return false;
             }
 
             if (! $this->isStaticallyKnownStringKey($item->key)) {
-                $this->logSkip($class, sprintf('ArrayItem key at index %d is not a statically-known string', $index));
+                $this->logSkip($class, sprintf('ArrayItem key at index %d is not a statically-known string', $index), location: $item);
 
                 return false;
             }
@@ -355,7 +360,7 @@ CODE_SAMPLE
 
             $shape = (new ReflectionClass($item->value))->getShortName();
             $keyDesc = $item->key instanceof String_ ? $item->key->value : 'const';
-            $this->logSkip($class, sprintf("value at key '%s' is not a FluentRule chain (shape: %s)", $keyDesc, $shape));
+            $this->logSkip($class, sprintf("value at key '%s' is not a FluentRule chain (shape: %s)", $keyDesc, $shape), location: $item);
 
             return false;
         }

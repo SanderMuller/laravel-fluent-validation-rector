@@ -2,6 +2,7 @@
 
 namespace SanderMuller\FluentValidationRector\Rector\Concerns;
 
+use PhpParser\Node;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Stmt\Class_;
 use Rector\Rector\AbstractRector;
@@ -103,25 +104,48 @@ trait LogsSkipReasons
      *                             Default true matches the existing
      *                             verbose-mode surface for unaudited sites.
      */
-    private function logSkip(Class_ $class, string $reason, bool $verboseOnly = false, bool $actionable = true): void
+    private function logSkip(Class_ $class, string $reason, bool $verboseOnly = false, bool $actionable = true, ?Node $location = null): void
     {
         $className = $class->namespacedName?->toString()
             ?? ($class->name instanceof Identifier ? $class->name->toString() : 'anonymous');
 
-        $this->writeSkipEntry($className, $reason, $verboseOnly, $actionable);
+        $line = self::resolveStartLine($location ?? $class);
+
+        $this->writeSkipEntry($className, $reason, $verboseOnly, $actionable, $line);
     }
 
     /**
      * Variant for callers that have a class name string but no `Class_`
      * AST node — e.g. `MethodCall`-driven rectors that resolve the
      * enclosing class via PHPStan scope rather than parent-walking.
+     *
+     * Optional `$location` lets a caller emit a precise line when the
+     * specific offending node is known (e.g. an `ArrayItem` inside the
+     * rules array). When not supplied, the line is omitted from the
+     * skip-log entry.
      */
-    private function logSkipByName(string $className, string $reason, bool $verboseOnly = false, bool $actionable = true): void
+    private function logSkipByName(string $className, string $reason, bool $verboseOnly = false, bool $actionable = true, ?Node $location = null): void
     {
-        $this->writeSkipEntry($className, $reason, $verboseOnly, $actionable);
+        $line = $location instanceof Node ? self::resolveStartLine($location) : null;
+
+        $this->writeSkipEntry($className, $reason, $verboseOnly, $actionable, $line);
     }
 
-    private function writeSkipEntry(string $className, string $reason, bool $verboseOnly = false, bool $actionable = true): void
+    /**
+     * Returns the AST node's start line when known, or null when the
+     * parser couldn't position the node (e.g. nodes synthesized by
+     * Rector without source positions). PhpParser uses `-1` for the
+     * "unknown" sentinel; we convert to null so the caller can omit
+     * the line from the skip-log entry rather than print `:-1`.
+     */
+    private static function resolveStartLine(Node $node): ?int
+    {
+        $line = $node->getStartLine();
+
+        return $line >= 1 ? $line : null;
+    }
+
+    private function writeSkipEntry(string $className, string $reason, bool $verboseOnly = false, bool $actionable = true, ?int $line = null): void
     {
         if ($verboseOnly && ! self::tierAllowsVerboseOnly($actionable)) {
             return;
@@ -138,7 +162,9 @@ trait LogsSkipReasons
 
         self::$loggedSkips[$key] = true;
 
-        $entry = sprintf("[fluent-validation:skip] %s %s (%s): %s\n", $rule, $className, $file, $reason);
+        $location = $line !== null ? sprintf('%s:%d', $file, $line) : $file;
+
+        $entry = sprintf("[fluent-validation:skip] %s %s (%s): %s\n", $rule, $className, $location, $reason);
 
         self::ensureLogSessionFreshness();
 

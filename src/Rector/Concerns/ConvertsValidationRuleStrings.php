@@ -18,6 +18,7 @@ use PhpParser\Node\Expr\Closure;
 use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
+use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Name\FullyQualified;
@@ -25,6 +26,7 @@ use PhpParser\Node\Scalar\Int_;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassLike;
+use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Stmt\Function_;
 use PhpParser\Node\Stmt\Namespace_;
 use PhpParser\Node\Stmt\Return_;
@@ -619,12 +621,11 @@ trait ConvertsValidationRuleStrings
         $matchedOp = null;
 
         foreach ($class->getMethods() as $method) {
-            $hasParentCall = false;
             $matchedOpInMethod = null;
 
             $this->traverseNodesWithCallable($method, function (Node $node) use (
-                &$hasParentCall,
                 &$matchedOpInMethod,
+                $method,
             ): ?int {
                 // Closure / arrow-function / nested-function / class-like
                 // boundaries are different scopes — their `parent::*()`
@@ -643,20 +644,35 @@ trait ConvertsValidationRuleStrings
                     return NodeVisitor::DONT_TRAVERSE_CHILDREN;
                 }
 
-                if ($node instanceof StaticCall
-                    && $node->class instanceof Name
-                    && $this->isName($node->class, 'parent')) {
-                    $hasParentCall = true;
+                if ($matchedOpInMethod !== null) {
+                    return null;
                 }
 
-                if ($matchedOpInMethod === null) {
-                    $matchedOpInMethod = $this->matchArrayManipulationOp($node);
+                // 0.21.0 #38 data-flow tightening: replaces the pre-0.21.0
+                // "any parent::*() call coexisting with any array op in
+                // the same method body" heuristic. Now requires the array
+                // op to operate on a `parent::*()` return value — either
+                // directly (`array_merge(parent::rules(), …)`) or via a
+                // depth-1 alias (`$x = parent::*(); array_op($x, …)`).
+                // The aliased-via-variable shape was flagged at fixture
+                // pin time as a real-world hazard pattern that (a)
+                // direct-only would miss; depth-1 trace catches it
+                // without paying the full chase-chain (b) complexity.
+                // Reopen-on-consumer-signal pattern reserves deeper
+                // alias trace for future shapes if any consumer files
+                // a depth-2+ aliased false negative.
+                $opLabel = $this->matchArrayManipulationOp($node);
+
+                if ($opLabel === null || ! $this->opOperatesOnParentCall($node, $method)) {
+                    return null;
                 }
+
+                $matchedOpInMethod = $opLabel;
 
                 return null;
             });
 
-            if ($hasParentCall && $matchedOpInMethod !== null) {
+            if ($matchedOpInMethod !== null) {
                 $hasUnsafeManipulation = true;
                 $matchedMethod = $this->getName($method);
                 $matchedOp = $matchedOpInMethod;
@@ -708,6 +724,178 @@ trait ConvertsValidationRuleStrings
      *  - `unset($rules[...])` language construct
      *  - `$rules['key'] = $value` array-dim assignment
      */
+    /**
+     * 0.21.0 #38 — data-flow trace, "direct only" depth (OQ #1 = (a)).
+     *
+     * Returns true when the array op's argument list contains a literal
+     * `parent::*()` static call. The pre-0.21.0 heuristic flagged any
+     * `parent::*()` call coexisting with any array op in the same method
+     * body, regardless of whether the array op operated on the parent's
+     * return value — generating false positives on real-world Filament/
+     * Livewire codebases where unrelated `parent::canAccess()` +
+     * `array_map($users)` shapes coexist (mijntp 0.20.1 dogfood:
+     * `ServiceProviderAdminPage`).
+     *
+     * Direct-only depth is empirically justified: hihaho's 12
+     * `parent::rules()` usages are all spread (`[...parent::rules(), …]`)
+     * or method-chain (`parent::rules()->modify(…)`), neither of which
+     * is an array op as classified by `matchArrayManipulationOp`. Mijntp
+     * + collectiq have zero `parent::rules()` references at all. Aliased
+     * shapes (`$base = parent::rules(); array_merge($base, …)`) don't
+     * exist in any audited consumer codebase. Reopen-on-consumer-signal
+     * pattern reserves full alias trace (b)/(c) for future need.
+     *
+     * Non-targets (already-correct behavior, pinned for design clarity):
+     *  - **Spread inside `Array_`** (`[...parent::rules(), 'extra' => …]`):
+     *    `Spread` AST node isn't an array op. Argument-unpacking, not
+     *    mutation. No false positive.
+     *  - **Method chain on `parent::*()`** (`parent::rules()->modify(…)`):
+     *    `MethodCall` on `StaticCall` isn't an array op. Combined with
+     *    the closure-scope skip stopping traversal into the closure arg
+     *    of `->modify(…)`, the chain itself contributes zero false-
+     *    positive surface.
+     *  - **`unset($var[…])` and `$var[…] = $val`**: even if `$var` were
+     *    `parent::rules()` it would be invalid PHP (can't apply unset
+     *    or array-dim-write to a function-call result). These shapes
+     *    can never satisfy the direct-only check, so they're effectively
+     *    dropped from the heuristic in 0.21.0 — was loose-coexistence
+     *    triggers in 0.20.x; now correctly inert.
+     */
+    private function opOperatesOnParentCall(Node $op, ClassMethod $method): bool
+    {
+        $candidates = match (true) {
+            $op instanceof FuncCall, $op instanceof StaticCall => $this->collectArgValues($op->args),
+            $op instanceof Unset_ => $this->collectArrayDimReceivers($op->vars),
+            $op instanceof Assign && $op->var instanceof ArrayDimFetch => [$op->var->var],
+            default => [],
+        };
+
+        foreach ($candidates as $expr) {
+            if ($this->traceToParentCall($expr, $method)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  iterable<mixed>  $args
+     * @return list<Node>
+     */
+    private function collectArgValues(iterable $args): array
+    {
+        $values = [];
+
+        foreach ($args as $arg) {
+            if ($arg instanceof Arg) {
+                $values[] = $arg->value;
+            }
+        }
+
+        return $values;
+    }
+
+    /**
+     * @param  iterable<mixed>  $vars
+     * @return list<Node>
+     */
+    private function collectArrayDimReceivers(iterable $vars): array
+    {
+        $receivers = [];
+
+        foreach ($vars as $var) {
+            if ($var instanceof ArrayDimFetch) {
+                $receivers[] = $var->var;
+            }
+        }
+
+        return $receivers;
+    }
+
+    /**
+     * Returns true when $expr is (a) a `parent::*()` static call directly
+     * or (b) a `Variable($x)` whose nearest assignment in `$method` binds
+     * it to a `parent::*()` call.
+     *
+     * Depth-1 alias trace per OQ #1 (escalated from "direct only" once
+     * `skip_parent_rules_manipulation.php.inc` confirmed real-world
+     * aliased-then-mutated patterns exist in fixture-pinned hazards).
+     * Reopen for depth-2+ on consumer signal.
+     */
+    private function traceToParentCall(Node $expr, ClassMethod $method): bool
+    {
+        if ($this->isParentStaticCall($expr)) {
+            return true;
+        }
+
+        if ($expr instanceof Variable) {
+            $varName = $this->getName($expr);
+
+            if ($varName === null) {
+                return false;
+            }
+
+            return $this->methodAssignsVarFromParentCall($method, $varName);
+        }
+
+        // Walk through ArrayDimFetch — `array_push($rules['title'], …)`
+        // operates on a parent-derived array via a sub-key access. The
+        // receiver `$rules` is the actual parent-traced binding; the
+        // dim is just the key.
+        if ($expr instanceof ArrayDimFetch) {
+            return $this->traceToParentCall($expr->var, $method);
+        }
+
+        return false;
+    }
+
+    /**
+     * Walks `$method` for an `Assign(var=Variable($varName), expr=StaticCall(parent, *))`
+     * shape. Skips into closure / arrow-function / nested-function /
+     * class-like boundaries (their assigns are different scopes).
+     */
+    private function methodAssignsVarFromParentCall(ClassMethod $method, string $varName): bool
+    {
+        $found = false;
+
+        $this->traverseNodesWithCallable($method, function (Node $node) use ($varName, &$found): ?int {
+            if ($node instanceof Closure
+                || $node instanceof ArrowFunction
+                || $node instanceof Function_
+                || $node instanceof ClassLike) {
+                return NodeVisitor::DONT_TRAVERSE_CHILDREN;
+            }
+
+            if ($found) {
+                return null;
+            }
+
+            if ($node instanceof Assign
+                && $node->var instanceof Variable
+                && $this->getName($node->var) === $varName
+                && $this->isParentStaticCall($node->expr)) {
+                $found = true;
+            }
+
+            return null;
+        });
+
+        return $found;
+    }
+
+    /**
+     * Returns true when $expr is a `parent::*()` static call shape.
+     * Used by `traceToParentCall` to identify direct-trace cases
+     * where the array op's input is the parent's return value.
+     */
+    private function isParentStaticCall(Node $expr): bool
+    {
+        return $expr instanceof StaticCall
+            && $expr->class instanceof Name
+            && $this->isName($expr->class, 'parent');
+    }
+
     private function matchArrayManipulationOp(Node $node): ?string
     {
         if ($node instanceof FuncCall

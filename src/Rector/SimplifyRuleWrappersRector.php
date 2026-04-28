@@ -629,7 +629,12 @@ CODE_SAMPLE
             $className = $scope->getClassReflection()->getName();
         }
 
-        $this->logSkipByName($className, $reason, $verboseOnly, $actionable);
+        // 0.21.0 #44: pass the offending MethodCall as location so the
+        // skip log entry includes `:<line>` on the file path. Lets
+        // consumers click straight to the offending chain (e.g.
+        // `FluentRule::field()->required()->rule('min:1')` on line 39
+        // of BoatCoverageRowHandler.php — mijntp dogfood example).
+        $this->logSkipByName($className, $reason, $verboseOnly, $actionable, $node);
     }
 
     /**
