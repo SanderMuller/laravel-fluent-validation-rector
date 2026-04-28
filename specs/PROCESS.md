@@ -1,8 +1,15 @@
-# Spec process invariants
+# Spec & dogfood process invariants
 
-Conventions every new spec under `specs/` must satisfy. The list grows
-when a real bug surfaces a gap that should have been caught earlier;
-each entry pins the lesson so the next spec doesn't repeat it.
+Conventions every new spec under `specs/` must satisfy and every
+dogfood cycle should follow. The list grows when a real bug surfaces
+a gap that should have been caught earlier — each entry pins the
+lesson so the next spec or release cycle doesn't repeat it.
+
+§§1–4 are **rector-design invariants** (heuristic boundaries, fixture
+shapes, test-config coverage). §§5–9 are **dogfood-process
+invariants** (how consumer-shape audits inform release decisions),
+codified during the 0.20.x → 0.21.x cycle that drove the project to
+1.0-RC distance.
 
 ## 1. Cross-fold-path interaction matrix
 
@@ -134,3 +141,223 @@ that directory.
 wasn't loaded — `UpdateRulesReturnTypeDocblockRector` simply didn't
 run, making it impossible to tell whether the predicate fix had
 worked. The fix shipped clean once the config gap closed.
+
+## 5. Gating-matrix outcomes pattern for dogfood asks
+
+When designing a dogfood verification ask involving a previously-
+flagged shape, **pre-define best/acceptable/concerning outcomes and
+the action tree from each.** Don't ask consumers "did the fix work?"
+— ask them "the fix is supposed to produce X; here are three
+possible outcomes (best / acceptable / concerning) and what each
+means for next steps."
+
+### Workflow
+
+For each gating-signal dogfood ask:
+
+1. **Pre-define the matrix** in the ping. Three outcomes minimum:
+   - **Best case**: the symptom drops out entirely (fix worked).
+   - **Acceptable case**: the symptom remains but with improved
+     diagnostic detail (fix partially worked; fall-back path is
+     correct).
+   - **Concerning case**: the symptom remains AND the diagnostic
+     detail is unchanged (fix didn't help; deeper investigation
+     needed).
+2. **Bind each outcome to a concrete next step**. Best → close the
+   work item. Acceptable → file a polish patch. Concerning →
+   escalate to the next-tier fix (data-flow analysis, refactor,
+   etc.).
+3. **The consumer reports which case occurred**, not whether the fix
+   worked in abstract terms. Eliminates ambiguity in interpretation.
+
+### What this guards against
+
+- **Ad-hoc dogfood interpretation.** Without pre-defined outcomes,
+  "the fix didn't fully work" can mean "fall-back fired correctly"
+  or "fix has zero impact" — different action trees, often conflated.
+- **Premature 1.0 RC declarations.** A "looks fine" report on a
+  single dogfood pass is weaker than "best case fired across N
+  consumer lenses."
+
+### Origin
+
+0.20.1 → 0.21.0 cycle on `ServiceProviderAdminPage` false-positive.
+The 0.20.1 ping pre-defined the three outcomes; mijntp's reply
+unambiguously surfaced "concerning case" → escalated 0.21.0
+data-flow tightening to 1.0 RC blocker. The 0.21.0 ping reused the
+same matrix; mijntp reported "best case" → closed the work item
+cleanly.
+
+## 6. Lens-diversity invariant on dogfood asks
+
+Consumer codebases have shape-coverage blind spots. A single lens
+catches what its codebase exercises and misses what it doesn't.
+Dogfood asks must cover **≥3 distinct consumer-shape lenses** before
+counting toward a 1.0 RC readiness signal.
+
+### Canonical lens types
+
+- **Cold-consumer**: a codebase that just adopted the package, has
+  drained surface (most opportunities already converted), and reads
+  documentation as a first-time user. Catches: docs gaps, public-
+  API surprises, FQN-leaks, unclear error messages.
+- **Deep-dogfood**: a codebase with extensive use of every rector
+  surface, complex inheritance hierarchies, real production
+  patterns. Catches: heuristic false positives/negatives, multi-
+  pass interactions, performance issues at scale.
+- **Skip-log signal-to-noise**: a codebase that runs the rector
+  routinely and treats the skip log as actionable diagnostic.
+  Catches: unactionable noise, misleading wording, wrong-line
+  resolutions, missing context in error messages.
+- **Drained-surface**: a codebase that adopted the package early
+  and has converged — most rector runs are no-ops. Catches:
+  bump-safety regressions, behavior changes that consumers thought
+  were stable.
+
+### Workflow
+
+When pinging for a release verification:
+1. Identify which lenses currently engage with the project's
+   active consumer set.
+2. Frame the ask per-lens: each consumer gets the question framed
+   for what their lens uniquely surfaces.
+3. Synthesize across lenses: a finding from one lens is a hypothesis;
+   the same finding (or its negation) confirmed by a second lens is
+   evidence; converged across three lenses is a triggerable signal.
+
+### Origin
+
+The 0.20.x cycle surfaced findings that NO lens caught alone:
+collectiq's cold-consumer lens caught FQN-leak + skip-message-
+wiring-ambiguity; mijntp's skip-log signal-to-noise lens caught
+unsafe-parent-on-Filament-pages noise; hihaho's deep-dogfood lens
+caught the 12 spread/method-chain `parent::rules()` shapes that
+empirically locked OQ #1 = (a). Three lenses produced three
+different findings → three different fixes → 0.21.0 ships with a
+heuristic that no single-lens audit could have validated.
+
+## 7. Saturation criteria for 1.0 RC readiness
+
+"Saturation" = the dogfood-finding signal stops producing new
+fixable items, indicating the audit lens has covered its surface.
+Misinterpretation risk: a "0 findings on this release" report can
+mean "lens has saturated" OR "lens didn't engage with the release's
+new surface". Distinguish.
+
+### Saturation criteria (all required)
+
+1. **Consumer surface engages with the release's scope**. If a
+   release adds a new emit feature, lenses that don't exercise that
+   emit don't count toward saturation for that subsurface.
+2. **Findings on the release converge across lenses**. Three
+   independent lenses producing zero new findings each is weaker
+   evidence than three lenses converging on one shared root finding
+   that gets fixed in the same cycle. Saturation = converged-
+   evidence on shared root, not zero-output-per-lens.
+3. **Subsurface clock resets when new emit ships**. Any new emit
+   feature in a release re-opens audit-lens for ≥1 dogfood pass
+   before counting toward saturation N. The line-number-emit
+   surface added in 0.21.0 reset the clock for that subsurface;
+   0.21.1's fix + verification establishes the new baseline.
+
+### Stopping rule
+
+When all three criteria hold across all engaged lenses for **two
+consecutive release cycles** (N=2), the project is 1.0 RC ready
+from the audit-lens perspective.
+
+N=2 chosen over N=1 because one consecutive cycle could be
+incidental ("nothing changed") rather than evidence of saturation.
+Two consecutive cycles is meaningful evidence the audit lens has
+genuinely converged on the project's behavior.
+
+### Origin
+
+0.21.0 → 0.21.1 cycle. mijntp reported "1.0 RC ready from my side"
+on 0.21.0 — first formal saturation declaration from any consumer
+lens. Hihaho confirmed on 0.21.1 — second lens converged. Collectiq
+converged at the same time via the cross-lens line-resolution
+finding being fixed in 0.21.1. The N=2 criterion is satisfied for
+the 0.21.x release pair across the three-lens panel.
+
+## 8. Audit-evidence baselines vs. code-level expected-state
+
+Dogfood baselines (JSON outputs, skip-log dumps, fixture diffs)
+serve **two distinct epistemic roles** that have different
+reproducibility requirements:
+
+- **Audit evidence for design-decision support**: "shapes that exist
+  in real codebases, used to inform spec OQ resolutions and
+  heuristic boundaries." Reproducibility is **not load-bearing** —
+  what matters is that the shapes were real at audit time, not
+  whether `git checkout && rector process` reproduces the exact
+  output today.
+- **Code-level expected-state references**: "regression baselines
+  used to assert the rector still produces output X for input Y."
+  Reproducibility is **strictly load-bearing** — the baseline must
+  be regenerable from a documented state.
+
+Conflating the two roles risks invalidating audit conclusions when
+a baseline turns out to be working-tree-only or otherwise non-
+reproducible. The audit-evidence role is robust to that ambiguity;
+the expected-state-reference role is not.
+
+### Workflow
+
+- Use peer-shared `.dogfood-baselines/*.json` outputs as **audit
+  evidence**: cite the shape, the consumer codebase, the release
+  cycle. Don't import them as fixture inputs.
+- For **code-level expected-state**, use `tests/*/Fixture/*.php.inc`
+  files committed to this repo. Those are reproducible by
+  construction.
+- When a peer's baseline turns out to be non-reproducible from
+  branch HEAD, the audit conclusions stand if they cited shapes;
+  only fixture-imported expected-states would need re-validation.
+
+### Origin
+
+Hihaho 0.21.0 dogfood disclosure (2026-04-28): all
+`.dogfood-baselines/0.16-0.20.x/*` JSON outputs reflected working-
+tree state never committed to branch HEAD. Audit conclusions held
+because peer-shared SHAPES (PHP source pasted in messages) drove
+spec OQ resolutions, not the JSON outputs. Going forward each
+peer-shared baseline includes a `STATE.md` annotating the exact
+branch-and-pin state for reproducibility.
+
+## 9. Fast-turnaround norm on consumer findings
+
+Consumer findings filed during a release cycle should land in a
+patch within hours when the fix is small (logger-side, message-
+wording, predicate-widen). The fast turnaround:
+
+1. **Maintains consumer trust**: a finding answered with "noted,
+   will fold into next minor" loses signal; a finding answered with
+   a tagged patch the same day reinforces the dogfood loop.
+2. **Closes the audit-lens window before drift**: peers re-dogfood
+   while their context is fresh. Day-late patches require peers to
+   re-engage, which has friction.
+3. **Compounds across cycles**: each fast-turnaround fix shortens
+   the next ask's response time, because peers know small findings
+   ship fast.
+
+### Threshold
+
+- **Hours**: logger-side bugs, message-wording rewrites, doc-
+  pointer additions, single-predicate widens.
+- **Same day**: small heuristic adjustments, single-fixture additions.
+- **Same cycle (next minor)**: heuristic tightening, multi-rector
+  refactors, deprecation cycles.
+- **Next major / 1.0 RC**: SemVer-affecting renames, namespace
+  moves, removal of deprecated symbols.
+
+Match scope to threshold. Don't fold an hours-class fix into a
+next-minor cycle.
+
+### Origin
+
+0.20.0 → 0.20.1 (closure-scope fix shipped within hours of mijntp's
+finding). 0.21.0 → 0.21.1 (Class\_ line-resolution fix shipped
+within ~10 minutes of collectiq's finding). Both reinforced the
+"small findings ship fast" norm; hihaho's arc-retrospective on
+0.21.0 explicitly cited fast turnaround as one of four reasons the
+release sequence worked cleanly.
