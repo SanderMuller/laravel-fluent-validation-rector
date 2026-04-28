@@ -360,7 +360,18 @@ CODE_SAMPLE
 
         if (is_array($explicit) && $explicit !== []) {
             if ($this->keyOverlapBehavior === self::OVERLAP_BEHAVIOR_BAIL) {
-                $this->logSkip($class, 'class calls $this->validate([...]) with explicit args — attribute conversion skipped to avoid generating dead-code rules()');
+                // 0.20.1 collectiq dogfood (2026-04-28): the prior message
+                // ("attribute conversion skipped to avoid generating
+                // dead-code rules()") overclaimed certainty — for #[Validate]
+                // attributes whose property name is NOT in the explicit
+                // args, conversion would NOT produce dead code; default-
+                // bail mode is conservative-safe rather than actually-dead.
+                // The rewrite hedges the certainty and names the
+                // OVERLAP_BEHAVIOR config knob verbatim so the consumer
+                // sees the escape hatch without reading docs. Per-attribute
+                // emit (one skip-log per #[Validate] with factual overlap
+                // diff) is deferred to 1.0 RC.
+                $this->logSkip($class, 'class calls $this->validate([...]) with explicit args — default mode (KEY_OVERLAP_BEHAVIOR=bail) skips classwide because attributes MAY overlap with the explicit args; conversion is conservative-safe but the rector cannot statically prove non-overlap. To convert attributes whose property name does not appear in any explicit validate() arg, set KEY_OVERLAP_BEHAVIOR=partial.');
 
                 return false;
             }

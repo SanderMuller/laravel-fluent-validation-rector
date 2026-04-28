@@ -12,7 +12,9 @@ use PhpParser\Node\ArrayItem;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\ArrayDimFetch;
+use PhpParser\Node\Expr\ArrowFunction;
 use PhpParser\Node\Expr\Assign;
+use PhpParser\Node\Expr\Closure;
 use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
@@ -23,9 +25,11 @@ use PhpParser\Node\Scalar\Int_;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassLike;
+use PhpParser\Node\Stmt\Function_;
 use PhpParser\Node\Stmt\Namespace_;
 use PhpParser\Node\Stmt\Return_;
 use PhpParser\Node\Stmt\Unset_;
+use PhpParser\NodeVisitor;
 use PHPStan\Type\ObjectType;
 use Rector\PhpParser\Node\FileNode;
 use RecursiveCallbackFilterIterator;
@@ -560,7 +564,24 @@ trait ConvertsValidationRuleStrings
             $this->traverseNodesWithCallable($method, function (Node $node) use (
                 &$hasParentCall,
                 &$matchedOpInMethod,
-            ): null {
+            ): ?int {
+                // Closure / arrow-function / nested-function / class-like
+                // boundaries are different scopes — their `parent::*()`
+                // calls and array ops belong to validator callbacks /
+                // anonymous classes, not the outer method's control flow.
+                // Without this skip, `parent::rules()->modify(self::FOO,
+                // function (ArrayRule $r): ArrayRule { … })` shapes
+                // false-positive: the outer parent::*() coexists with
+                // the closure-body's array ops, but they're unrelated.
+                // hihaho 0.20.0 dogfood (2026-04-28) caught this on
+                // `UpdateQuestionRequest::rules()`.
+                if ($node instanceof Closure
+                    || $node instanceof ArrowFunction
+                    || $node instanceof Function_
+                    || $node instanceof ClassLike) {
+                    return NodeVisitor::DONT_TRAVERSE_CHILDREN;
+                }
+
                 if ($node instanceof StaticCall
                     && $node->class instanceof Name
                     && $this->isName($node->class, 'parent')) {
@@ -701,7 +722,7 @@ trait ConvertsValidationRuleStrings
             );
         }
 
-        return 'unsafe parent: a descendant in this codebase calls `parent::*()` and uses an array op (`array_*()` / `Arr::*()` / `unset()` / array-dim assignment) in the same method body — exact descendant not visible in this process; re-run with `vendor/bin/rector process` to materialize the in-process detail. The detector does not trace data flow, so a `parent::*()` call coexisting with unrelated array ops in the same method is a possible false positive — verify the descendant before treating as actionable.';
+        return 'unsafe parent: a descendant calls `parent::*()` + uses an array op (`array_*()` / `Arr::*()` / `unset()` / array-dim assignment) in the same method body — heuristic detected coexistence but does not trace data flow; descendant pinpoint unavailable in this scan tier; possible false positive, verify before acting.';
     }
 
     /**
