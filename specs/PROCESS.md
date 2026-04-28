@@ -364,9 +364,10 @@ release sequence worked cleanly.
 
 ## Candidate pen (awaiting second-cycle confirmation)
 
-Findings that have surfaced once and are demonstrably real but not
-yet generalizable enough to earn a numbered invariant slot. Two
-epistemic anchors gate promotion:
+Findings and methodologies that have surfaced once and are
+demonstrably real but not yet generalizable enough to earn a
+numbered invariant or methodology slot. Three epistemic anchors gate
+promotion:
 
 - **Premature canonicalization is the failure mode.** Codifying a
   candidate as a numbered invariant on N=1 shape risks post-hoc
@@ -378,11 +379,30 @@ epistemic anchors gate promotion:
   sufficient for canonical-invariant status; the wording has to
   generalize across the failure-mode shape, not just the originating
   consumer.
+- **Methodologies earn their slot the same way invariants do** — via
+  independent multi-cycle surfacing, not single-cycle utility. A
+  novel dogfood methodology that catches a real defect on its first
+  use is a *candidate*, not yet a canonical methodology; promotion
+  requires the methodology surfacing a defect that the existing
+  methodology surface couldn't have caught, across a second cycle.
+  Recursive epistemic gate: applies the lens-diversity / multi-cycle
+  criterion to methodology additions themselves.
 
 When a second consumer's dogfood independently surfaces the same
 class of failure mode (different shape, different bypass, different
 manifestation), promote the candidate to a numbered §N invariant
 synthesizing both observations. Until then, the entry stays here.
+
+### Implicit corollary on saturation
+
+Saturation requires both **(a) consumer-shape signal-stability AND
+(b) methodology-surface stability.** A new methodology surfacing a
+new finding mid-cycle is itself a saturation reset condition, not
+just a new lens reading. Declaring 1.0 ready while methodology
+innovation is still active is the same failure-mode shape as
+"premature canonicalization" one level up. The audit-clock-reset
+rule already pinned in §7.3 is the consumer-shape side; this is the
+methodology-surface side.
 
 <!-- candidate-pen entry; awaiting second-cycle confirmation -->
 
@@ -441,12 +461,75 @@ then swap. Real constraint compliance instead of bypass. Will
 co-promote alongside the constraint pre-flight invariant when both
 land together.
 
-**Companion fixture (in-repo)**: 0.22.1's
-`tests/RectorInternalContractsTest::testFactoryBaselineClassesAllResolve`
-+ `testSimplifyRuleWrappersRectorBootsCleanly` pin the upstream
-correctness invariant (BASELINE entries must resolve under the
-declared `^X.Y` constraint; rector boots gracefully under the
-`array_filter(BASELINE, 'class_exists')` guard). The pre-flight
-invariant is the dogfood-side analogue; the fixtures are the
-in-repo analogue. Both gate the same failure class from different
-phases.
+**Companion fixture (in-repo)**: 0.22.2's
+`tests/RectorInternalContractsTest::testEveryHardcodedClassTableResolves`
++ `testRectorClassesWithHardcodedTablesBootCleanly` pin the upstream
+correctness invariant. The 0.22.1 site-specific shape was generalized
+to a registry-driven sweep across all rector classes that iterate
+hardcoded class-typed const tables (current sites:
+`SimplifyRuleWrappersRector::FACTORY_BASELINE`,
+`InlineMessageSurface::TYPED_RULE_CLASSES`,
+`PromoteFieldFactoryRector::TYPED_BUILDER_TO_FACTORY`); future rector
+classes adding their own table register via the `HARDCODED_CLASS_TABLES`
+constant. The pre-flight invariant is the dogfood-side analogue; the
+fixtures are the in-repo analogue. Both gate the same failure class
+from different phases.
+
+**Cross-rector observation surfaced 0.22.1 → 0.22.2**: the original
+0.22.1 fix scoped Option A to a single rector; the 0.22.2
+runtime-simulation pass found the same correctness-symmetry pattern
+at two more sites. Operational invariant restated more broadly: *any
+rector iterating a hardcoded class-typed const table for reflection
+must filter for `class_exists` before reflecting*. The 0.22.2 fixture
+pair encodes this; the dogfood-side invariant (this candidate-pen
+entry) catches the same class of failure from the methodology side.
+
+<!-- candidate-pen entry; awaiting second-cycle confirmation -->
+
+### Runtime-simulation dogfood methodology (delete-class + re-run)
+
+**Status**: candidate methodology, surfaced 2026-04-28 during
+0.22.1 saturation re-converge pass (skip-log signal-to-noise lens
+extended their methodology mid-cycle). Promotes to numbered
+methodology when an independent dogfood cycle uses the
+runtime-simulation surface to catch a defect that real-consumer-
+shape lenses couldn't have caught by construction.
+
+**Observation**: real-consumer-shape lenses catch what their
+codebase exercises and miss what it doesn't. *Runtime-simulation*
+introduces fault injection — temporarily remove a vendor class file
+the rector reflects on, re-run rector, observe whether boot
+degrades gracefully or fatals. Catches incomplete-coverage gaps
+that consumer-shape lenses won't surface because consumers don't
+hit the simulated condition under correctly-resolved Composer
+constraints.
+
+The 0.22.1 saturation re-converge used this methodology to find
+that the prior cycle's Option A fix at site #1 was incomplete —
+the same correctness-symmetry pattern existed at sites #2 and #3
+(InlineMessageSurface, PromoteFieldFactoryRector). Real-consumer-
+shape dogfood couldn't have caught this because the gap is
+consumer-impossible-by-constraint; only fault injection exercises
+the missing-class branch.
+
+**Why deferred**: novel methodology surfaced once. Per the
+"methodologies earn their slot the same way invariants do"
+epistemic anchor, single-cycle utility isn't sufficient for
+canonical methodology status. Promotion requires the methodology
+catching a *second* defect that the existing methodology surface
+couldn't have caught, across a second cycle. If the second-cycle
+case lands, the methodology gets a numbered §N section codifying:
+when to apply, how to construct the simulated condition (vendor
+file deletion, classmap mutation, etc.), what defect classes it
+catches, and how it relates to the lens-diversity invariant (§6).
+
+**Companion fixture (in-repo)**: the 0.22.2 fixture pair
+(`testEveryHardcodedClassTableResolves` +
+`testRectorClassesWithHardcodedTablesBootCleanly`) is the static
++ current-surface coverage. The full simulated-missing-class
+runtime fixture (delete vendor file in setUp / scaffold minimal
+vendor stub, run boot path, assert graceful degradation) would
+land alongside this methodology when it promotes to numbered
+status. Until then, the dogfood-side simulation is the only place
+the runtime guard's actual behavior gets exercised; the in-repo
+fixtures cover existence + current-surface boot only.

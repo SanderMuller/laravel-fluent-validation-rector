@@ -466,7 +466,14 @@ CODE_SAMPLE
     {
         $matches = [];
 
-        foreach (array_keys(self::TYPED_BUILDER_TO_FACTORY) as $class) {
+        // Filter to typed-builder classes that exist under the installed
+        // sister-package version. Mirrors the cross-rector class_exists
+        // pre-filter invariant — any iteration reflecting on a hardcoded
+        // rule-class FQCN must guard against a missing class. Without
+        // this, TYPED_BUILDER_TO_FACTORY entries that race ahead of the
+        // composer constraint bump fatal at boot. Companion fixture:
+        // tests/RectorInternalContractsTest::testEveryHardcodedClassTableResolvesCleanly.
+        foreach (array_filter(array_keys(self::TYPED_BUILDER_TO_FACTORY), class_exists(...)) as $class) {
             $reflection = new ReflectionClass($class);
 
             if (! $reflection->hasMethod($method)) {

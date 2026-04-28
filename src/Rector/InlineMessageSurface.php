@@ -151,7 +151,16 @@ final class InlineMessageSurface
 
         self::collectFactoryAllowlist($allowlist);
 
-        foreach (self::TYPED_RULE_CLASSES as $class) {
+        // Filter to rule classes that exist under the installed
+        // sister-package version. Mirrors the class_exists guard pattern
+        // applied across rector class-typed const tables (cross-rector
+        // correctness invariant: any iteration that reflects on a
+        // hardcoded rule-class FQCN must pre-filter for class_exists).
+        // Without this, BASELINE additions that race ahead of the
+        // composer constraint bump fatal at boot for consumers on
+        // older sister-package versions. Companion fixture:
+        // tests/RectorInternalContractsTest::testEveryHardcodedClassTableResolvesCleanly.
+        foreach (array_filter(self::TYPED_RULE_CLASSES, class_exists(...)) as $class) {
             self::collectTypedRuleAllowlist($class, $allowlist);
         }
 
