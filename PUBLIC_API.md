@@ -114,6 +114,10 @@ IDE refactoring follows correctly.
 
 ### `UpdateRulesReturnTypeDocblockRector`
 
+These constants share their wire key (string value) with the equally-named
+constants on `SimplifyRuleWrappersRector`, but they configure this rector
+independently — pass the key on each rector that consumes it.
+
 - `TREAT_AS_FLUENT_COMPATIBLE` (value: `'treat_as_fluent_compatible'`)
 - `ALLOW_CHAIN_TAIL_ON_ALLOWLISTED` (value: `'allow_chain_tail_on_allowlisted'`)
 
@@ -125,6 +129,13 @@ wire format; the constants above are convenience symbols pointing at them.
 Listing the wire keys as first-class API ensures literal-string consumers
 get the same semver guarantees as constant-using consumers — a future
 constant rename does NOT change the wire key.
+
+**Per-rector configuration.** Each rector receives its own configuration
+array via `withConfiguredRule(...)`. When the same wire key appears on
+multiple rectors (e.g. `'treat_as_fluent_compatible'` on both
+`SimplifyRuleWrappersRector` and `UpdateRulesReturnTypeDocblockRector`),
+pass the key on each rector that consumes it — the values are not pooled
+across rectors.
 
 ### `SimplifyRuleWrappersRector` wire keys
 
@@ -149,10 +160,15 @@ constant rename does NOT change the wire key.
 
 ### `UpdateRulesReturnTypeDocblockRector` wire keys
 
-- `'treat_as_fluent_compatible'` (`array<class-string>`) — same semantics
-  as the equally-named key on `SimplifyRuleWrappersRector`.
-- `'allow_chain_tail_on_allowlisted'` (`bool`) — same semantics as the
-  equally-named key on `SimplifyRuleWrappersRector`.
+Same wire keys as `SimplifyRuleWrappersRector`, with identical semantics
+per key. Configured independently per the per-rector configuration rule
+above — pass the key on each rector that consumes it.
+
+- `'treat_as_fluent_compatible'` (`array<class-string>`) — additional
+  class FQNs the rector should treat as wrappers around `FluentRule`
+  chains (for the docblock-narrow predicate).
+- `'allow_chain_tail_on_allowlisted'` (`bool`) — permit non-fluent chain
+  tails on allowlisted classes (for the docblock-narrow predicate).
 
 ## Verbose-mode env var
 
@@ -241,7 +257,10 @@ SemVer-committed:
   promise the shape stays unhandled.
 - **Diagnostic granularity** — per-key vs. per-class skip emission
   cardinality. The line-format slot count IS committed; emission
-  count per source class is not.
+  count per source class is not. Consumers gating CI on skip-log
+  entry counts should expect entry-count variance across MINOR
+  releases as diagnostic granularity tightens; gate on rector-class
+  FQN presence + reason-text grep instead.
 
 What IS committed for behavior is enumerated above (skip-log file
 paths, line-format slot semantics, env var name + accepted vocabulary,

@@ -650,7 +650,17 @@ CODE_SAMPLE
             return;
         }
 
-        $factoryMap = self::FACTORY_BASELINE;
+        // Filter FACTORY_BASELINE to entries whose target class actually
+        // exists in the installed fluent-validation surface. Mirrors the
+        // class_exists guard on the reflection-discovered factory loop
+        // below (around `if (! class_exists($returnClass))`). Without
+        // this, BASELINE adding entries that race ahead of the
+        // composer-declared `^X.Y` constraint would fatal at boot for
+        // consumers on the older sister-package version (FQCN strings
+        // resolve at parse time without requiring the class to exist;
+        // the reflection iteration on line ~688 then fatals). Honors
+        // the same correctness invariant at a single point.
+        $factoryMap = array_filter(self::FACTORY_BASELINE, class_exists(...));
 
         $reflection = new ReflectionClass(FluentRule::class);
 

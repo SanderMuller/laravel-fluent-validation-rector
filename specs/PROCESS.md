@@ -361,3 +361,92 @@ within ~10 minutes of collectiq's finding). Both reinforced the
 "small findings ship fast" norm; hihaho's arc-retrospective on
 0.21.0 explicitly cited fast turnaround as one of four reasons the
 release sequence worked cleanly.
+
+## Candidate pen (awaiting second-cycle confirmation)
+
+Findings that have surfaced once and are demonstrably real but not
+yet generalizable enough to earn a numbered invariant slot. Two
+epistemic anchors gate promotion:
+
+- **Premature canonicalization is the failure mode.** Codifying a
+  candidate as a numbered invariant on N=1 shape risks post-hoc
+  broadening when a second shape surfaces. Candidate-pen preserves
+  the finding + rationale + retroactive evidence with zero loss;
+  promotion drafts from N=2 shapes, not N=1-with-multiple-instances.
+- **Invariants earn their slot, they don't get one by appearing.**
+  Same gate, more pointed phrasing. A finding being real isn't
+  sufficient for canonical-invariant status; the wording has to
+  generalize across the failure-mode shape, not just the originating
+  consumer.
+
+When a second consumer's dogfood independently surfaces the same
+class of failure mode (different shape, different bypass, different
+manifestation), promote the candidate to a numbered §N invariant
+synthesizing both observations. Until then, the entry stays here.
+
+<!-- candidate-pen entry; awaiting second-cycle confirmation -->
+
+### Cross-package constraint pre-flight (vendor-rsync methodology)
+
+**Status**: candidate, surfaced 2026-04-28 during 0.22.0 dogfood
+(skip-log signal-to-noise lens). Promotes to numbered invariant
+when a second consumer surfaces an independent bypass-constraint
+failure that broadens the wording shape.
+
+**Observation**: rsync-based dogfood pattern bypasses Composer's
+constraint resolution. The 0.22.0 dogfood hit a runtime
+`ReflectionException` on `SimplifyRuleWrappersRector::bootResolutionTables()`
+because rector 0.22.0's `FACTORY_BASELINE` referenced `AcceptedRule`
+(added in `laravel-fluent-validation` 1.20+) while the consumer's
+lockfile pinned 1.13.2. A real `composer require` would have
+refused with a clear constraint-mismatch message; the
+rsync-vendor-swap pattern bypassed that gate.
+
+**Retroactive evidence**: same methodology weakness was present in
+4 prior dogfood cycles (0.18 → 0.21.0). Those cycles ran without
+fatal because no `FACTORY_BASELINE` additions broke against the
+older sister-package version. The absence of fatals was luck (no
+hostile additions), not contract compliance.
+
+**Sketch (package-version-shape only)**:
+
+```bash
+jq -r '.require | to_entries[] | "\(.key) \(.value)"' \
+  /tmp/<new-version-worktree>/composer.json |
+while read pkg constraint; do
+  locked=$(jq -r ".packages[]|select(.name==\"$pkg\").version" composer.lock)
+  composer-semver "$constraint" "$locked" || echo "MISMATCH: $pkg"
+done
+```
+
+If any line emits `MISMATCH`, abort the rsync. Either skip dogfood
+this cycle pending consumer constraint update, or bump consumer
+constraints first (in a sandbox), then re-run.
+
+**Why deferred**: the sketch is package-version-mismatch-shaped.
+Composer overrides bypass at resolution time (after the `jq .require`
+check passes). Path repos with `dev-master` pins yield null version
+fields. PHP / extension constraints (`require.php`, `require.ext-*`)
+surface as different fatal classes. Symlinked vendor for monorepos,
+vendor:prestissimo races, hand-edited `installed.json` — all bypass
+paths the sketch doesn't anticipate. Codifying today on the
+package-version shape only risks post-hoc broadening when shape #2
+lands; the candidate-pen preserves finding + provenance with zero
+loss until N=2.
+
+**Companion pattern (constructive paired)**: "verification sandbox
+methodology" — when running a vendor-swap dogfood, bump consumer
+constraints in a worktree first via `composer update --with X --with Y`,
+then swap. Real constraint compliance instead of bypass. Will
+co-promote alongside the constraint pre-flight invariant when both
+land together.
+
+**Companion fixture (in-repo)**: 0.22.1's
+`tests/RectorInternalContractsTest::testFactoryBaselineClassesAllResolve`
++ `testSimplifyRuleWrappersRectorBootsCleanly` pin the upstream
+correctness invariant (BASELINE entries must resolve under the
+declared `^X.Y` constraint; rector boots gracefully under the
+`array_filter(BASELINE, 'class_exists')` guard). The pre-flight
+invariant is the dogfood-side analogue; the fixtures are the
+in-repo analogue. Both gate the same failure class from different
+phases.

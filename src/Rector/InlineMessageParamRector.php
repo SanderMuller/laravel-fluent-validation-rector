@@ -51,6 +51,8 @@ final class InlineMessageParamRector extends AbstractRector implements Documente
      * listed fall back to `lcfirst(class_basename)` at runtime.
      *
      * @var array<string, string>
+     *
+     * @internal
      */
     public const array RULE_OBJECT_KEY_OVERRIDES = [
         'RequiredIf' => 'required',
@@ -71,6 +73,8 @@ final class InlineMessageParamRector extends AbstractRector implements Documente
      * in spec §1.4 (peer Q4 handoff, tightened 2026-04-22). Consumers hit
      * this when they're on Laravel 11 where the `'password.password'`
      * key never resolves — the message silently no-ops pre-L12.
+     *
+     * @internal
      */
     public const string PASSWORD_L11_L12_SKIP_TEMPLATE =
         "Skipping messageFor('password', ...) on PasswordRule: key resolves via Laravel's "
