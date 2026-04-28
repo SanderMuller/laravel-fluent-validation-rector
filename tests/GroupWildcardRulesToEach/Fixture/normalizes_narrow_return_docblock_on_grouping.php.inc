@@ -26,6 +26,7 @@ class NarrowDocblockWildcardFormRequest extends FormRequest
 
 namespace SanderMuller\FluentValidationRector\Tests\GroupWildcardRulesToEach\Fixture;
 
+use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidation\StringRule;
@@ -33,7 +34,7 @@ use SanderMuller\FluentValidation\StringRule;
 class NarrowDocblockWildcardFormRequest extends FormRequest
 {
     /**
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|string|array<mixed>>
+     * @return array<string, ValidationRule|string|array<mixed>>
      */
     public function rules(): array
     {

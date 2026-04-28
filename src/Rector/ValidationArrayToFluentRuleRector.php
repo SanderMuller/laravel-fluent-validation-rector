@@ -213,6 +213,15 @@ CODE_SAMPLE
         $this->needsFluentRuleImport = false;
     }
 
+    /**
+     * 0.20.2 NormalizesRulesDocblock hook implementation. See
+     * NormalizesRulesDocblock::queueValidationRuleUseImport().
+     */
+    protected function queueValidationRuleUseImport(): void
+    {
+        $this->useNodesToAddCollector->addUseImport(new FullyQualifiedObjectType(self::VALIDATION_RULE_CONTRACT_FQN));
+    }
+
     private function processValidationRules(Array_ $array): bool
     {
         $changed = false;

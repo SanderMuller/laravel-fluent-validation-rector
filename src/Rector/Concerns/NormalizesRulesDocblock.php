@@ -2,6 +2,7 @@
 
 namespace SanderMuller\FluentValidationRector\Rector\Concerns;
 
+use Illuminate\Contracts\Validation\ValidationRule;
 use PhpParser\Comment\Doc;
 use PhpParser\Node\Stmt\ClassMethod;
 
@@ -65,7 +66,30 @@ trait NormalizesRulesDocblock
         'ProhibitedRule',
     ];
 
-    protected const string STANDARD_RULES_ANNOTATION_BODY = 'array<string, \\Illuminate\\Contracts\\Validation\\ValidationRule|string|array<mixed>>';
+    protected const string STANDARD_RULES_ANNOTATION_BODY = 'array<string, ValidationRule|string|array<mixed>>';
+
+    /**
+     * Legacy FQN-form of the standard rules annotation body, emitted by
+     * pre-0.20.2 rector runs. Kept here as a recognized "already-narrowed"
+     * shape so re-runs over consumer codebases that still have the FQN
+     * form leave it alone (passive idempotency, not active migration).
+     * Pint's `fully_qualified_strict_types` cleans up the FQN form on
+     * consumer-side over time. Removal slated when 1.0 RC's docblock-emit
+     * audit confirms no live FQN forms remain in active dogfood codebases.
+     */
+    protected const string LEGACY_FQN_STANDARD_RULES_ANNOTATION_BODY = 'array<string, \\Illuminate\\Contracts\\Validation\\ValidationRule|string|array<mixed>>';
+
+    /**
+     * FQN of the validation contract that the standard rules annotation body
+     * references. Consuming rectors must register this as a use import via
+     * `queueValidationRuleUseImport()` whenever the trait emits the standard
+     * body — without it, the short-name form in the docblock would be an
+     * unresolved type reference for consumers who don't run Pint.
+     *
+     * String-referenced (not `::class`) so the trait file doesn't load the
+     * contract class at static-analysis time.
+     */
+    protected const string VALIDATION_RULE_CONTRACT_FQN = ValidationRule::class;
 
     /**
      * Matches a full `@return` tag — including continuation lines that belong
@@ -102,6 +126,20 @@ trait NormalizesRulesDocblock
      * paired with prose elsewhere in the docblock that mentions `StringRule`
      * (e.g. a description sentence or an unrelated tag) is preserved.
      */
+    /**
+     * Hook implemented by each consuming rector to register the
+     * `Illuminate\Contracts\Validation\ValidationRule` use import when
+     * the trait emits the (short-name) standard rules annotation body.
+     * Without this, consumer files would have unresolved short-name
+     * references unless they happened to import the contract already.
+     *
+     * Each rector implements via either `UseNodesToAddCollector`
+     * (Rector container service) or `ManagesNamespaceImports::ensureUseImportInNamespace`,
+     * depending on which infrastructure the rector already uses for
+     * import management.
+     */
+    abstract protected function queueValidationRuleUseImport(): void;
+
     private function normalizeRulesDocblockIfStale(ClassMethod $method): bool
     {
         $doc = $method->getDocComment();
@@ -132,6 +170,7 @@ trait NormalizesRulesDocblock
         }
 
         $method->setDocComment(new Doc($replacement));
+        $this->queueValidationRuleUseImport();
 
         return true;
     }
@@ -174,21 +213,41 @@ trait NormalizesRulesDocblock
     private function annotationBodyMatchesStandardUnionExactlyOrProse(string $body): bool
     {
         $body = trim($body);
-        $standard = self::STANDARD_RULES_ANNOTATION_BODY;
 
-        if ($body === $standard) {
-            return true;
+        // 0.20.2: recognize BOTH the new short-name form AND the legacy
+        // FQN form as "standard" so re-runs over consumer codebases that
+        // still have the FQN form leave them alone (passive idempotency).
+        // The first form to match wins; remainder check uses the matched
+        // form's length.
+        foreach ([self::STANDARD_RULES_ANNOTATION_BODY, self::LEGACY_FQN_STANDARD_RULES_ANNOTATION_BODY] as $standard) {
+            if ($body === $standard) {
+                return true;
+            }
+
+            if (! str_starts_with($body, $standard)) {
+                continue;
+            }
+
+            $remainder = substr($body, strlen($standard));
+
+            if ($remainder === '') {
+                return true;
+            }
+
+            return $this->remainderIsProseOnly($remainder);
         }
 
-        if (! str_starts_with($body, $standard)) {
-            return false;
-        }
+        return false;
+    }
 
-        $remainder = substr($body, strlen($standard));
-
-        if ($remainder === '') {
-            return true;
-        }
+    /**
+     * Validates the trailing remainder after a standard-body prefix match.
+     * Extracted from `annotationBodyMatchesStandardUnionExactlyOrProse` so
+     * both standard-body forms (short-name + legacy FQN) can share the
+     * remainder-validation logic.
+     */
+    private function remainderIsProseOnly(string $remainder): bool
+    {
 
         return preg_match('/^\s+[A-Za-z][A-Za-z0-9 ,.\'\-]*$/', $remainder) === 1;
     }

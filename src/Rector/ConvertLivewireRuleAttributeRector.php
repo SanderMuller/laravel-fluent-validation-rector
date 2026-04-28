@@ -371,7 +371,7 @@ CODE_SAMPLE
                 // sees the escape hatch without reading docs. Per-attribute
                 // emit (one skip-log per #[Validate] with factual overlap
                 // diff) is deferred to 1.0 RC.
-                $this->logSkip($class, 'class calls $this->validate([...]) with explicit args — default mode (KEY_OVERLAP_BEHAVIOR=bail) skips classwide because attributes MAY overlap with the explicit args; conversion is conservative-safe but the rector cannot statically prove non-overlap. To convert attributes whose property name does not appear in any explicit validate() arg, set KEY_OVERLAP_BEHAVIOR=partial.');
+                $this->logSkip($class, 'class calls $this->validate([...]) with explicit args — default mode (KEY_OVERLAP_BEHAVIOR=bail) skips classwide because attributes MAY overlap with the explicit args; conversion is conservative-safe but the rector cannot statically prove non-overlap. To convert attributes whose property name does not appear in any explicit validate() arg, set KEY_OVERLAP_BEHAVIOR=partial → see PUBLIC_API.md#convertlivewireruleattributerector for canonical wiring.');
 
                 return false;
             }
@@ -821,6 +821,15 @@ CODE_SAMPLE
 
         $this->useNodesToAddCollector->addUseImport(new FullyQualifiedObjectType(FluentRule::class));
         $this->needsFluentRuleImport = false;
+    }
+
+    /**
+     * 0.20.2 NormalizesRulesDocblock hook implementation. See
+     * NormalizesRulesDocblock::queueValidationRuleUseImport().
+     */
+    protected function queueValidationRuleUseImport(): void
+    {
+        $this->useNodesToAddCollector->addUseImport(new FullyQualifiedObjectType(self::VALIDATION_RULE_CONTRACT_FQN));
     }
 
     /**

@@ -24,8 +24,8 @@ class NarrowDocblockStringFormRequest extends FormRequest
 
 namespace SanderMuller\FluentValidationRector\Tests\ValidationStringToFluentRule\Fixture;
 
-use SanderMuller\FluentValidation\FluentRule;
 use Illuminate\Contracts\Validation\ValidationRule;
+use SanderMuller\FluentValidation\FluentRule;
 use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\StringRule;
 

@@ -687,6 +687,17 @@ CODE_SAMPLE
     }
 
     /**
+     * 0.20.2 NormalizesRulesDocblock hook implementation. Called by
+     * the trait when it emits the (now short-name) standard rules
+     * annotation body. Registers `Illuminate\Contracts\Validation\ValidationRule`
+     * as a use import so the short-name reference resolves.
+     */
+    protected function queueValidationRuleUseImport(): void
+    {
+        $this->useNodesToAddCollector->addUseImport(new FullyQualifiedObjectType(self::VALIDATION_RULE_CONTRACT_FQN));
+    }
+
+    /**
      * Converts `/** content *\/` to
      *
      *     /**

@@ -333,9 +333,32 @@ trait ConvertsValidationRuleStrings
 
         // Skip classes whose subclasses manipulate parent::rules() with array
         // functions (array_search, array_merge, in_array, bracket assignment).
+        //
+        // Pre-emit gate suppresses the skip when it would be noise:
+        // **No rules-bearing surface.** Filament Page subclasses, Livewire
+        // wrapper components, and similar UI-scaffolding classes qualify
+        // via Livewire ancestry but rarely declare validation rules. Pre-
+        // 0.20.2 the unsafe-parent skip fired on every such class with an
+        // array-manipulating descendant somewhere up the chain, generating
+        // irreducible noise. If the class has nothing the rector would
+        // convert anyway (no rules() / no #[FluentRules] / no auto-detect-
+        // qualified rules-shaped method), suppress the skip — it's noise,
+        // not actionable diagnostic. Surfaced via mijntp 0.20.1 dogfood:
+        // 9 Filament-Page descendants of `ServiceProviderAdminPage`, none
+        // with rules-bearing methods, all generating noise skips.
+        //
+        // NOTE: A `#[FluentRules]` audit-assertion bypass at this site was
+        // considered (mijntp finding #43) but conflicts with the pinned
+        // design in `skip_attributed_method_when_subclass_manipulates.php.inc`
+        // where parent-safety explicitly wins over the per-method attribute.
+        // The semantic distinction (audit-safety on the method body itself
+        // vs. a "no descendant breaks" assertion) needs further peer
+        // discussion before reversing. Deferred from 0.20.2.
         $className = $this->getName($classLike);
 
-        if ($className !== null && $this->isUnsafeParentClass($className)) {
+        if ($className !== null
+            && $this->isUnsafeParentClass($className)
+            && $this->hasRulesBearingSurface($classLike)) {
             $this->logSkip($classLike, $this->describeUnsafeParentSkip($className));
 
             return null;
@@ -462,6 +485,44 @@ trait ConvertsValidationRuleStrings
             }
 
             return $this->hasFluentRulesAttribute($method);
+        }
+
+        return false;
+    }
+
+    /**
+     * Class-wide check: does the class have ANY method the rector might
+     * convert? Mirrors the per-method gate at the top of the converter
+     * walk (literal `rules()` / `#[FluentRules]`-attributed / rules-shaped
+     * under class-wide auto-detect).
+     *
+     * Returns false for UI-scaffolding classes (Filament Page subclasses,
+     * Livewire wrapper components, etc.) that qualify via ancestry but
+     * declare no validation rules — emitting the unsafe-parent skip on
+     * such a class generates pure noise: there's nothing the rector would
+     * convert anyway. Surfaced via mijntp 0.20.1 dogfood
+     * (`ServiceProviderAdminPage` + 9 Filament-Page descendants).
+     */
+    private function hasRulesBearingSurface(Class_ $class): bool
+    {
+        if ($this->hasLiteralRulesMethod($class)) {
+            return true;
+        }
+
+        $allowsAutoDetect = $this->qualifiesForRulesProcessingClassWide($class);
+
+        foreach ($class->getMethods() as $method) {
+            if ($this->isNonRulesMethodName($this->getName($method))) {
+                continue;
+            }
+
+            if ($this->hasFluentRulesAttribute($method)) {
+                return true;
+            }
+
+            if ($allowsAutoDetect && $this->isRulesShapedMethod($method)) {
+                return true;
+            }
         }
 
         return false;

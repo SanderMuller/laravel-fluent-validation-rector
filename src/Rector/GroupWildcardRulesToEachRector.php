@@ -146,6 +146,15 @@ CODE_SAMPLE
      */
     private bool $needsFluentRuleImport = false;
 
+    /**
+     * 0.20.2: set to true when `NormalizesRulesDocblock` rewrites a
+     * docblock to the (now short-name) standard rules annotation body.
+     * Triggers insertion of `use Illuminate\Contracts\Validation\ValidationRule;`
+     * so the `ValidationRule` short-name reference resolves. Reset on
+     * each `refactor()` entry alongside `needsFluentRuleImport`.
+     */
+    private bool $needsValidationRuleImport = false;
+
     public function refactor(Node $node): ?Node
     {
         if (! $node instanceof Namespace_) {
@@ -153,6 +162,7 @@ CODE_SAMPLE
         }
 
         $this->needsFluentRuleImport = false;
+        $this->needsValidationRuleImport = false;
         $hasChanged = false;
 
         foreach ($node->stmts as $stmt) {
@@ -173,7 +183,22 @@ CODE_SAMPLE
             $this->ensureUseImportInNamespace($node, FluentRule::class);
         }
 
+        if ($this->needsValidationRuleImport) {
+            $this->ensureUseImportInNamespace($node, self::VALIDATION_RULE_CONTRACT_FQN);
+        }
+
         return $node;
+    }
+
+    /**
+     * 0.20.2 NormalizesRulesDocblock hook implementation. Defers the
+     * actual `use ... ValidationRule;` insertion to refactor() time
+     * since this rector's import management is namespace-scoped via
+     * `ensureUseImportInNamespace`.
+     */
+    protected function queueValidationRuleUseImport(): void
+    {
+        $this->needsValidationRuleImport = true;
     }
 
     /**

@@ -28,8 +28,8 @@ final class MergeStaleDocblockComponent extends Component
 
 namespace SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute\Fixture;
 
-use SanderMuller\FluentValidation\FluentRule;
 use Illuminate\Contracts\Validation\ValidationRule;
+use SanderMuller\FluentValidation\FluentRule;
 use Livewire\Attributes\Rule;
 use Livewire\Component;
 use SanderMuller\FluentValidation\StringRule;

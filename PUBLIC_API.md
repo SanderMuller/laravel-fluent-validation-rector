@@ -86,6 +86,28 @@ consumers passing the literal string key are both protected.
 - `OVERLAP_BEHAVIOR_BAIL` (value: `'bail'`)
 - `OVERLAP_BEHAVIOR_PARTIAL` (value: `'partial'`)
 
+#### Canonical configuration shape
+
+```php
+use Rector\Config\RectorConfig;
+use SanderMuller\FluentValidationRector\Rector\ConvertLivewireRuleAttributeRector;
+
+return static function (RectorConfig $rectorConfig): void {
+    $rectorConfig->ruleWithConfiguration(
+        ConvertLivewireRuleAttributeRector::class,
+        [
+            ConvertLivewireRuleAttributeRector::KEY_OVERLAP_BEHAVIOR
+                => ConvertLivewireRuleAttributeRector::OVERLAP_BEHAVIOR_PARTIAL,
+        ],
+    );
+};
+```
+
+The keys are the constant *names* (committed); the values are the constant
+*values* (committed wire keys). Mixing constant references with the raw
+string values is supported but the constant references are preferred so
+IDE refactoring follows correctly.
+
 ### `AddHasFluentRulesTraitRector`
 
 - `BASE_CLASSES` (value: `'base_classes'`)
@@ -195,3 +217,30 @@ inserted traits — renames upstream cascade.
 - `SanderMuller\FluentValidation\HasFluentRules`
 - `SanderMuller\FluentValidation\HasFluentValidation`
 - `SanderMuller\FluentValidation\HasFluentValidationForFilament`
+
+## Inspecting test fixtures (semantics-pinning)
+
+The Composer archive ships only the runtime artifacts (`src/`, `config/`,
+`composer.json`); the `tests/` directory is excluded to keep the package
+size lean. Cold consumers wanting to spot-check what shapes the rector
+exercises — particularly the `tests/Parity/Fixture/` parity-harness
+fixtures that pin runtime semantics across the converter rectors —
+should clone the repository:
+
+```bash
+git clone https://github.com/SanderMuller/laravel-fluent-validation-rector.git
+cd laravel-fluent-validation-rector
+ls tests/Parity/Fixture/
+```
+
+The parity fixtures are organized by rector class. Each fixture is a
+`.php` file declaring `rules_before` / `rules_after` / `payloads`
+arrays; the harness validates both shapes against the same payloads and
+asserts identical error bags. If the rector's output ever diverges
+semantically from its input, the parity test surfaces the regression at
+CI time.
+
+Other directories worth inspecting for shape coverage:
+`tests/<Rector>/Fixture/` for per-rector before/after pairs;
+`tests/FullPipelinePolish/Fixture/` for end-to-end multi-rector
+scenarios under the `ALL + POLISH` set list combination.
