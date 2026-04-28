@@ -137,10 +137,29 @@ trait LogsSkipReasons
      * Rector without source positions). PhpParser uses `-1` for the
      * "unknown" sentinel; we convert to null so the caller can omit
      * the line from the skip-log entry rather than print `:-1`.
+     *
+     * 0.21.1 Class_-resolution fix (collectiq dogfood, 2026-04-28):
+     * `Class_::getStartLine()` returns the position of the first
+     * attached token — which for classes with `#[Layout]` attributes
+     * returns the attribute line, with attached docblocks returns the
+     * docblock start, and in some cases bleeds into preceding `use`
+     * statements via attached whitespace token positions. Result:
+     * the `:line` suffix on class-wide skips landed on use-imports,
+     * trait-use blocks, or class-level attributes ~40% of the time on
+     * collectiq's surface. Special-case `Class_` to use the
+     * Identifier's position (`$class->name->getStartLine()`) — the
+     * Identifier always sits on the `class Foo` declaration line
+     * because that's where the name token literally appears in source.
+     * Robust against attached attributes / docblocks / leading
+     * whitespace.
      */
     private static function resolveStartLine(Node $node): ?int
     {
-        $line = $node->getStartLine();
+        if ($node instanceof Class_ && $node->name instanceof Identifier) {
+            $line = $node->name->getStartLine();
+        } else {
+            $line = $node->getStartLine();
+        }
 
         return $line >= 1 ? $line : null;
     }
