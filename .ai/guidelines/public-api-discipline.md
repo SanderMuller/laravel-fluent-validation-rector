@@ -37,8 +37,9 @@ releases:
   pointing at the new name.
 - **Document the cycle in `PUBLIC_API.md`** — note when the deprecation
   shipped and when the removal is slated. Example: 0.20.0's `Diagnostics` /
-  `RunSummary` namespace move adds shims at the old location with
-  `@deprecated since 0.20.0 — removal slated for 1.0`.
+  `RunSummary` namespace move added shims at the old location with
+  `@deprecated since 0.20.0 — removal slated for 1.0`; the shims were
+  removed in 0.22.0 (the 1.0 RC scope-lock release).
 - **Mention it in the release notes** under a "Deprecations" section so
   consumers see the timeline.
 

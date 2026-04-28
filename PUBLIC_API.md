@@ -27,8 +27,8 @@ The package's namespace tree is split into three tiers:
   0.20.0) — implementation-detail classes whose namespace placement IS
   the do-not-import signal. May change in any release without a MAJOR
   bump. Do not import. Pre-0.20.0 these classes lived at the root with
-  `@internal` PHPDoc tags only; deprecation shims at the root will be
-  removed in 1.0.
+  `@internal` PHPDoc tags only; root-namespace deprecation shims were
+  removed in 0.22.0.
 
 `Rector\Concerns\` traits are also implementation detail (intended to be
 mixed into rector classes only); they have always been `@internal` by
@@ -156,9 +156,13 @@ constant rename does NOT change the wire key.
 
 ## Verbose-mode env var
 
-- `FLUENT_VALIDATION_RECTOR_VERBOSE` — env var name. Accepted values:
-  `off`, `actionable`, `1`, `true`, `all`. Renames or value-vocabulary
-  removal are MAJOR-bump events.
+- `FLUENT_VALIDATION_RECTOR_VERBOSE` — env var name. Canonical accepted
+  values: `off`, `actionable`, `all`. Legacy synonyms `1` / `true`
+  (case-insensitive) resolve to `all`; preserved indefinitely for
+  pre-0.13 compatibility. Renames of the env var name or removal of
+  the canonical vocabulary are MAJOR-bump events. Empty / unset
+  resolves to `off`. Resolution is case-insensitive for the named
+  values.
 
 ## Skip-log file paths
 
@@ -166,8 +170,8 @@ Two paths, mode-dependent. Both are committed observable contracts.
 
 - **Verbose tier on** (`=1` / `=actionable` / `=all`):
   `<cwd>/.cache/rector-fluent-validation-skips.log`
-  (PSR-4 cwd; `.cache/` subdir auto-created; falls back to cwd-root if
-  `.cache/` cannot be created).
+  (`.cache/` subdir auto-created; falls back to cwd-root if `.cache/`
+  cannot be created — read-only mount, restrictive perms, etc.).
 - **Verbose tier off** (default, env unset):
   `sys_get_temp_dir() . '/rector-fluent-validation-skips-<cwd-hash>.log'`
   (hashed temp path scoped per-cwd; unlinked by the package's internal
@@ -216,6 +220,34 @@ Each header line starts with `# `, has a colon-separated key/value, and
 is followed by a single blank line before entries. Field *values*
 (version string, timestamp format, tier vocabulary) are implementation.
 
+## Heuristic boundaries (implementation detail)
+
+The rectors decide which AST shapes are convertible vs. skippable
+using internal heuristics. Heuristic tightening (catching more true
+positives, eliminating more false positives) ships in MINOR releases
+without MAJOR bumps. The categories below are explicitly NOT
+SemVer-committed:
+
+- **Detection-heuristic boundaries** — which AST shapes a rector
+  classifies as unsafe-to-convert, closure-scoped, wrapper-around-
+  FluentRule, FormRequest descendant, etc.
+- **Classification confidence / trace depth** — e.g. data-flow trace
+  may deepen across MINOR releases when consumer signal warrants.
+- **Skip-text reason content** — the free-text portion after the
+  colon in the skip-log line. The line *format* (slot semantics,
+  prefix, parenthesization) IS committed; the text is not.
+- **Fixture coverage** — existing tests pin shapes the rector handles
+  correctly today. The absence of a fixture for a shape is not a
+  promise the shape stays unhandled.
+- **Diagnostic granularity** — per-key vs. per-class skip emission
+  cardinality. The line-format slot count IS committed; emission
+  count per source class is not.
+
+What IS committed for behavior is enumerated above (skip-log file
+paths, line-format slot semantics, env var name + accepted vocabulary,
+wire-key strings, rector class FQNs, set list constant names,
+configuration constant names + their wire-key values).
+
 ## Trait FQNs (referenced by trait-add rectors)
 
 Live in the main `laravel-fluent-validation` package, not this rector
@@ -231,24 +263,23 @@ inserted traits — renames upstream cascade.
 The Composer archive ships only the runtime artifacts (`src/`, `config/`,
 `composer.json`); the `tests/` directory is excluded to keep the package
 size lean. Cold consumers wanting to spot-check what shapes the rector
-exercises — particularly the `tests/Parity/Fixture/` parity-harness
-fixtures that pin runtime semantics across the converter rectors —
-should clone the repository:
+exercises — particularly the parity-harness fixtures that pin runtime
+semantics across the converter rectors — can browse them directly on
+GitHub:
 
-```bash
-git clone https://github.com/SanderMuller/laravel-fluent-validation-rector.git
-cd laravel-fluent-validation-rector
-ls tests/Parity/Fixture/
-```
+- [`tests/Parity/Fixture/`](https://github.com/SanderMuller/laravel-fluent-validation-rector/tree/main/tests/Parity/Fixture)
+  — parity-harness fixtures, organized by rector class
+  (`SimplifyRuleWrappersRector/`, `GroupWildcardRulesToEachRector/`,
+  `PromoteFieldFactoryRector/`, `Attributed/`).
+- [`tests/<Rector>/Fixture/`](https://github.com/SanderMuller/laravel-fluent-validation-rector/tree/main/tests)
+  — per-rector before/after pairs.
+- [`tests/FullPipelinePolish/Fixture/`](https://github.com/SanderMuller/laravel-fluent-validation-rector/tree/main/tests/FullPipelinePolish/Fixture)
+  — end-to-end multi-rector scenarios under the `ALL + POLISH` set
+  list combination.
 
-The parity fixtures are organized by rector class. Each fixture is a
-`.php` file declaring `rules_before` / `rules_after` / `payloads`
-arrays; the harness validates both shapes against the same payloads and
-asserts identical error bags. If the rector's output ever diverges
-semantically from its input, the parity test surfaces the regression at
-CI time.
-
-Other directories worth inspecting for shape coverage:
-`tests/<Rector>/Fixture/` for per-rector before/after pairs;
-`tests/FullPipelinePolish/Fixture/` for end-to-end multi-rector
-scenarios under the `ALL + POLISH` set list combination.
+The parity-harness runner is `SanderMuller\FluentValidationRector\Tests\Parity\ParityTest`.
+Each fixture is a `.php` file declaring `rules_before` / `rules_after` /
+`payloads` arrays; the harness validates both shapes against the same
+payloads and asserts identical error bags. If the rector's output ever
+diverges semantically from its input, the parity test surfaces the
+regression at CI time.

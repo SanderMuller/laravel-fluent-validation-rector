@@ -6,4 +6,4 @@
 // a single STDOUT line pointing at `.rector-fluent-validation-skips.log`
 // when it contains entries. See `RunSummary` for details.
 
-SanderMuller\FluentValidationRector\RunSummary::registerShutdownHandler();
+SanderMuller\FluentValidationRector\Internal\RunSummary::registerShutdownHandler();

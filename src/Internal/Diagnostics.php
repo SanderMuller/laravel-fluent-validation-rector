@@ -230,10 +230,12 @@ final class Diagnostics
      * triage signal: lets a downstream consumer's CI diff identify which
      * release produced a given log shape.
      *
-     * The package version is read from the package's own composer.json
-     * via `__DIR__/../composer.json`. Falls back to "unknown" if the
-     * file is unreadable (rare — package's own composer.json should
-     * always be present in the installed tree).
+     * The package version is sourced via `packageVersion()` →
+     * `Composer\InstalledVersions::getPrettyVersion()`. This is the
+     * single resolution path; pinned in `SkipLogHeaderTest`. Returns
+     * `"unknown"` only when InstalledVersions is unavailable (rare —
+     * Composer 2+ ships it) or the package isn't registered with
+     * Composer (impossible for an installed dep).
      */
     public static function skipLogHeader(): string
     {

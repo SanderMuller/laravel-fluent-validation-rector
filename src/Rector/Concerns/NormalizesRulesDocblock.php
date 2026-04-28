@@ -74,8 +74,14 @@ trait NormalizesRulesDocblock
      * shape so re-runs over consumer codebases that still have the FQN
      * form leave it alone (passive idempotency, not active migration).
      * Pint's `fully_qualified_strict_types` cleans up the FQN form on
-     * consumer-side over time. Removal slated when 1.0 RC's docblock-emit
-     * audit confirms no live FQN forms remain in active dogfood codebases.
+     * consumer-side over time.
+     *
+     * @deprecated since 0.22.0 — passive-idempotency recognition of the
+     *   FQN-form annotation body is slated for removal in 2.0 alongside
+     *   the magic-constant config deprecation cycle. By 2.0, the FQN
+     *   form will have had four+ minor cycles to be cleaned up by
+     *   re-running the rector on consumer codebases (each rewrites to
+     *   the short-name form). Behavior preserved through 1.x.
      */
     protected const string LEGACY_FQN_STANDARD_RULES_ANNOTATION_BODY = 'array<string, \\Illuminate\\Contracts\\Validation\\ValidationRule|string|array<mixed>>';
 
@@ -219,6 +225,11 @@ trait NormalizesRulesDocblock
         // still have the FQN form leave them alone (passive idempotency).
         // The first form to match wins; remainder check uses the matched
         // form's length.
+        //
+        // 0.22.0: the LEGACY_FQN_STANDARD_RULES_ANNOTATION_BODY branch
+        // is `@deprecated` (see constant declaration). Removal slated
+        // for 2.0; behavior preserved through 1.x so consumer codebases
+        // mid-migration still get passive idempotency.
         foreach ([self::STANDARD_RULES_ANNOTATION_BODY, self::LEGACY_FQN_STANDARD_RULES_ANNOTATION_BODY] as $standard) {
             if ($body === $standard) {
                 return true;
