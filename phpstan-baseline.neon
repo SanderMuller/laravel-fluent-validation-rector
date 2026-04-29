@@ -10,3 +10,8 @@ parameters:
 			identifier: complexity.classLike
 			count: 1
 			path: src/Rector/AddHasFluentValidationTraitRector.php
+		-
+			rawMessage: 'Class cognitive complexity is 90, keep it under 80'
+			identifier: complexity.classLike
+			count: 1
+			path: src/Rector/ConvertLivewireRuleAttributeRector.php

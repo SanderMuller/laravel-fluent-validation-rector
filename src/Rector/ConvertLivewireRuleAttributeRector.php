@@ -26,6 +26,8 @@ use Rector\PostRector\Collector\UseNodesToAddCollector;
 use Rector\Rector\AbstractRector;
 use Rector\StaticTypeMapper\ValueObject\Type\FullyQualifiedObjectType;
 use SanderMuller\FluentValidation\FluentRule;
+use SanderMuller\FluentValidation\HasFluentValidation;
+use SanderMuller\FluentValidation\HasFluentValidationForFilament;
 use SanderMuller\FluentValidationRector\Internal\RunSummary;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ConvertsValidationRuleArrays;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
@@ -131,6 +133,16 @@ final class ConvertLivewireRuleAttributeRector extends AbstractRector implements
      * @var array<string, true>
      */
     private array $partialOverlapSkipKeys = [];
+
+    /**
+     * Static dedup map for the 1.2.0 layer-2 compose-conflict warning.
+     * Keyed on class FQCN; same class doesn't generate duplicate
+     * skip-log entries as the rector visits it. Mirrors
+     * `QualifiesForRulesProcessing::$denylistedAttributedWarnings`.
+     *
+     * @var array<string, true>
+     */
+    private static array $composeConflictWarnings = [];
 
     use ConvertsValidationRuleArrays;
     use DetectsInheritedTraits;
@@ -346,6 +358,23 @@ CODE_SAMPLE
             return false;
         }
 
+        // 1.2.0 layer-2 compose-conflict warning. Class with Livewire
+        // `#[Rule]` / `#[Validate]` property attribute AND
+        // `HasFluentValidation` (or its Filament variant) trait use:
+        // the trait's `getRules()` returns the trait-side `rules()`
+        // method's output and does NOT consult the Livewire attribute
+        // pathway, so `validateOnly($prop)` for an attribute-bound
+        // property silently returns `[]`. Diagnostic only — no
+        // auto-rewrite (the right fix depends on consumer intent:
+        // move rule into trait's `rules()` OR remove the trait).
+        // Bails conversion: rector-side conversion would generate a
+        // child `rules()` method that overrides the parent's,
+        // potentially losing parent-owned fields — wrong fix shape
+        // for this composition.
+        if ($this->warnLivewireFluentTraitComposeConflict($class)) {
+            return false;
+        }
+
         $explicit = $this->extractExplicitValidateKeys($class);
 
         // `'unsafe'` => at least one `$this->validate()` call with a
@@ -388,6 +417,126 @@ CODE_SAMPLE
         }
 
         return true;
+    }
+
+    /**
+     * 1.2.0 layer-2 compose-conflict warning. Returns true (and emits
+     * a per-property skip-log entry) when:
+     *
+     *  - The class has at least one Livewire `#[Rule]` / `#[Validate]`
+     *    attribute on a property; AND
+     *  - The class uses `HasFluentValidation` (or its Filament variant)
+     *    directly or via any ancestor.
+     *
+     * Both conditions together mean the trait's `getRules()` reads the
+     * trait-side `rules()` method but ignores the Livewire attribute
+     * pathway — `validateOnly($prop)` for an attribute-bound property
+     * silently returns `[]` at runtime. Diagnostic only; no auto-rewrite
+     * (the right fix depends on consumer intent — move the rule into
+     * the trait's `rules()` method, or remove the trait if Livewire-
+     * attribute validation is intended).
+     *
+     * Caller (`shouldProcessClass`) bails conversion when this returns
+     * true: rector-side conversion would generate a child `rules()`
+     * method overriding the parent's, potentially losing parent-owned
+     * fields. Wrong fix shape for this composition.
+     *
+     * Static-deduped by class FQCN so the same class doesn't emit
+     * duplicate warnings on re-visits. Mirrors the intra-package
+     * `warnDenylistedAttributedMethods` pattern in
+     * `QualifiesForRulesProcessing`.
+     *
+     * Origin: surfaced post-1.1.0 from a real consumer 2FA-flow
+     * production bug where `validateOnly('phoneNumber')` returned `[]`
+     * for an attribute-bound property on a class whose abstract parent
+     * used `HasFluentValidation`. Spec at
+     * `specs/1.2.0-livewire-fluent-trait-compose-warning.md`.
+     */
+    private function warnLivewireFluentTraitComposeConflict(Class_ $class): bool
+    {
+        $fqcn = $this->getName($class);
+
+        if ($fqcn === null || ! $this->classUsesFluentValidationTrait($class)) {
+            return false;
+        }
+
+        $alreadyEmitted = isset(self::$composeConflictWarnings[$fqcn]);
+        $hadConflict = false;
+
+        foreach ($class->stmts as $stmt) {
+            if (! ($stmt instanceof Property)) {
+                continue;
+            }
+
+            if (! $this->propertyHasLivewireRuleAttribute($stmt)) {
+                continue;
+            }
+
+            $hadConflict = true;
+
+            if ($alreadyEmitted) {
+                continue;
+            }
+
+            $this->emitComposeConflictForProperty($class, $stmt);
+        }
+
+        if ($hadConflict) {
+            self::$composeConflictWarnings[$fqcn] = true;
+        }
+
+        return $hadConflict;
+    }
+
+    /**
+     * True when the class uses `HasFluentValidation` (or its Filament
+     * variant) directly or via any ancestor.
+     */
+    private function classUsesFluentValidationTrait(Class_ $class): bool
+    {
+        if ($this->currentOrAncestorUsesTrait($class, HasFluentValidation::class)) {
+            return true;
+        }
+
+        return $this->currentOrAncestorUsesTrait($class, HasFluentValidationForFilament::class);
+    }
+
+    /**
+     * Per-property emit for the compose-conflict warning. Each property
+     * in a multi-prop declaration (`public string $a, $b;`) gets its
+     * own skip-log entry naming the property explicitly.
+     */
+    private function emitComposeConflictForProperty(Class_ $class, Property $property): void
+    {
+        foreach ($property->props as $propertyItem) {
+            $this->logSkip(
+                $class,
+                sprintf(
+                    'property `$%s` carries `#[Livewire\\Attributes\\Rule]` (or `#[Validate]`) but class uses `HasFluentValidation` trait — the attribute is silently ignored at runtime (`validateOnly()` returns `[]` for this field). Either move the rule into the trait\'s `rules()` method, or remove the trait if Livewire-attribute validation is intended.',
+                    $propertyItem->name->toString(),
+                ),
+            );
+        }
+    }
+
+    /**
+     * Helper for `warnLivewireFluentTraitComposeConflict` — returns true
+     * when the property carries any `#[Livewire\Attributes\Rule]` or
+     * `#[Validate]` attribute, regardless of convertibility shape. The
+     * existing `hasAnyLivewireRuleAttribute` works at class scope; this
+     * is the per-property variant.
+     */
+    private function propertyHasLivewireRuleAttribute(Property $property): bool
+    {
+        foreach ($property->attrGroups as $attrGroup) {
+            foreach ($attrGroup->attrs as $attr) {
+                if ($this->isLivewireRuleAttribute($attr)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
