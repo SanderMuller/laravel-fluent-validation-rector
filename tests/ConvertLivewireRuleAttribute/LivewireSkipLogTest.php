@@ -142,6 +142,25 @@ final class LivewireSkipLogTest extends AbstractRectorTestCase
             $base . 'skip_livewire_attribute_with_fluent_trait_inherited.php.inc',
             'property `$phoneNumber` carries `#[Livewire\\Attributes\\Rule]` (or `#[Validate]`) but an ancestor class uses `HasFluentValidation` trait — the attribute is silently ignored at runtime',
         ];
+
+        // 1.2.1 per-property overlap-bail emit — replaces the pre-1.2.1
+        // single classwide skip with one entry per Livewire-attributed
+        // property, naming whether its predicted emit key(s) overlap
+        // explicit `$this->validate([...])` keys. The
+        // `skip_hybrid_validateOnly_with_rules.php.inc` fixture has two
+        // `#[Validate]` attrs + an explicit `validateOnly('name', ['name'
+        // => ...])` call — `$name` overlaps, `$email` doesn't. Both
+        // dataset entries below assert the verbatim pinpoint message
+        // for each property.
+        yield 'overlap-bail per-property emit (overlapping property)' => [
+            $base . 'skip_hybrid_validateOnly_with_rules.php.inc',
+            "property `\$name` Livewire attribute key(s) ['name'] overlap explicit `\$this->validate(...)` key(s) ['name'] — KEY_OVERLAP_BEHAVIOR=bail (default) keeps it as attrs",
+        ];
+
+        yield 'overlap-bail per-property emit (non-overlapping property)' => [
+            $base . 'skip_hybrid_validateOnly_with_rules.php.inc',
+            "property `\$email` Livewire attribute key(s) ['email'] do NOT overlap explicit `\$this->validate(...)` key(s) ['name'] — KEY_OVERLAP_BEHAVIOR=bail (default) skips classwide regardless. Set KEY_OVERLAP_BEHAVIOR=partial to convert this property",
+        ];
     }
 
     public function provideConfigFilePath(): string

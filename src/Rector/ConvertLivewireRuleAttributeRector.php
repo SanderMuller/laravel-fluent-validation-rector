@@ -389,18 +389,14 @@ CODE_SAMPLE
 
         if (is_array($explicit) && $explicit !== []) {
             if ($this->keyOverlapBehavior === self::OVERLAP_BEHAVIOR_BAIL) {
-                // 0.20.1 collectiq dogfood (2026-04-28): the prior message
-                // ("attribute conversion skipped to avoid generating
-                // dead-code rules()") overclaimed certainty — for #[Validate]
-                // attributes whose property name is NOT in the explicit
-                // args, conversion would NOT produce dead code; default-
-                // bail mode is conservative-safe rather than actually-dead.
-                // The rewrite hedges the certainty and names the
-                // OVERLAP_BEHAVIOR config knob verbatim so the consumer
-                // sees the escape hatch without reading docs. Per-attribute
-                // emit (one skip-log per #[Validate] with factual overlap
-                // diff) is deferred to 1.0 RC.
-                $this->logSkip($class, 'class calls $this->validate([...]) with explicit args — default mode (KEY_OVERLAP_BEHAVIOR=bail) skips classwide because attributes MAY overlap with the explicit args; conversion is conservative-safe but the rector cannot statically prove non-overlap. To convert attributes whose property name does not appear in any explicit validate() arg, set KEY_OVERLAP_BEHAVIOR=partial → see PUBLIC_API.md#convertlivewireruleattributerector for canonical wiring.');
+                // 1.2.1: per-attribute pinpoint emit (was a single classwide
+                // skip pre-1.2.1). Each Livewire-attributed property gets its
+                // own skip-log entry naming whether its predicted emit keys
+                // overlap the explicit `$this->validate([...])` keys —
+                // consumers with multiple attributed properties no longer
+                // have to manually correlate the classwide bail to specific
+                // attrs. Cardinality fix; bail outcome unchanged.
+                $this->emitOverlapBailPerProperty($class, $explicit);
 
                 return false;
             }
@@ -531,6 +527,100 @@ CODE_SAMPLE
                 ),
             );
         }
+    }
+
+    /**
+     * Per-property overlap-bail emit (1.2.1, replacing the pre-1.2.1
+     * classwide single emit). For each property carrying Livewire
+     * `#[Rule]` / `#[Validate]` attributes, predict the rule keys those
+     * attributes would emit (`predictEmitKeysForProperty`) and compare
+     * against the explicit `$this->validate([...])` key set. Emit one
+     * skip-log entry per property naming whether its key(s) overlap.
+     *
+     * Non-overlapping properties are still bailed (default mode is
+     * classwide-conservative) but the message tells the consumer that
+     * `KEY_OVERLAP_BEHAVIOR=partial` would convert that specific
+     * property — the bail is only forced for the genuinely-overlapping
+     * ones. Overlapping properties get a different message indicating
+     * the overlap would force preservation under partial mode too.
+     *
+     * @param  list<string>  $explicit  Static-extracted keys from the class's
+     *                                   `$this->validate([...])` call(s).
+     */
+    private function emitOverlapBailPerProperty(Class_ $class, array $explicit): void
+    {
+        $explicitDisplay = $this->formatKeyList($explicit);
+        $explicitSet = array_fill_keys($explicit, true);
+
+        foreach ($class->stmts as $stmt) {
+            if (! ($stmt instanceof Property)) {
+                continue;
+            }
+
+            if (! $this->propertyHasLivewireRuleAttribute($stmt)) {
+                continue;
+            }
+
+            $emitKeys = $this->predictEmitKeysForProperty($stmt);
+            $overlapping = array_values(array_filter(
+                $emitKeys,
+                static fn (string $key): bool => isset($explicitSet[$key]),
+            ));
+
+            foreach ($stmt->props as $propertyItem) {
+                $this->logSkip(
+                    $class,
+                    $this->formatOverlapBailMessage(
+                        $propertyItem->name->toString(),
+                        $emitKeys,
+                        $overlapping,
+                        $explicitDisplay,
+                    ),
+                    location: $stmt,
+                );
+            }
+        }
+    }
+
+    /**
+     * @param  list<string>  $emitKeys
+     * @param  list<string>  $overlapping
+     */
+    private function formatOverlapBailMessage(
+        string $propertyName,
+        array $emitKeys,
+        array $overlapping,
+        string $explicitDisplay,
+    ): string {
+        $emitDisplay = $this->formatKeyList($emitKeys);
+
+        if ($overlapping !== []) {
+            return sprintf(
+                'property `$%s` Livewire attribute key(s) %s overlap explicit `$this->validate(...)` key(s) %s — KEY_OVERLAP_BEHAVIOR=bail (default) keeps it as attrs; under KEY_OVERLAP_BEHAVIOR=partial the overlap still forces preservation (overlap = explicit-call wins).',
+                $propertyName,
+                $this->formatKeyList($overlapping),
+                $explicitDisplay,
+            );
+        }
+
+        return sprintf(
+            'property `$%s` Livewire attribute key(s) %s do NOT overlap explicit `$this->validate(...)` key(s) %s — KEY_OVERLAP_BEHAVIOR=bail (default) skips classwide regardless. Set KEY_OVERLAP_BEHAVIOR=partial to convert this property → see PUBLIC_API.md#convertlivewireruleattributerector for canonical wiring.',
+            $propertyName,
+            $emitDisplay,
+            $explicitDisplay,
+        );
+    }
+
+    /**
+     * @param  list<string>  $keys
+     */
+    private function formatKeyList(array $keys): string
+    {
+        if ($keys === []) {
+            return '[]';
+        }
+
+        return '[' . implode(', ', array_map(static fn (string $k): string => "'{$k}'", $keys)) . ']';
     }
 
     /**
