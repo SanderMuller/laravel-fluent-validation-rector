@@ -14,12 +14,16 @@ use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassLike;
+use PHPStan\Analyser\Scope;
+use PHPStan\Reflection\ClassReflection;
+use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\PostRector\Collector\UseNodesToAddCollector;
 use Rector\Rector\AbstractRector;
 use Rector\StaticTypeMapper\ValueObject\Type\FullyQualifiedObjectType;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidationRector\Internal\RunSummary;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ConvertsValidationRuleStrings;
+use SanderMuller\FluentValidationRector\Rector\Concerns\DescendsIntoRuleSetFromWrapper;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsRulesShapedMethods;
 use SanderMuller\FluentValidationRector\Rector\Concerns\IdentifiesLivewireClasses;
@@ -40,6 +44,7 @@ use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
 final class ValidationStringToFluentRuleRector extends AbstractRector implements DocumentedRuleInterface
 {
     use ConvertsValidationRuleStrings;
+    use DescendsIntoRuleSetFromWrapper;
     use DetectsInheritedTraits;
     use DetectsRulesShapedMethods;
     use IdentifiesLivewireClasses;
@@ -112,33 +117,15 @@ CODE_SAMPLE
                 return null;
             }
 
-            $result = $this->refactorFormRequest($node);
-
-            if ($result instanceof Node) {
-                $this->queueFluentRuleImport();
-            }
-
-            return $result;
+            return $this->emitWithImport($this->refactorFormRequest($node));
         }
 
         if ($node instanceof MethodCall && $this->isName($node->name, 'validate')) {
-            $result = $this->refactorValidateCall($node);
-
-            if ($result instanceof Node) {
-                $this->queueFluentRuleImport();
-            }
-
-            return $result;
+            return $this->emitWithImport($this->refactorValidateCall($node));
         }
 
         if (($node instanceof StaticCall || $node instanceof MethodCall) && $this->isName($node->name, 'make')) {
-            $result = $this->refactorValidatorMake($node);
-
-            if ($result instanceof Node) {
-                $this->queueFluentRuleImport();
-            }
-
-            return $result;
+            return $this->emitWithImport($this->refactorValidatorMake($node));
         }
 
         // `Validator::validate(<data>, <rules>)` — the one-shot static
@@ -148,13 +135,7 @@ CODE_SAMPLE
         // `Illuminate\Support\Facades\Validator` (handles aliased
         // imports too).
         if ($node instanceof StaticCall && $this->isName($node->name, 'validate')) {
-            $result = $this->refactorValidatorMake($node);
-
-            if ($result instanceof Node) {
-                $this->queueFluentRuleImport();
-            }
-
-            return $result;
+            return $this->emitWithImport($this->refactorValidatorMake($node));
         }
 
         // Global `validator(<data>, <rules>)` helper. Conservative
@@ -170,16 +151,78 @@ CODE_SAMPLE
         // namespacedName attached) or write the call in the global
         // namespace.
         if ($node instanceof FuncCall) {
-            $result = $this->refactorGlobalValidatorHelper($node);
+            return $this->emitWithImport($this->refactorGlobalValidatorHelper($node));
+        }
 
-            if ($result instanceof Node) {
-                $this->queueFluentRuleImport();
-            }
-
-            return $result;
+        // 1.1.0 broad-scope RuleSet::from descent (OQ #1 = (b)). Visits any
+        // `RuleSet::from([Array_])` static call wherever it appears in PHP
+        // source — action methods, services, controllers, jobs, plus the
+        // FormRequest `rules(): RuleSet` return path. The static-call
+        // signature self-gates against false positives; no surrounding-class
+        // qualification is needed.
+        //
+        // Placed after the Validator::* paths so a call like
+        // `Validator::validate(...)` is matched first by the validate
+        // handler. Both paths are mutually exclusive by name predicate
+        // (`from` vs `validate` / `make`); ordering is defensive.
+        if ($node instanceof StaticCall && $this->isRuleSetFromCall($node)) {
+            return $this->emitWithImport($this->refactorRuleSetFromWrapper($node));
         }
 
         return null;
+    }
+
+    /**
+     * Per-branch terminal: queue the FluentRule use-import iff the
+     * branch's refactor helper produced a (mutated) node, and return
+     * the same node back to Rector. Centralizes the "if rewrite
+     * happened, ensure FluentRule is imported" pattern across all
+     * refactor() branches so the dispatch method stays under
+     * cognitive-complexity budget.
+     */
+    private function emitWithImport(?Node $result): ?Node
+    {
+        if ($result instanceof Node) {
+            $this->queueFluentRuleImport();
+        }
+
+        return $result;
+    }
+
+    /**
+     * Apply string-rule conversion to the inner Array_ argument of a
+     * `RuleSet::from([Array_])` static call. Inner-only descent per
+     * OQ #3 = (a) — the wrapper static call + any chained methods
+     * (`->check($data)->safe()`) stay verbatim around the converted
+     * inner array.
+     *
+     * Non-literal-arg case (`RuleSet::from($injected)`) emits a skip-log
+     * entry mirroring `GroupWildcardRulesToEachRector`'s wording so all
+     * three rectors share one consistent skip-reason text for the same
+     * failure-mode shape.
+     */
+    private function refactorRuleSetFromWrapper(StaticCall $node): ?StaticCall
+    {
+        $innerArray = $this->extractArrayFromRuleSetFrom($node);
+
+        if (! $innerArray instanceof Array_) {
+            $scope = $node->getAttribute(AttributeKey::SCOPE);
+            $className = 'top-level';
+
+            if ($scope instanceof Scope && $scope->getClassReflection() instanceof ClassReflection) {
+                $className = $scope->getClassReflection()->getName();
+            }
+
+            $this->logSkipByName(
+                $className,
+                'RuleSet::from() argument is not a literal array — fold target must be a statically-determinable Array_; consumer audit required',
+                location: $node,
+            );
+
+            return null;
+        }
+
+        return $this->processValidationRules($innerArray) ? $node : null;
     }
 
     /**

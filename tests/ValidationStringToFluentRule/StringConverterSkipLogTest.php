@@ -1,0 +1,209 @@
+<?php declare(strict_types=1);
+
+namespace SanderMuller\FluentValidationRector\Tests\ValidationStringToFluentRule;
+
+use Iterator;
+use PHPUnit\Framework\Attributes\DataProvider;
+use Rector\Testing\PHPUnit\AbstractRectorTestCase;
+use ReflectionClass;
+use SanderMuller\FluentValidationRector\Internal\Diagnostics;
+use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
+use SanderMuller\FluentValidationRector\Rector\ValidationStringToFluentRuleRector;
+
+/**
+ * Regression coverage for the skip-log entries emitted by
+ * `ValidationStringToFluentRuleRector` at decision-point bails. Each
+ * `skip_<reason>.php.inc` fixture under `Fixture/` exercises a
+ * specific bail; this test runs the rector with verbose mode enabled
+ * and asserts the expected reason string lands in the skip log.
+ *
+ * Currently pins the 1.1.0 RuleSet::from non-literal-arg skip emit
+ * (per spec §4.4a). New skip-emit sites add new data-provider rows
+ * here. Pinning the reason strings here means a future refactor that
+ * silently drops or renames a skip message produces a test failure
+ * rather than a silent regression — which would otherwise be invisible
+ * because the source-diff fixture format only catches source-mutation
+ * regressions, not skip-log emit regressions.
+ *
+ * Mirrors `tests/GroupWildcardRulesToEach/GroupWildcardSkipLogTest.php`
+ * verbatim for the per-test cwd / verbose-tier setup; the only
+ * differences are the rector class under test and the data provider.
+ */
+final class StringConverterSkipLogTest extends AbstractRectorTestCase
+{
+    private ?string $originalVerbose = null;
+
+    private string $originalCwd = '';
+
+    private string $tempCwd = '';
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $env = getenv(Diagnostics::VERBOSE_ENV);
+        $this->originalVerbose = $env === false ? null : $env;
+        putenv(Diagnostics::VERBOSE_ENV . '=1');
+
+        $this->originalCwd = getcwd() ?: sys_get_temp_dir();
+        $this->tempCwd = sys_get_temp_dir() . '/string-converter-skiplog-' . uniqid('', true);
+
+        if (! mkdir($this->tempCwd) && ! is_dir($this->tempCwd)) {
+            $this->fail('Failed to create per-test cwd');
+        }
+
+        chdir($this->tempCwd);
+
+        $this->resetSkipLogState();
+        $this->unlinkSkipLog();
+    }
+
+    protected function tearDown(): void
+    {
+        $this->unlinkSkipLog();
+        $this->resetSkipLogState();
+
+        if ($this->originalVerbose === null) {
+            putenv(Diagnostics::VERBOSE_ENV);
+            unset($_SERVER[Diagnostics::VERBOSE_ENV], $_ENV[Diagnostics::VERBOSE_ENV]);
+        } else {
+            putenv(Diagnostics::VERBOSE_ENV . '=' . $this->originalVerbose);
+        }
+
+        if ($this->originalCwd !== '') {
+            chdir($this->originalCwd);
+        }
+
+        if ($this->tempCwd !== '' && is_dir($this->tempCwd)) {
+            @rmdir($this->tempCwd);
+        }
+
+        parent::tearDown();
+    }
+
+    #[DataProvider('skipFixtures')]
+    public function testFixtureEmitsExpectedSkipReason(string $fixturePath, string $expectedReasonSubstring): void
+    {
+        $tempFixture = $this->copyFixtureToUniquePath($fixturePath);
+
+        try {
+            $this->doTestFile($tempFixture);
+        } finally {
+            @unlink($tempFixture);
+        }
+
+        $logPath = Diagnostics::skipLogPath();
+        $this->assertFileExists($logPath, sprintf(
+            'Expected skip log at %s after processing %s',
+            $logPath,
+            basename($fixturePath),
+        ));
+
+        $contents = (string) file_get_contents($logPath);
+
+        $this->assertStringContainsString(
+            $expectedReasonSubstring,
+            $contents,
+            sprintf(
+                "Fixture '%s' did not emit expected skip reason.\nLog contents:\n%s",
+                basename($fixturePath),
+                $contents,
+            ),
+        );
+    }
+
+    private function copyFixtureToUniquePath(string $sourcePath): string
+    {
+        $contents = (string) file_get_contents($sourcePath);
+        $unique = uniqid('', true);
+        $destination = sys_get_temp_dir() . '/skiplog_' . $unique . '_' . basename($sourcePath);
+        file_put_contents($destination, $contents);
+
+        return $destination;
+    }
+
+    /**
+     * @return Iterator<string, array{0: string, 1: string}>
+     */
+    public static function skipFixtures(): Iterator
+    {
+        $base = __DIR__ . '/Fixture/';
+
+        // Skip-message wording is shared verbatim with
+        // `GroupWildcardRulesToEachRector` and
+        // `ValidationArrayToFluentRuleRector` — one consistent
+        // skip-reason text across all three rectors for the same
+        // failure-mode shape (RuleSet::from with non-literal arg).
+        // Consumers learn one wording, not three.
+        yield 'RuleSet::from non-literal argument' => [
+            $base . 'skip_ruleset_from_non_literal_argument.php.inc',
+            'RuleSet::from() argument is not a literal array — fold target must be a statically-determinable Array_; consumer audit required',
+        ];
+    }
+
+    public function provideConfigFilePath(): string
+    {
+        return __DIR__ . '/config/configured_rule.php';
+    }
+
+    private function unlinkSkipLog(): void
+    {
+        foreach (Diagnostics::allSkipLogArtifacts() as $path) {
+            if (is_file($path)) {
+                @unlink($path);
+            }
+        }
+    }
+
+    private function resetSkipLogState(): void
+    {
+        $reflection = new ReflectionClass(ValidationStringToFluentRuleRector::class);
+        $traitNames = array_map(
+            static fn (object $t): string => $t::class,
+            $reflection->getTraits(),
+        );
+
+        if (! in_array(LogsSkipReasons::class, $traitNames, true)) {
+            // Trait may live on a parent / chained trait; walk the
+            // trait graph if needed. For 1.1.0 the rector's direct
+            // trait list includes ConvertsValidationRuleStrings which
+            // includes LogsSkipReasons — both candidates present.
+            $directTraitsHaveLogs = array_any(
+                $reflection->getTraitNames(),
+                fn (string $name): bool => self::traitGraphIncludes($name, LogsSkipReasons::class),
+            );
+
+            if (! $directTraitsHaveLogs) {
+                return;
+            }
+        }
+
+        foreach (['loggedSkips', 'logSessionVerified'] as $propName) {
+            if ($reflection->hasProperty($propName)) {
+                $prop = $reflection->getProperty($propName);
+                $prop->setValue(null, $propName === 'loggedSkips' ? [] : false);
+            }
+        }
+    }
+
+    private static function traitGraphIncludes(string $traitName, string $target): bool
+    {
+        if ($traitName === $target) {
+            return true;
+        }
+
+        if (! trait_exists($traitName)) {
+            return false;
+        }
+
+        $reflection = new ReflectionClass($traitName);
+
+        foreach ($reflection->getTraitNames() as $usedTrait) {
+            if (self::traitGraphIncludes($usedTrait, $target)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}

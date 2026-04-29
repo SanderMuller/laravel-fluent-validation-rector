@@ -153,11 +153,13 @@ Grouped by the set that includes them. `FluentValidationSetList::ALL` runs every
 
 Converts pipe-delimited rule strings (`'required|string|max:255'`) to fluent chains.
 
-- **Where it fires**: FormRequest `rules()`, `$request->validate()`, `Validator::make()`.
+- **Where it fires**: FormRequest `rules()`, `$request->validate()`, `Validator::make()`, plus `RuleSet::from([...])` wrappers anywhere in PHP source (FormRequest `rules(): RuleSet` returns, action methods, services, controllers, jobs — added 1.1.0). The wrapper itself stays intact; only the inner array converts.
 
 #### `ValidationArrayToFluentRuleRector`
 
 Converts array-based rules (`['required', 'string', Rule::unique(...)]`), including `Rule::` objects, `Password::min()` chains, conditional tuples, closures, and custom rule objects.
+
+- **Where it fires**: same surface as `ValidationStringToFluentRuleRector` — FormRequest `rules()`, `$request->validate()`, `Validator::make()`, plus `RuleSet::from([...])` wrappers anywhere in PHP source (added 1.1.0).
 
 - **Conditional tuples accept**:
   - Explicit enum-value args: `['exclude_unless', 'type', Enum::CASE->value]`

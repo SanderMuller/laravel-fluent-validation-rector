@@ -26,8 +26,8 @@ use PhpParser\NodeVisitor;
 use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\Rector\AbstractRector;
 use SanderMuller\FluentValidation\FluentRule;
-use SanderMuller\FluentValidation\RuleSet;
 use SanderMuller\FluentValidationRector\Internal\RunSummary;
+use SanderMuller\FluentValidationRector\Rector\Concerns\DescendsIntoRuleSetFromWrapper;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsRulesShapedMethods;
 use SanderMuller\FluentValidationRector\Rector\Concerns\IdentifiesLivewireClasses;
@@ -56,6 +56,7 @@ use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
  */
 final class GroupWildcardRulesToEachRector extends AbstractRector implements DocumentedRuleInterface
 {
+    use DescendsIntoRuleSetFromWrapper;
     use DetectsInheritedTraits;
     use DetectsRulesShapedMethods;
     use IdentifiesLivewireClasses;
@@ -1529,58 +1530,6 @@ CODE_SAMPLE
 
             return null;
         });
-    }
-
-    /**
-     * Returns true when $expr is a `RuleSet::from(...)` static call, ignoring
-     * argument shape. Matches both FQN and short-name `RuleSet` references.
-     *
-     * Caller pairs this with `extractArrayFromRuleSetFrom()` to differentiate
-     * "not a RuleSet::from() return at all" (silent — out of scope) from
-     * "RuleSet::from() with a non-array argument" (log — actionable).
-     */
-    private function isRuleSetFromCall(Expr $expr): bool
-    {
-        if (! $expr instanceof StaticCall) {
-            return false;
-        }
-
-        $className = $this->getName($expr->class);
-
-        if ($className !== RuleSet::class && $className !== 'RuleSet') {
-            return false;
-        }
-
-        return $expr->name instanceof Identifier && $expr->name->name === 'from';
-    }
-
-    /**
-     * If $expr is `RuleSet::from(<Array_>)` with a single literal-Array_
-     * argument, return the wrapped Array_; else null.
-     *
-     * Returns null for `RuleSet::from($injected)`, `RuleSet::from(self::base())`,
-     * multi-arg, etc. Pair with `isRuleSetFromCall()` to log when the descent
-     * target is non-literal vs silently skip when it isn't a from() call at
-     * all.
-     */
-    private function extractArrayFromRuleSetFrom(Expr $expr): ?Array_
-    {
-        if (! $this->isRuleSetFromCall($expr)) {
-            return null;
-        }
-
-        /** @var StaticCall $expr — narrowed by isRuleSetFromCall */
-        if (count($expr->args) !== 1) {
-            return null;
-        }
-
-        $arg = $expr->args[0];
-
-        if (! $arg instanceof Arg || ! $arg->value instanceof Array_) {
-            return null;
-        }
-
-        return $arg->value;
     }
 
     /**
