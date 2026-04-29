@@ -188,7 +188,7 @@ Strips Livewire `#[Rule('...')]` / `#[Validate('...')]` property attributes and 
   - Constructor-form rule objects (`new Password(8)`, `new Unique('users')`, `new Exists('roles')`) lower to `FluentRule::password(8)` / `->unique(...)` / `->exists(...)` the same as their static-factory counterparts.
   - Maps `as:` / `attribute:` to `->label()` in both string and array forms. When both are present, `attribute:` wins on conflict.
   - Keeps an empty `#[Validate]` marker on converted properties so `wire:model.live` real-time validation survives conversion. Opt out via [`PRESERVE_REALTIME_VALIDATION => false`](#convertlivewireruleattributerector-config).
-- **Bails on**: hybrid `$this->validate([...])` calls (softenable, see config below), final parent `rules()` methods, unsupported attribute args, numeric keyed-array keys. Each bail logged to the skip file (see [Diagnostics](#diagnostics)).
+- **Bails on**: hybrid `$this->validate([...])` calls (softenable, see config below), final parent `rules()` methods, unsupported attribute args, numeric keyed-array keys, and the `HasFluentValidation`-trait compose conflict (an ancestor uses the trait AND the child carries `#[Rule]` / `#[Validate]` — the trait's `getRules()` reads only `rules(): array` so the attribute is silently ignored at runtime, and rector-side conversion would override the parent's `rules()` and drop parent-owned fields). Each bail logged to the skip file (see [Diagnostics](#diagnostics)). Direct trait use on the class itself is **not** a bail — the rector merges the attribute rule into a local `rules()` array (or installs one), since neither failure mode applies in that shape.
 - **Config**: `KEY_OVERLAP_BEHAVIOR => 'partial'` softens the classwide bail on explicit `$this->validate([...])` to a per-property overlap check. Converts non-overlapping attrs, leaves overlapping ones plus the explicit call alone. See [config keys](#convertlivewireruleattributerector-config).
 
 ### Grouping (set `GROUP`)
@@ -581,6 +581,12 @@ Any opt-in tier writes `.cache/rector-fluent-validation-skips.log` (plus a `.ses
 
 ```
 [fluent-validation] 42 skip entries written to .cache/rector-fluent-validation-skips.log — see for details
+```
+
+At the legacy `=1` / `=all` tier, the same line appends a tip pointing at the actionable filter — the `=all` firehose typically dominates with structural noise (trait-already-present, parent-inherits-trait, Livewire-detected) which `=actionable` filters out. Production dogfood on a 5-Livewire-component Laravel 12 / Filament v5 app measured 110 entries at `=all` vs. 5 at `=actionable` on the same surface:
+
+```
+[fluent-validation] 110 skip entries written to .cache/rector-fluent-validation-skips.log — see for details (tip: FLUENT_VALIDATION_RECTOR_VERBOSE=actionable filters informational entries)
 ```
 
 The `.cache/` subdir matches Rector's own cache directory convention — most projects already gitignore it. The first line of the log is a per-run header recording the package version, ISO-8601 UTC timestamp, and verbose tier, useful for cross-release diff stability in CI:

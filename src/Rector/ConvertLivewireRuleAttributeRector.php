@@ -458,8 +458,11 @@ CODE_SAMPLE
      * Origin: surfaced post-1.1.0 from a real consumer 2FA-flow
      * production bug where `validateOnly('phoneNumber')` returned `[]`
      * for an attribute-bound property on a class whose abstract parent
-     * used `HasFluentValidation`. Spec at
-     * `specs/1.2.0-livewire-fluent-trait-compose-warning.md`.
+     * used `HasFluentValidation`. Codex pre-tag review on the 1.2.0
+     * candidate narrowed the original `currentOrAncestorUsesTrait`
+     * check to ancestor-only (`aliasAwareAncestorUsesTrait`) — the
+     * direct-trait shape converts cleanly via attribute-into-rules()
+     * merge and was being over-bailed.
      */
     private function warnLivewireFluentTraitComposeConflict(Class_ $class): bool
     {

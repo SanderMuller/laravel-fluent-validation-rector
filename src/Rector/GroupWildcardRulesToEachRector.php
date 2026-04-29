@@ -1446,8 +1446,8 @@ CODE_SAMPLE
 
         if (count($directReturns) > 1) {
             // Bail uniformly across all return shapes. Consumer audit required
-            // before per-branch fold ships (OQ#1 conservative resolution,
-            // specs/0.19.1-…). Reopens on consumer signal.
+            // before per-branch fold ships — the conservative resolution dates
+            // to 0.19.1; reopens on consumer signal for branched-return cases.
             $this->logSkip(
                 $class,
                 'rules() body has multiple top-level return statements — fold target ambiguous; consumer audit required',
