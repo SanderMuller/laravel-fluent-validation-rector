@@ -108,6 +108,27 @@ The keys are the constant *names* (committed); the values are the constant
 string values is supported but the constant references are preferred so
 IDE refactoring follows correctly.
 
+**Reference each rector's own constant when configuring it.** When two
+rectors expose constants that share a wire-key string value (e.g.
+`SimplifyRuleWrappersRector::TREAT_AS_FLUENT_COMPATIBLE` and
+`UpdateRulesReturnTypeDocblockRector::TREAT_AS_FLUENT_COMPATIBLE`),
+prefer the form that references the constant on the rector you're
+configuring:
+
+```php
+// Self-documenting — symbol matches the rector receiving the config
+->ruleWithConfiguration(UpdateRulesReturnTypeDocblockRector::class, [
+    UpdateRulesReturnTypeDocblockRector::TREAT_AS_FLUENT_COMPATIBLE => [...],
+]);
+```
+
+Both rectors' constants currently resolve to the same wire-key string,
+so the cross-form (`SimplifyRuleWrappersRector::TREAT_AS_FLUENT_COMPATIBLE`
+on `UpdateRulesReturnTypeDocblockRector`'s config array) also works
+today. The recommended form is drift-resilient: if either rector adds
+a new constant later, the self-referencing form keeps the consumer's
+intent explicit at the call site.
+
 ### `AddHasFluentRulesTraitRector`
 
 - `BASE_CLASSES` (value: `'base_classes'`)

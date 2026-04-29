@@ -423,6 +423,8 @@ Four rules accept configuration via `withConfiguredRule()`.
 
 Same two keys as `SimplifyRuleWrappersRector` (`TREAT_AS_FLUENT_COMPATIBLE`, `ALLOW_CHAIN_TAIL_ON_ALLOWLISTED`). Allowlisted items count as FluentRule for the narrow-`@return`-tag decision. Mixed arrays (allowlisted items + string/array entries) with an existing narrow `FluentRuleContract` tag emit a stale-narrow skip-log warning.
 
+> **Per-rector configuration.** Each rector receives its own configuration array via `withConfiguredRule(...)`; the values are not pooled across rectors. When the same wire key appears on both `SimplifyRuleWrappersRector` and `UpdateRulesReturnTypeDocblockRector`, pass the key on each rector that consumes it — configuring only one will leave the other running with a default-empty allowlist (silent partial config; docblocks won't narrow on your custom factories). The DTO builder section below shows the recommended shared-instance pattern.
+
 #### `AddHasFluentRulesTraitRector` config
 
 | Key            | Type           | Default | What it does                                                                                                                                                                          |
@@ -457,6 +459,7 @@ fits your `rector.php` style.
 
 ```php
 use Rector\Config\RectorConfig;
+use SanderMuller\FluentValidationRector\Config\DocblockNarrowOptions;
 use SanderMuller\FluentValidationRector\Config\HasFluentRulesTraitOptions;
 use SanderMuller\FluentValidationRector\Config\LivewireConvertOptions;
 use SanderMuller\FluentValidationRector\Config\RuleWrapperSimplifyOptions;
@@ -466,6 +469,16 @@ use SanderMuller\FluentValidationRector\Config\Shared\OverlapBehavior;
 use SanderMuller\FluentValidationRector\Rector\AddHasFluentRulesTraitRector;
 use SanderMuller\FluentValidationRector\Rector\ConvertLivewireRuleAttributeRector;
 use SanderMuller\FluentValidationRector\Rector\SimplifyRuleWrappersRector;
+use SanderMuller\FluentValidationRector\Rector\UpdateRulesReturnTypeDocblockRector;
+
+// `AllowlistedFactories` is shared across BOTH rectors that consume it.
+// Build it once and feed it to each rector's options DTO so the two stay
+// in lockstep on what counts as "fluent-compatible" — configuring only
+// one would leave the other running with default-empty allowlist
+// (silent partial config; docblocks won't narrow on your custom factories).
+$allowlist = AllowlistedFactories::none()
+    ->withFactories(['App\\Rules\\CustomRule'])
+    ->allowingChainTail();
 
 return RectorConfig::configure()
     ->withConfiguredRule(
@@ -477,13 +490,11 @@ return RectorConfig::configure()
     )
     ->withConfiguredRule(
         SimplifyRuleWrappersRector::class,
-        RuleWrapperSimplifyOptions::default()
-            ->withAllowlistedFactories(
-                AllowlistedFactories::none()
-                    ->withFactories(['App\\Rules\\CustomRule'])
-                    ->allowingChainTail(),
-            )
-            ->toArray(),
+        RuleWrapperSimplifyOptions::with($allowlist)->toArray(),
+    )
+    ->withConfiguredRule(
+        UpdateRulesReturnTypeDocblockRector::class,
+        DocblockNarrowOptions::with($allowlist)->toArray(),
     )
     ->withConfiguredRule(
         AddHasFluentRulesTraitRector::class,
@@ -493,23 +504,7 @@ return RectorConfig::configure()
     );
 ```
 
-**Cross-rector shared DTOs are the canonical multi-rector form.** When you configure both `SimplifyRuleWrappersRector` and `UpdateRulesReturnTypeDocblockRector`, build the `AllowlistedFactories` once and feed both options DTOs from the same instance. The two rectors stay in lockstep on what counts as "fluent-compatible" — adding a class to the allowlist updates both surfaces atomically:
-
-```php
-$allowlist = AllowlistedFactories::none()
-    ->withFactories(['App\\Rules\\CustomRule'])
-    ->allowingChainTail();
-
-return RectorConfig::configure()
-    ->withConfiguredRule(
-        SimplifyRuleWrappersRector::class,
-        RuleWrapperSimplifyOptions::with($allowlist)->toArray(),
-    )
-    ->withConfiguredRule(
-        UpdateRulesReturnTypeDocblockRector::class,
-        DocblockNarrowOptions::with($allowlist)->toArray(),
-    );
-```
+**Cross-rector shared DTOs are the canonical multi-rector form.** The example above shows the lockstep pattern: a single `$allowlist` instance feeds both `SimplifyRuleWrappersRector::with(...)` and `UpdateRulesReturnTypeDocblockRector`'s `DocblockNarrowOptions::with(...)`. Adding a class to the allowlist updates both surfaces atomically. Configuring only one of the two rectors leaves the other running with an empty allowlist — the kind of silent-partial-config that produces no error but quietly skips your custom factories on the un-configured rector's surface.
 
 The `::with(...)` named constructor is shorthand for `::default()->withAllowlistedFactories(...)` — both produce identical output. Use whichever reads better at the call site; mixed-style is fine.
 

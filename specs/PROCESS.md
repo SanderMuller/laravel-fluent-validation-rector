@@ -533,3 +533,140 @@ land alongside this methodology when it promotes to numbered
 status. Until then, the dogfood-side simulation is the only place
 the runtime guard's actual behavior gets exercised; the in-repo
 fixtures cover existence + current-surface boot only.
+
+<!-- candidate-pen entry; awaiting second-cycle confirmation -->
+
+### Cross-package class removal/rename failure mode
+
+**Status**: candidate, surfaced 2026-04-28 during the 1.0
+adversarial pass (skip-log signal-to-noise lens, runtime-simulation
+methodology). Not currently exercised by any consumer cycle —
+filed for completeness so the absence of an entry isn't itself
+evidence of incomplete-pattern-mapping at the moment of SemVer
+commitment.
+
+**Observation**: the 0.22.x `array_filter(..., class_exists(...))`
+guard sweep (sites #1-#3) handles the additive case — a class
+"missing because added in newer sister-package" (consumer's
+sister-package version is older than rector's hardcoded
+`FACTORY_BASELINE` / `TYPED_RULE_CLASSES` /
+`TYPED_BUILDER_TO_FACTORY` declared). Forward incompatibility
+under graceful degradation.
+
+It does NOT handle the symmetric case: a class "missing because
+removed/renamed in newer sister-package" (consumer's
+sister-package is *newer* than the rector's understanding,
+upstream renamed `FieldRule` → `FluentField`). Same code path
+silently excludes the renamed class from the factory map. No
+diagnostic; consumer gets non-converted `field()` factory chains
+with no signal that the rector's understanding is stale.
+
+This isn't theoretical — `sandermuller/laravel-fluent-validation`
+is at 1.24.0; a 2.0 with a class rename is a future-likely event.
+The rector commits to a SemVer surface at 1.0 that doesn't
+anticipate this failure mode, but it will surface the next time
+the sister-package cuts a MAJOR with a class rename.
+
+**Adjacent unverified gaps surfaced in the same adversarial pass**
+(skip-log signal-to-noise lens, 2026-04-28):
+
+1. **Parallel rector worker + class_exists race.** The
+   `class_exists` filter runs in `bootResolutionTables()` /
+   `InlineMessageSurface::load()` / `classesWithPublicMethod()` —
+   per-worker-process. Should be safe under
+   `RectorConfig::withParallel(...)`, but no panel cycle has
+   verified parallel + missing-class together.
+2. **Composer authoritative classmap mode.** Consumers running
+   `composer dump-autoload --classmap-authoritative` get classmap-
+   cached `class_exists` resolution that bypasses file-existence
+   checks. The reflection iteration on the cached metadata may
+   succeed even when the file is removed, or fatal differently
+   than the non-classmap path. Different code path than the
+   AcceptedRule-deletion bonus simulations the panel ran.
+
+**Why deferred**: novel observation from one cycle, no current
+consumer hit, and the in-repo fixture pair covers the static-
+existence + current-surface invariants that catch the *additive*
+case at PR-time. The removal/rename case + parallel/classmap
+adjacent gaps are unverifiable without either (a) a real
+sister-package 2.0 cycle, or (b) a deliberate test-harness setup
+that simulates each failure mode. Promotion criteria: when the
+sister-package cuts a MAJOR with a class rename, OR when a second
+consumer surfaces an independent bypass-of-class_exists-guard
+failure mode, this entry promotes alongside the
+runtime-simulation methodology that surfaced it.
+
+**Companion (constructive paired pattern)**: when an upstream
+class rename is planned, the rector should ship a coordinated
+release that updates the BASELINE entries to the new FQCN BEFORE
+the consumer's composer constraint resolves to the renamed
+sister-package version. The rector's release timing becomes
+load-bearing on this case in a way it isn't for the additive
+case. Worth banking for the 2.0 horizon planning even if the
+candidate-pen entry itself stays deferred.
+
+<!-- candidate-pen entry; awaiting second-cycle confirmation -->
+
+### Lens-scope refinement: methodology + surface = specialty
+
+**Status**: candidate, surfaced 2026-04-28 during the 1.0
+adversarial pass (cold-consumer + drained-surface lens). Surfaced
+when the lens's reversal of a prior BEST verdict revealed that
+the prior verdict was specialty-saturated on a narrower scope
+than the lens claimed to cover.
+
+**Observation**: a lens's specialty is jointly defined by:
+1. **The methodology applied** — e.g. structured cold-read,
+   runtime-simulation, byte-identity diff, six-point check.
+2. **The surfaces audited under that methodology** — e.g. for
+   cold-read: PUBLIC_API.md only? README + PUBLIC_API.md? Full
+   cold-consumer-first-touch corpus (README + PUBLIC_API.md +
+   shipped SKILL.md + DTO worked examples + any tutorial)?
+
+**Saturation on a narrowly-scoped specialty doesn't generalize to
+the broader surface the lens claims to cover.** Two consecutive
+zero-finding passes on PUBLIC_API.md isn't evidence the
+cold-consumer corpus is drained — it's evidence that the
+PUBLIC_API.md SCOPE is drained under the cold-read methodology.
+
+**The lens-fatigue vs lens-saturation discriminator**: apply the
+same methodology to a different scope. If findings emerge, the
+prior saturation was scope-narrow (the lens was fatigued on its
+audited scope, not saturated on its claimed specialty). If no
+findings emerge across multiple scope shifts, the lens has
+genuinely converged on its claimed specialty.
+
+**The 0.22.2 → 0.22.3 reversal** that surfaced this candidate:
+the cold-consumer lens had two consecutive zero-finding passes on
+PUBLIC_API.md and declared specialty-saturation. The adversarial
+re-pass extended scope to README + DTO example + shipped
+SKILL.md, and three Q1-side silent-partial-config findings
+emerged immediately. Same methodology, broader scope, three
+findings.
+
+**Why deferred**: surfaced once (this cycle). Per the
+"methodologies earn their slot the same way invariants do" gate,
+the methodology-side observation needs an independent second
+surfacing before promoting to numbered invariant. The most likely
+path: a future cycle where a different lens declares
+specialty-saturation under a similarly narrow scope, then
+broadens and finds new gaps.
+
+**Operational implication for the panel-ledger framing**: every
+"lens BEST" entry in saturation evidence should explicitly
+document the lens's *audited scope* alongside its methodology,
+not just its methodology. "collectiq BEST on PUBLIC_API.md
+cold-read" is a stronger claim than "collectiq BEST on
+cold-consumer surface" — the first is verifiable, the second
+implicitly claims surface-coverage that the methodology may not
+have actually tested.
+
+**Companion**: the **doc-sync sweep invariant** that fixes this
+surface is itself a candidate observation: when a Q1-side doc fix
+lands, the sweep should hit ALL cold-read surfaces (README,
+PUBLIC_API.md, SKILL.md, DTO examples, any shipped tutorial), not
+just the doc explicitly named in the original finding. F1 in
+0.22.1 fixed PUBLIC_API.md only; the same wiring ambiguity
+persisted in README:424 and SKILL.md until 0.22.3 swept the full
+corpus. Filing as a sub-observation under this candidate-pen
+entry; promotes together when scope-as-specialty lands.

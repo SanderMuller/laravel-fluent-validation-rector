@@ -1,6 +1,6 @@
 ---
 name: fluent-validation-rector
-description: "Use when developing, testing, or debugging Rector rules for laravel-fluent-validation migration. Provides context on the rule architecture, set lists, testing conventions, and cross-process parallel worker support."
+description: "Use when configuring, running, or debugging the laravel-fluent-validation-rector migration. Covers set lists, cross-rector configuration semantics (especially the silent-partial-config pitfall on shared allowlists), and the rule architecture context downstream contributors and AI agents need."
 ---
 
 # Fluent Validation Rector Rules
@@ -39,7 +39,63 @@ FluentValidationSetList::CONVERT   // string + array conversion
 FluentValidationSetList::GROUP     // wildcard grouping
 FluentValidationSetList::TRAITS    // trait addition
 FluentValidationSetList::SIMPLIFY  // post-migration cleanup (opt-in only)
+FluentValidationSetList::POLISH    // docblock polish (opt-in only)
 ```
+
+## Cross-rector configuration
+
+Each rector receives its own configuration array via
+`withConfiguredRule(...)`; values are not pooled across rectors. Two
+specific rectors share wire keys by string value but need to be
+configured **independently**:
+
+| Wire key                            | Consuming rectors                                                   | Shared DTO type             |
+|-------------------------------------|---------------------------------------------------------------------|-----------------------------|
+| `treat_as_fluent_compatible`        | `SimplifyRuleWrappersRector`, `UpdateRulesReturnTypeDocblockRector` | `Config\Shared\AllowlistedFactories` |
+| `allow_chain_tail_on_allowlisted`   | `SimplifyRuleWrappersRector`, `UpdateRulesReturnTypeDocblockRector` | `Config\Shared\AllowlistedFactories` |
+
+**The silent-partial-config pitfall**: configuring only one of the
+two rectors leaves the other running with an empty allowlist. No
+error fires; the rector you forgot to configure quietly skips your
+custom factories. `SimplifyRuleWrappersRector` won't simplify
+chains on those classes; `UpdateRulesReturnTypeDocblockRector`
+won't narrow `@return` docblocks on the methods that use them.
+
+**The recommended pattern**: build the `AllowlistedFactories`
+instance once, feed both rectors from it.
+
+```php
+use SanderMuller\FluentValidationRector\Config\DocblockNarrowOptions;
+use SanderMuller\FluentValidationRector\Config\RuleWrapperSimplifyOptions;
+use SanderMuller\FluentValidationRector\Config\Shared\AllowlistedFactories;
+use SanderMuller\FluentValidationRector\Rector\SimplifyRuleWrappersRector;
+use SanderMuller\FluentValidationRector\Rector\UpdateRulesReturnTypeDocblockRector;
+
+$allowlist = AllowlistedFactories::none()
+    ->withFactories(['App\\Rules\\CustomRule'])
+    ->allowingChainTail();
+
+return RectorConfig::configure()
+    ->withConfiguredRule(
+        SimplifyRuleWrappersRector::class,
+        RuleWrapperSimplifyOptions::with($allowlist)->toArray(),
+    )
+    ->withConfiguredRule(
+        UpdateRulesReturnTypeDocblockRector::class,
+        DocblockNarrowOptions::with($allowlist)->toArray(),
+    );
+```
+
+When asked to "configure rector to treat my custom rule as
+fluent-compatible," apply the shared-instance pattern — produce
+both `withConfiguredRule(...)` calls feeding the same
+`$allowlist` variable. Single-rector form is a partial migration;
+the consumer's intent ("my custom rule is fluent-compatible
+everywhere") requires both rectors to know.
+
+For deeper SemVer semantics (which constants are committed, which
+wire-key strings are committed, the `Config\Shared\` namespace
+contract), see `vendor/sandermuller/laravel-fluent-validation-rector/PUBLIC_API.md`.
 
 ## Testing
 
