@@ -2,6 +2,67 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 1.0.0 - 2026-04-29
+
+The package is now stable. The public API surface enumerated in
+[`PUBLIC_API.md`](PUBLIC_API.md) is committed under [SemVer 2.0](https://semver.org).
+Renames, removals, or value-vocabulary changes to anything listed there
+are MAJOR-bump-only events; symbols not listed are `@internal` and may
+change in any release without a MAJOR bump.
+
+This is a tag-only release — there is no behavior change between 0.22.3
+and 1.0.0. The same SHA carries both tags; the tag IS the commitment.
+
+### What's frozen
+
+- **12 rector class FQNs** under `SanderMuller\FluentValidationRector\Rector\`
+- **6 set list constants** on `FluentValidationSetList` (`ALL`, `CONVERT`,
+  `GROUP`, `TRAITS`, `POLISH`, `SIMPLIFY`)
+- **Configuration constant names + their string wire keys** on the
+  configurable rectors (constants and literal-string keys both protected)
+- **Typed-config DTO builders** under `Config\` and shared value objects
+  under `Config\Shared\` (`AllowlistedFactories`, `BaseClassRegistry`,
+  `OverlapBehavior`)
+- **Verbose-mode env var** `FLUENT_VALIDATION_RECTOR_VERBOSE` — name +
+  canonical accepted values (`off`, `actionable`, `all`)
+- **Skip-log file paths**, line format, and header shape (slot
+  semantics, prefix, parenthesization)
+- **Trait FQNs** referenced by the trait-add rectors
+
+Heuristic boundaries — detection rules, classification confidence,
+trace depth, skip-text reason content, fixture coverage, diagnostic
+granularity — are explicitly NOT SemVer-committed. Heuristic
+tightening continues to ship in MINOR releases.
+
+### Compatibility
+
+- **PHP**: 8.3, 8.4
+- **Laravel**: 11, 12, 13
+- **`sandermuller/laravel-fluent-validation`**: ^1.20
+- **Rector**: 2.x
+
+The 24-cell CI matrix (2 OS × 2 PHP × 2 stability × 3 Laravel) is green
+on this release. 676 tests / 1261 assertions / 0 failures locally;
+PHPStan, Pint, Rector all clean.
+
+### Upgrading from 0.x
+
+Existing `rector.php` files keep working unchanged. The 0.20 → 0.22
+arc landed all SemVer-affecting cleanups:
+
+- **Pre-0.20.0**: deprecation shims at the root namespace for
+  `Diagnostics` and `RunSummary` (always `@internal`; rarely imported).
+  Removed in 0.22.0. If your code imports the root-namespace forms,
+  update to `Internal\Diagnostics` / `Internal\RunSummary` (or, better,
+  stop importing them — they're internal).
+- **Cross-rector configuration**: when configuring both
+  `SimplifyRuleWrappersRector` and `UpdateRulesReturnTypeDocblockRector`
+  with a custom allowlist, build a single `AllowlistedFactories`
+  instance and feed both rectors. See README §"Cross-rector shared
+  DTOs" for the canonical pattern.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/0.22.3...1.0.0
+
 ## 0.22.3 - 2026-04-29
 
 ### cold-consumer doc-sync sweep + 1.0 adversarial-pass candidate-pen entries
@@ -135,6 +196,7 @@ when configuring rectors that share a wire-key string value:
     UpdateRulesReturnTypeDocblockRector::TREAT_AS_FLUENT_COMPATIBLE => [...],
 ]);
 
+
 ```
 Both forms (self-referencing and cross-referencing the sibling
 rector's constant) work today since wire keys are committed
@@ -185,6 +247,7 @@ foreach (array_filter(self::TYPED_RULE_CLASSES, class_exists(...)) as $class) {
 }
 
 
+
 ```
 The reflection iteration on line 219 (inside
 `collectTypedRuleAllowlist`) previously fataled when
@@ -198,6 +261,7 @@ foreach (array_filter(array_keys(self::TYPED_BUILDER_TO_FACTORY), class_exists(.
     $reflection = new ReflectionClass($class);
     ...
 }
+
 
 
 ```
@@ -336,6 +400,7 @@ foreach ($reflection->getMethods(...) as $method) {
 
 
 
+
 ```
 But the `FACTORY_BASELINE`-derived iteration further down had no
 such guard. `FACTORY_BASELINE` includes class FQCNs as
@@ -350,6 +415,7 @@ loop guard.
 
 ```php
 $factoryMap = array_filter(self::FACTORY_BASELINE, 'class_exists');
+
 
 
 
@@ -709,6 +775,7 @@ if ($node instanceof Class_ && $node->name instanceof Identifier) {
 
 
 
+
 ```
 The `Class_::$name` Identifier always sits on the `class Foo`
 declaration line because that's where the name token literally
@@ -752,6 +819,7 @@ return array_merge(parent::rules(), [...]);
 
 
 
+
 ```
 …or via a depth-1 variable alias:
 
@@ -759,6 +827,7 @@ return array_merge(parent::rules(), [...]);
 $rules = parent::rules();
 array_push($rules['title'], 'unique:videos,title');
 return $rules;
+
 
 
 
@@ -808,6 +877,7 @@ file path:
 
 ```
 [fluent-validation:skip] <RectorShortName> <ClassFQCN> (<file-path>[:<line>]): <reason>
+
 
 
 
@@ -900,6 +970,7 @@ array<string, \Illuminate\Contracts\Validation\ValidationRule|string|array<mixed
 
 
 
+
 ```
 This violated downstream-project guidelines forbidding FQN in
 docblocks. Consumer Pint cleaned it up post-hoc, but consumers
@@ -910,6 +981,7 @@ The trait now emits the short-name form:
 
 ```
 array<string, ValidationRule|string|array<mixed>>
+
 
 
 
@@ -1037,6 +1109,7 @@ possible false positive, verify before acting.
 
 
 
+
 ```
 Honest "scan tier limitation" framing replaces the misleading "re-
 run" advice. Two independent dogfood reports flagged this — both
@@ -1064,6 +1137,7 @@ overlap with the explicit args; conversion is conservative-safe but
 the rector cannot statically prove non-overlap. To convert
 attributes whose property name does not appear in any explicit
 validate() arg, set KEY_OVERLAP_BEHAVIOR=partial.
+
 
 
 
@@ -1169,6 +1243,7 @@ children() bail: "parent factory <X>() doesn't support children() — only array
 
 
 
+
 ```
 ##### Concat-key bail classified per failure shape
 
@@ -1221,6 +1296,7 @@ and uses `array_map()` in the same method body — converting the parent
 could change the merged shape if the array op operates on the parent's
 return value (heuristic doesn't trace data flow; verify before treating
 as actionable)
+
 
 
 
@@ -1341,6 +1417,7 @@ public function rules(): RuleSet
 
 
 
+
 ```
 Pre-0.19.1 the rector visited, saw the `MethodCall` return
 expression, walked away **without folding and without logging** —
@@ -1360,6 +1437,7 @@ public function rules(): RuleSet
         self::COLOR => FluentRule::string()->nullable(),
     ])]);
 }
+
 
 
 
@@ -1407,6 +1485,7 @@ the post-fold output of `GroupWildcardRulesToEachRector`:
 
 
 
+
 ```
 Root cause: name-resolution scope. The wildcard fold emits short-name
 `new StaticCall(new Name('FluentRule'), …)` nodes; the post-rector
@@ -1432,6 +1511,7 @@ public function rules(): array
         self::COLOR => FluentRule::string()->nullable(),
     ])];
 }
+
 
 
 
@@ -1512,6 +1592,7 @@ return [
         self::SORT_ORDER => FluentRule::integer()->min(0),
     ]),
 ];
+
 
 
 
@@ -1648,6 +1729,7 @@ RuleWrapperSimplifyOptions::with($allowlist)->toArray();
 
 
 
+
 ```
 Both produce identical wire output. Mixed-style is fine —
 `default()` is still the right entry point for the zero-arg path
@@ -1691,6 +1773,7 @@ return RectorConfig::configure()
 
 
 
+
 ```
 Eliminates duplicate allowlist literals across rectors — adding a
 class to the allowlist updates both surfaces atomically. The same
@@ -1720,6 +1803,7 @@ vendor/bin/rector process && vendor/bin/pint --dirty
 
 
 
+
 ```
 Removes ambiguity for downstream consumers about whether rector
 should produce PSR-12-sorted imports on its own. The three
@@ -1736,6 +1820,7 @@ post-`GroupWildcardRulesToEachRector`-fold shape correctly:
 
 ```php
 '*' => FluentRule::array()->each(FluentRule::string()->max(255))
+
 
 
 
@@ -1794,6 +1879,7 @@ type string, int given
 
 
 
+
 ```
 The nested-children's keys get walked as if they were top-level fields
 with int indices, hitting the validator's metadata extraction with the
@@ -1815,6 +1901,7 @@ predicate fails, with a documented skip-log message:
 shape-changing rector skipped on Validator subclass — parent class
 may postprocess rules() output and the each()/children() shape is
 incompatible. Wrap manually if you have audited the parent's behavior.
+
 
 
 
@@ -1947,6 +2034,7 @@ return RectorConfig::configure()
             )
             ->toArray(),
     );
+
 
 
 
@@ -2372,6 +2460,7 @@ non-FormRequest plain class) plus 5 positive-confirming Livewire surfaces
    
    
    
+   
    ```
    Lets consumers attribute skip-log diff shapes to specific releases
    when grepping the log in CI. The header is **always emitted** when
@@ -2473,6 +2562,7 @@ non-FormRequest plain class) plus 5 positive-confirming Livewire surfaces
    
    
    
+   
    ```
 
 #### Class-qualification gate (shared)
@@ -2538,6 +2628,7 @@ FLUENT_VALIDATION_RECTOR_VERBOSE=actionable vendor/bin/rector process --clear-ca
 
 
 
+
 ```
 You'll now see entries like these for shapes the rector deliberately leaves alone:
 
@@ -2556,6 +2647,7 @@ You'll now see entries like these for shapes the rector deliberately leaves alon
 
 [fluent-validation:skip] GroupWildcardRulesToEachRector App\Http\Requests\DynamicKeyRequest:
   concat key too complex to parse for grouping — only static class-constant prefixes (e.g. self::FOO) followed by a dotted-string suffix are supported
+
 
 
 
@@ -2622,11 +2714,13 @@ SimplifyRuleWrappersRector App\Foo\CreateNewUser: accepted() not on FieldRule
 
 
 
+
 ```
 **After** (0.13.2):
 
 ```
 SimplifyRuleWrappersRector App\Foo\CreateNewUser: accepted() not on FieldRule — auto-promotion to FluentRule::boolean() blocked because boolean's implicit constraint rejects 'yes'/'on'/'true' which the accepted Laravel rule permits. Keep the field()->rule('accepted') escape hatch, OR use FluentRule::boolean()->accepted() explicitly if your form submits only 1/true/"1".
+
 
 
 
@@ -2766,6 +2860,7 @@ The bare skip line read like a rector bug. The same skip now includes candidate 
 
 
 
+
 ```
 ### Internal: complexity reductions
 
@@ -2821,11 +2916,13 @@ FluentRule::field()->rule('max:61')->rule('regex:/^[a-z]+$/');
 
 
 
+
 ```
 After the promotion + the next `SimplifyRuleWrappersRector` pass:
 
 ```php
 FluentRule::string()->max(61)->regex('/^[a-z]+$/');
+
 
 
 
@@ -2871,6 +2968,7 @@ The verbose-only `"rule payload not statically resolvable to a v1 shape"` skip l
 [fluent-validation:skip] SimplifyRuleWrappersRector App\Requests\Foo (rules): rule payload not statically resolvable to a v1 shape: StaticCall Password::default()
 [fluent-validation:skip] SimplifyRuleWrappersRector App\Requests\Bar (rules): rule payload not statically resolvable to a v1 shape: New_ App\Validation\CustomRule(…)
 [fluent-validation:skip] SimplifyRuleWrappersRector App\Requests\Baz (rules): rule payload not statically resolvable to a v1 shape: MethodCall …->withoutTrashed()
+
 
 
 
@@ -2960,6 +3058,7 @@ Livewire component has rules() but no FluentRule usage — convert string rules 
 
 
 
+
 ```
 ### `->rule(['required_array_keys', ...])` lowers to `->requiredArrayKeys(...)`
 
@@ -2996,11 +3095,13 @@ FluentRule::array()->requiredArrayKeys('id', 'slug')
 
 
 
+
 ```
 ### Opt back into verbose skip logging
 
 ```bash
 FLUENT_VALIDATION_RECTOR_VERBOSE=1 vendor/bin/rector process --clear-cache
+
 
 
 
@@ -3073,6 +3174,7 @@ Every silenced category in this release is restored. Useful when debugging why a
 
 
 
+
 ```
 Applied only to the fluent-method lowering (`['max', $x]` → `->max($x)`) and `->rule([...])` escape-hatch paths. COMMA_SEPARATED conditional rules (`requiredIf`, `excludeUnless`, …) keep the strict whitelist — their fluent signatures are overloaded (`Closure|bool|string $field`), so a dynamic expression that evaluated to a closure/bool at runtime would silently switch between field-comparison and closure/bool branches. Such tuples fall through to `->rule([...])` instead of `->requiredIf(...)`:
 
@@ -3085,6 +3187,7 @@ Applied only to the fluent-method lowering (`['max', $x]` → `->max($x)`) and `
 
 // After (escape hatch preserves array-form runtime semantics)
 'role' => FluentRule::string()->rule(['required_if', 'type', $this->roleResolver()]),
+
 
 
 
@@ -3131,6 +3234,7 @@ FluentRule::string()->rule(['required_if', 'subtitleSource', SubtitleSource::Pas
 
 // After
 FluentRule::string()->requiredIf('subtitleSource', SubtitleSource::Paste->value)
+
 
 
 
@@ -3215,6 +3319,7 @@ Tuple args written as explicit `PropertyFetch` on a `ClassConstFetch` (the Backe
 
 
 
+
 ```
 The match is narrow — only `->value` on a `ClassConstFetch` qualifies. Dynamic property names (`->$var`) and unrelated property fetches (`->name`, `->items`) still bail.
 
@@ -3239,6 +3344,7 @@ In-tuple variadic spread (`...Enum::list()`, `...$values`) is now preserved when
     ->bail()
     ->requiredUnless('type', ...InteractionType::getValuesWithoutDuration())
     ->rule(new DoesNotExceedVideoDurationRule($this->video())),
+
 
 
 
@@ -3313,6 +3419,7 @@ FluentRule::email(message: 'Bad email.')->required();
 
 
 
+
 ```
 Non-adjacent cases (`->email()->required()->message('x')`) stay chained — `->required()` mutates `$lastConstraint`, so the message binds to `'required'`, not `'email'`. Conditionable hops (`->when()` / `->unless()` / `->whenInput()`) reject the collapse for the same reason.
 
@@ -3352,6 +3459,7 @@ FluentRule::string()->min(3, message: 'Too short.');
 
 
 
+
 ```
 Emitted-key derivation: snake_case of the method name by default, with a hardcoded override table for the ≠ snake_case cases (`exactly` → `size`, `greaterThan` → `gt`, `alphaNumeric` → `alpha_num`, the `DateRule` wrapper aliases like `beforeToday` → `before`, etc.). Source: reading `addRule()` call sites in the vendor tree + peer handoff.
 
@@ -3363,6 +3471,7 @@ FluentRule::string()->rule(new In(['admin', 'user']))->messageFor('in', 'Pick a 
 
 // After
 FluentRule::string()->rule(new In(['admin', 'user']), message: 'Pick a valid role.');
+
 
 
 
@@ -3471,6 +3580,7 @@ return RectorConfig::configure()
     ->withConfiguredRule(ConvertLivewireRuleAttributeRector::class, [
         ConvertLivewireRuleAttributeRector::MIGRATE_MESSAGES => true,
     ]);
+
 
 
 
@@ -3638,6 +3748,7 @@ return RectorConfig::configure()
 
 
 
+
 ```
 #### What qualifies
 
@@ -3768,6 +3879,7 @@ protected function rules(): array
 
 
 
+
 ```
 Same for `new Unique(...)` → `->unique(...)` and `new Exists(...)` → `->exists(...)` against `Illuminate\Validation\Rules\Unique` / `Exists` (matching the existing `Rule::unique(...)` / `Rule::exists(...)` conversion).
 
@@ -3777,6 +3889,7 @@ Same for `new Unique(...)` → `->unique(...)` and `new Exists(...)` → `->exis
 // FormRequest::rules() — unchanged
 'password' => ['required', new Password(8)],
 // → FluentRule::field()->required()->rule(new Password(8))
+
 
 
 
@@ -3889,6 +4002,7 @@ protected function rules(): array
 
 
 
+
 ```
 Same shape for `new Unique(...)` and `new Exists(...)` against `Illuminate\Validation\Rules\Unique` / `Exists`, lowered to `->unique(...)` / `->exists(...)` chain methods (matching the existing `Rule::unique(...)` conversion).
 
@@ -3914,6 +4028,7 @@ Default runs still count skips and the end-of-run summary reports the total, but
 
 ```
 [fluent-validation] 42 skip entries. Re-run with FLUENT_VALIDATION_RECTOR_VERBOSE=1 and --clear-cache for details.
+
 
 
 
@@ -3993,11 +4108,13 @@ FLUENT_VALIDATION_RECTOR_VERBOSE=1 vendor/bin/rector process --clear-cache
 
 
 
+
 ```
 Env-only is deliberate — the flag has to reach parallel workers (fresh PHP processes spawned via `proc_open`) and shell-exported env inherits automatically, while in-process mutation would not. With verbose on, the log lands in the project root as before and the summary references it:
 
 ```
 [fluent-validation] 42 skip entries written to .rector-fluent-validation-skips.log — see for details
+
 
 
 
@@ -4101,6 +4218,7 @@ public function rules(): array
 
 
 
+
 ```
 Flat `.*` entries pass through `GroupWildcardRulesToEachRector` downstream for nested `->each(...)` folding. Fails closed on unconvertible values, numeric-string keys, and mixed keyed/positional shapes with a skip-log entry.
 
@@ -4152,6 +4270,7 @@ protected function rules(): array { /* ... */ }
 
 
 
+
 ```
 Deprecated `#[Rule]` (not `#[Validate]`) strips cleanly without a marker — the rector's scope is FluentRule migration, not the `#[Rule]` → `#[Validate]` upgrade. `#[Validate(onUpdate: false)]` also strips cleanly; if any `#[Validate]` on the property opts out of real-time, the marker is suppressed (aggregate veto, not first-wins).
 
@@ -4161,6 +4280,7 @@ Deprecated `#[Rule]` (not `#[Validate]`) strips cleanly without a marker — the
 ConvertLivewireRuleAttributeRector::class => [
     ConvertLivewireRuleAttributeRector::PRESERVE_REALTIME_VALIDATION => false,
 ]
+
 
 
 
@@ -4277,6 +4397,7 @@ Four rectors now normalize the annotation: `ConvertLivewireRuleAttributeRector` 
 
 
 
+
 ```
 This matches the annotation fresh-emitted on newly-generated `rules()` methods, so every `rules()` method this package touches now carries the same `@return` shape.
 
@@ -4318,6 +4439,7 @@ Four rectors now normalize the annotation: `ConvertLivewireRuleAttributeRector` 
 
 ```
 @return array<string, ValidationRule|string|array<mixed>>
+
 
 
 
@@ -4448,6 +4570,7 @@ use InteractsWithForms;
 
 
 
+
 ```
 `getMessages` is intentionally absent from the block — the trait defines it but Filament does not, so no collision to resolve.
 
@@ -4493,6 +4616,7 @@ vendor/bin/fluent-validation-migrate
 
 # custom paths
 vendor/bin/fluent-validation-migrate app/ src/Livewire/
+
 
 
 
@@ -4643,6 +4767,7 @@ protected function rules(): array { /* … */ }
 
 
 
+
 ```
 The annotation imports `Illuminate\Contracts\Validation\ValidationRule` via Rector's import-names pass (the same pass that handles `FluentRule` imports), so the pre-Pint output has a proper `use` statement + short-name reference.
 
@@ -4679,6 +4804,7 @@ Updated 10 fixtures under `tests/ConvertLivewireRuleAttribute/Fixture/` to match
  * @return array<string, FluentRule|string|array<string, mixed>>
  */
 protected function rules(): array { /* … */ }
+
 
 
 
@@ -4850,6 +4976,7 @@ class MyComponent extends Component {
 
 
 
+
 ```
 Removed from `GroupWildcardRulesToEachRector`:
 
@@ -4914,6 +5041,7 @@ Users running Rector on codebases with heavy trait-hoisting (abstract bases that
 
 ```
 [fluent-validation] 42 skip entries written to .rector-fluent-validation-skips.log — see for details
+
 
 
 
@@ -5090,6 +5218,7 @@ class MyRequest {
 
 
 
+
 ```
 Pint's `ordered_traits` continues to resort if a consumer's existing trait list wasn't already alphabetical, but on well-ordered class bodies Pint is typically a no-op now.
 
@@ -5154,6 +5283,7 @@ protected function rules(): array
         'email' => FluentRule::email()->nullable(),
     ];
 }
+
 
 
 
@@ -5397,6 +5527,7 @@ protected function rules(): array
 
 
 
+
 ```
 The union accurately describes what the generated array contains:
 
@@ -5454,6 +5585,7 @@ public string $description = '';
 #[Validate('min:1')]
 public int $count = 0;
 // → 'count' => FluentRule::integer()->min(1)
+
 
 
 
@@ -5624,6 +5756,7 @@ public int $count = 0;
 
 
 
+
 ```
 Maps:
 
@@ -5675,6 +5808,7 @@ final class Settings extends Component
         ];
     }
 }
+
 
 
 
@@ -5868,6 +6002,7 @@ Mirrors the 0.3.0 fix on `GroupWildcardRulesToEachRector`. Now every rector in t
 
 
 
+
 ```
 Reported by hihaho (gap note during 0.3.0 re-verification) and collectiq (Nit A).
 
@@ -5959,6 +6094,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 #### Flat wildcard `'items.*'` entries fold into parent `->each(<scalar>)`
 
@@ -5972,6 +6108,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
@@ -6137,6 +6274,7 @@ Covers `NUMERIC_ARG_RULES`, `TWO_NUMERIC_ARG_RULES`, `STRING_ARG_RULES`, and one
 
 
 
+
 ```
 Reported from a run against the hihaho codebase (20+ files).
 
@@ -6152,6 +6290,7 @@ Synthesizes a bare `FluentRule::array()` parent when no explicit parent exists. 
 'interactions.*' => FluentRule::field()->filled(),
 // After
 'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
+
 
 
 
