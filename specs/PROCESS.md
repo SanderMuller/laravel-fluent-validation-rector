@@ -9,7 +9,9 @@ lesson so the next spec or release cycle doesn't repeat it.
 shapes, test-config coverage). §§5–9 are **dogfood-process
 invariants** (how consumer-shape audits inform release decisions),
 codified during the 0.20.x → 0.21.x cycle that drove the project to
-1.0-RC distance.
+1.0-RC distance. §10 is a **CI-stability invariant** (parallel-mode
+under fs-race-prone conditions), promoted post-1.1.0 after multi-cycle
+flake observations satisfied the candidate-pen N=2 stopping rule.
 
 ## 1. Cross-fold-path interaction matrix
 
@@ -362,11 +364,120 @@ within ~10 minutes of collectiq's finding). Both reinforced the
 0.21.0 explicitly cited fast turnaround as one of four reasons the
 release sequence worked cleanly.
 
+## 10. Parallel-mode under fs-race-prone conditions
+
+CI cells running `pest --parallel` against `prefer-lowest` composer
+resolution on Windows runners exhibit a non-deterministic FS race in
+`PackageManifest::write()` → `rename()`. The same flake class also
+covers a hypothetical (not yet observed) rector-worker-side
+`class_exists` race under `RectorConfig::withParallel(...)`: per-
+worker process-state isolation is structurally similar to Pest's
+parallel-runner shape, and concurrent autoloader cache warmup +
+classmap-reads can produce the same fs-race-prone surface.
+
+Promoted from candidate-pen 2026-04-29 after N=2 stopping-rule
+satisfied across three independent observations of the Pest-runner
+shape, plus the hypothetical rector-worker shape from the 1.0
+adversarial pass — multi-cycle independent surfacing across distinct
+release events.
+
+### Provenance
+
+- **0.22.3 tag-ref push** (2026-04-29): `P8.4 - L12.* -
+  prefer-lowest - windows-latest` cell red. Re-run green. First
+  observed Pest-FS-race occurrence on the project's release cadence.
+- **1.0.0 tag-ref push** (2026-04-29): `P8.4 - L11.* -
+  prefer-lowest - windows-latest` cell red. Re-run green. Different
+  Laravel cell (L11 vs L12), same FS-race class. Second
+  independent shape across the same multi-cycle stopping rule.
+- **1.1.0 fix-commit push** (2026-04-29): `P8.4 - L13.* -
+  prefer-lowest - windows-latest` cell red. Re-run green. Third
+  observation; different Laravel cell again (L13). Confirms the
+  flake is not Laravel-version-specific within the Windows-prefer-
+  lowest combination.
+- **Hypothetical rector-worker class_exists race** (1.0 adversarial
+  pass, candidate Q1): the rector's `bootResolutionTables()` /
+  `InlineMessageSurface::load()` /
+  `PromoteFieldFactoryRector::classesWithPublicMethod()` paths run
+  per-worker under `RectorConfig::withParallel(...)`. Same fs-race-
+  prone surface category (parallel + filesystem state); not yet
+  observed in production but structurally similar enough to share
+  the codification. Filed here so the §10 wording covers both layers
+  rather than splitting later.
+
+### Mitigation
+
+**Re-run policy for tag-ref CI failures matching
+`*-prefer-lowest-windows-latest` cells.** When a release-cycle's
+tag-ref push hits this cell red:
+
+1. Identify the failed cell via `gh run list --commit "$TAG_SHA"`.
+2. Confirm the failure is the documented FS-race class (look for
+   `PackageManifest::write()` → `rename()` in the failure log; or
+   any `pest --parallel` setup-phase fatal that doesn't reproduce
+   on serial runs).
+3. Re-run via `gh run rerun <id> --failed`. Wait for terminal.
+4. If still red on re-run: the failure is NOT the documented flake;
+   investigate as a real bug per the standard step-6 / 8b drill.
+5. If green on re-run: the failure was the documented flake. Proceed
+   with the release; bank the observation in PROCESS.md if
+   green-rate trend warrants attention (see "demotion criteria"
+   below).
+
+**Upstream tracking**: open a tracking issue against `pestphp/pest`
+(or the upstream PHPUnit if root cause sits there) when a fix lands
+upstream that addresses the `PackageManifest::write()` → `rename()`
+race. Demote this section per "inverse-evidence flips the gate"
+(see candidate-pen header) when the flake stops surfacing across
+N consecutive cycles.
+
+### Demotion criteria
+
+Per the inverse-evidence epistemic anchor (see candidate-pen header
+below): if the Pest-flake stops surfacing for **N=5 consecutive
+release cycles** (post-1.1.0), demote the entry to "observed but no
+longer load-bearing" with provenance preserved. Five cycles chosen
+because three observations took ~3 release cycles to accumulate;
+five cycles of clean is the symmetric-evidence inverse.
+
+Re-introduce as a numbered invariant if the flake re-surfaces at any
+point after demotion — preserves the "earn the slot" gate at both
+ends.
+
+### Cross-link to in-repo gate
+
+`tests/RectorInternalContractsTest::testRectorClassesWithHardcodedTablesBootCleanly`
+exercises the boot path of the three rector classes that hold
+hardcoded class-typed const tables (per §10's hypothetical rector-
+worker race shape). The test is single-process (Pest's serial
+mode by default for this test class), so it doesn't exercise
+parallel-worker race conditions, but it pins the necessary
+condition: the boot path must run cleanly under the current
+installed surface. A future "delete vendor class file then run boot
+under withParallel" test (per the runtime-simulation methodology
+in candidate-pen) would close the parallel-worker shape coverage
+fully.
+
+### Origin
+
+Three Pest-flake observations across the 0.22.x → 1.1.0 release
+cadence (2026-04-29). Mijntp's 1.0 adversarial pass surfaced the
+hypothetical rector-worker shape (Q1 unverified-coverage gap) at
+the same time. Both shapes share the parallel-mode-on-fs-race-
+prone-conditions surface category. Candidate-pen entry banked
+mijntp's observations + dogfood-side mitigation proposal; 1.1.0
+fix-commit's third Pest-flake occurrence + N=2 stopping-rule
+satisfaction promoted the entry to numbered §10. Promotion patch
+explicitly surfaced as a process-meta decision (mijntp's
+gate-discipline call: "won't auto-promote on momentum, even though
+the evidence is there") rather than landing as a side-effect of
+the 1.1.0 release cycle.
+
 ## Candidate pen (awaiting second-cycle confirmation)
 
 Findings and methodologies that have surfaced once and are
 demonstrably real but not yet generalizable enough to earn a
-numbered invariant or methodology slot. Three epistemic anchors gate
+numbered invariant or methodology slot. Four epistemic anchors gate
 promotion:
 
 - **Premature canonicalization is the failure mode.** Codifying a
@@ -387,6 +498,17 @@ promotion:
   methodology surface couldn't have caught, across a second cycle.
   Recursive epistemic gate: applies the lens-diversity / multi-cycle
   criterion to methodology additions themselves.
+- **Inverse-evidence flips the gate.** A candidate's promotion gate
+  fires on N=2 confirmations across cycles, but ALSO on N=K
+  absences across cycles for a previously-confirmed shape (where K
+  is at least the count of confirmations needed to promote). If a
+  flake-class candidate or a numbered invariant stops surfacing
+  across N consecutive cycles, the candidate may be a transient
+  quirk rather than a structural pattern; demote to "observed but
+  no longer load-bearing" with provenance preserved. Symmetric
+  evidence, symmetric gate. Reintroduce as a numbered invariant if
+  the shape re-surfaces post-demotion — preserves the "earn the
+  slot" gate at both ends.
 
 When a second consumer's dogfood independently surfaces the same
 class of failure mode (different shape, different bypass, different
@@ -567,16 +689,10 @@ The rector commits to a SemVer surface at 1.0 that doesn't
 anticipate this failure mode, but it will surface the next time
 the sister-package cuts a MAJOR with a class rename.
 
-**Adjacent unverified gaps surfaced in the same adversarial pass**
+**Adjacent unverified gap surfaced in the same adversarial pass**
 (skip-log signal-to-noise lens, 2026-04-28):
 
-1. **Parallel rector worker + class_exists race.** The
-   `class_exists` filter runs in `bootResolutionTables()` /
-   `InlineMessageSurface::load()` / `classesWithPublicMethod()` —
-   per-worker-process. Should be safe under
-   `RectorConfig::withParallel(...)`, but no panel cycle has
-   verified parallel + missing-class together.
-2. **Composer authoritative classmap mode.** Consumers running
+1. **Composer authoritative classmap mode.** Consumers running
    `composer dump-autoload --classmap-authoritative` get classmap-
    cached `class_exists` resolution that bypasses file-existence
    checks. The reflection iteration on the cached metadata may
@@ -584,11 +700,17 @@ the sister-package cuts a MAJOR with a class rename.
    than the non-classmap path. Different code path than the
    AcceptedRule-deletion bonus simulations the panel ran.
 
+(The parallel-rector-worker + class_exists race adjacent gap
+originally listed here was promoted to numbered §10 on 2026-04-29
+after Pest-flake observations satisfied the N=2 stopping rule for
+the broader parallel-mode-fs-race-prone-conditions surface
+category. See §10.)
+
 **Why deferred**: novel observation from one cycle, no current
 consumer hit, and the in-repo fixture pair covers the static-
 existence + current-surface invariants that catch the *additive*
-case at PR-time. The removal/rename case + parallel/classmap
-adjacent gaps are unverifiable without either (a) a real
+case at PR-time. The removal/rename case + classmap-authoritative
+adjacent gap are unverifiable without either (a) a real
 sister-package 2.0 cycle, or (b) a deliberate test-harness setup
 that simulates each failure mode. Promotion criteria: when the
 sister-package cuts a MAJOR with a class rename, OR when a second
