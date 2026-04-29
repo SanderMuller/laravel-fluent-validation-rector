@@ -164,6 +164,55 @@ final class RunSummaryTest extends TestCase
         $this->assertStringContainsString(Diagnostics::VERBOSE_LOG_FILENAME, $line);
         $this->assertStringContainsString('see for details', $line);
         $this->assertStringNotContainsString('Re-run with', $line, 'Any opt-in tier already points at the file — no re-run hint needed.');
+        $this->assertStringNotContainsString(
+            'tip:',
+            $line,
+            'TIER_ACTIONABLE already filters informational entries — appending a "use actionable" tip would be self-referential noise.',
+        );
+    }
+
+    public function testAllTierAppendsActionableTip(): void
+    {
+        // 1.2.1 collectiq dogfeed (2026-04-29) measured 110 entries at TIER_ALL
+        // vs. 5 at TIER_ACTIONABLE on the same surface — the legacy `=1` alias
+        // gives consumers the firehose without an in-band hint pointing at the
+        // filtering knob. Pin the tip in the stderr line so a future refactor
+        // can't silently drop it. Test runs at TIER_ALL via the `=all` value
+        // (legacy `=1` resolves to the same tier; covered in
+        // testVerboseModeReturnsSingularForOneEntry which uses `=1`).
+        putenv(Diagnostics::VERBOSE_ENV . '=all');
+
+        file_put_contents(Diagnostics::skipLogPath(), "[fluent-validation:skip] all-tier entry\n");
+
+        $line = RunSummary::format();
+
+        $this->assertNotNull($line);
+        $this->assertStringContainsString('see for details', $line);
+        $this->assertStringContainsString(
+            sprintf('tip: %s=actionable filters informational entries', Diagnostics::VERBOSE_ENV),
+            $line,
+            'TIER_ALL hint must point consumers at the filter knob — without it, '
+            . 'users running with `=1` (legacy) see the firehose with no in-band '
+            . 'signal that `=actionable` filters informational entries.',
+        );
+    }
+
+    public function testAllTierLegacyAliasAppendsActionableTip(): void
+    {
+        // The `=1` legacy alias resolves to TIER_ALL — pin that the tip is
+        // present for the legacy entry-point too, not just the named `=all`.
+        // Most existing consumers use `=1` (predates the named tiers).
+        putenv(Diagnostics::VERBOSE_ENV . '=1');
+
+        file_put_contents(Diagnostics::skipLogPath(), "[fluent-validation:skip] legacy entry\n");
+
+        $line = RunSummary::format();
+
+        $this->assertNotNull($line);
+        $this->assertStringContainsString(
+            sprintf('tip: %s=actionable filters informational entries', Diagnostics::VERBOSE_ENV),
+            $line,
+        );
     }
 
     public function testDefaultModeEmitsHint(): void

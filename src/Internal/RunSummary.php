@@ -159,11 +159,24 @@ final class RunSummary
         $noun = $count === 1 ? 'entry' : 'entries';
 
         if (Diagnostics::verbosityTier() !== Diagnostics::TIER_OFF) {
+            // At TIER_ALL the firehose includes ~100s of non-actionable
+            // informational entries (trait-already-present, parent-inherits-
+            // trait, Livewire-detected). Consumers running with `=1` (legacy
+            // alias for `=all`) often want the actionable subset instead;
+            // surface the filter knob in-band so they don't have to re-discover
+            // it from PUBLIC_API.md. Collectiq 1.2.0 dogfeed (2026-04-29)
+            // measured 110 entries at TIER_ALL vs. 5 at TIER_ACTIONABLE on the
+            // same surface — the tip cuts the firehose ~22× when applied.
+            $tip = Diagnostics::verbosityTier() === Diagnostics::TIER_ALL
+                ? sprintf(' (tip: %s=actionable filters informational entries)', Diagnostics::VERBOSE_ENV)
+                : '';
+
             return sprintf(
-                "\n[fluent-validation] %d skip %s written to %s — see for details\n",
+                "\n[fluent-validation] %d skip %s written to %s — see for details%s\n",
                 $count,
                 $noun,
                 Diagnostics::verboseLogDisplayPath(),
+                $tip,
             );
         }
 
