@@ -37,3 +37,4 @@ PEER_FEEDBACK.md
 # Dogfood regression baselines from peer instances — saved here so
 # they're reachable from the worktree but kept out of git history.
 .dogfood-baselines/
+.claude/scheduled_tasks.lock
