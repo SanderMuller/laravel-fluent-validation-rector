@@ -37,9 +37,23 @@ use SanderMuller\FluentValidation\RuleSet;
 trait DescendsIntoRuleSetFromWrapper
 {
     /**
-     * Returns true when `$expr` is a `RuleSet::from(...)` static call,
-     * ignoring argument shape. Matches both FQN and short-name `RuleSet`
-     * references (consumers may import or use the FQCN inline).
+     * Returns true when `$expr` is a `RuleSet::from(...)` static call
+     * resolving to the sister-package's
+     * `SanderMuller\FluentValidation\RuleSet` FQCN. Matches against the
+     * fully-qualified name only, so:
+     *
+     * - Plain imports (`use SanderMuller\FluentValidation\RuleSet;
+     *   RuleSet::from(...)`) match (NameResolver attaches FQCN via
+     *   `namespacedName` attribute).
+     * - Aliased imports (`use SanderMuller\FluentValidation\RuleSet as
+     *   ValidationRules; ValidationRules::from(...)`) match (the
+     *   alias resolves to the same FQCN).
+     * - Inline FQCNs (`\SanderMuller\FluentValidation\RuleSet::from(...)`)
+     *   match.
+     * - Same-named user classes (`App\Domain\RuleSet`,
+     *   `MyPackage\RuleSet`, or any global-namespace `RuleSet`) do NOT
+     *   match — the FQCN-only check eliminates the false-positive
+     *   surface that a bare short-name fallback would expose.
      *
      * Caller pairs this with `extractArrayFromRuleSetFrom()` to
      * differentiate "not a RuleSet::from() call at all" (silent — out
@@ -53,9 +67,7 @@ trait DescendsIntoRuleSetFromWrapper
             return false;
         }
 
-        $className = $this->getName($expr->class);
-
-        if ($className !== RuleSet::class && $className !== 'RuleSet') {
+        if ($this->getName($expr->class) !== RuleSet::class) {
             return false;
         }
 
