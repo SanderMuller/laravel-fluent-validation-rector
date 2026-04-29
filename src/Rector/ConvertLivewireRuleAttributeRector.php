@@ -562,6 +562,17 @@ CODE_SAMPLE
             }
 
             $emitKeys = $this->predictEmitKeysForProperty($stmt);
+
+            // 1.2.1: skip properties whose attrs predict zero keys —
+            // empty-marker `#[Validate]` and named-arg-only attrs aren't
+            // convertible, so claiming they would-or-wouldn't overlap is
+            // misleading. Per-attr non-convertibility skip-log entries
+            // fire elsewhere (`logUnsupportedAttributeArgs`) when the
+            // rector reaches them under partial / non-bail modes.
+            if ($emitKeys === []) {
+                continue;
+            }
+
             $overlapping = array_values(array_filter(
                 $emitKeys,
                 static fn (string $key): bool => isset($explicitSet[$key]),
@@ -604,7 +615,7 @@ CODE_SAMPLE
         }
 
         return sprintf(
-            'property `$%s` Livewire attribute key(s) %s do NOT overlap explicit `$this->validate(...)` key(s) %s — KEY_OVERLAP_BEHAVIOR=bail (default) skips classwide regardless. Set KEY_OVERLAP_BEHAVIOR=partial to convert this property → see PUBLIC_API.md#convertlivewireruleattributerector for canonical wiring.',
+            'property `$%s` Livewire attribute key(s) %s do NOT overlap explicit `$this->validate(...)` key(s) %s — KEY_OVERLAP_BEHAVIOR=bail (default) skips classwide regardless. Switch to KEY_OVERLAP_BEHAVIOR=partial to release this property from the classwide bail (whether the attribute itself converts depends on its shape — separate per-attr skip-log entries flag non-convertible attrs) → see PUBLIC_API.md#convertlivewireruleattributerector for canonical wiring.',
             $propertyName,
             $emitDisplay,
             $explicitDisplay,

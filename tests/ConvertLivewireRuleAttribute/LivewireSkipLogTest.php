@@ -114,6 +114,43 @@ final class LivewireSkipLogTest extends AbstractRectorTestCase
         );
     }
 
+    /**
+     * 1.2.1 Codex-review guard: the per-property overlap-bail emit must
+     * NOT report a non-convertible empty-marker / named-arg-only attr
+     * as if `KEY_OVERLAP_BEHAVIOR=partial` would convert it. The fixture
+     * has one convertible-overlapping property (`$name`) and one empty-
+     * marker property (`$bio`); the bail-emit must surface the
+     * `$name` overlap entry but stay silent on `$bio`.
+     */
+    public function testEmptyMarkerPropertyIsNotMisreported(): void
+    {
+        $fixturePath = __DIR__ . '/Fixture/skip_overlap_bail_empty_marker_silent.php.inc';
+        $tempFixture = $this->copyFixtureToUniquePath($fixturePath);
+
+        try {
+            $this->doTestFile($tempFixture);
+        } finally {
+            @unlink($tempFixture);
+        }
+
+        $contents = (string) file_get_contents(Diagnostics::skipLogPath());
+
+        $this->assertStringContainsString(
+            "property `\$name` Livewire attribute key(s) ['name'] overlap explicit",
+            $contents,
+            'Convertible overlapping property `$name` must still emit the per-property overlap entry.',
+        );
+
+        $this->assertStringNotContainsString(
+            '`$bio`',
+            $contents,
+            'Empty-marker `#[Validate]` attr on `$bio` is non-convertible; the per-property '
+            . 'overlap-bail emit must NOT surface it (codex review on the 1.2.1 candidate caught '
+            . 'the original predict-keys path fabricating the property name as a key for argless '
+            . 'attrs and the bail-emit then misdirecting the user to flip KEY_OVERLAP_BEHAVIOR=partial).',
+        );
+    }
+
     private function copyFixtureToUniquePath(string $sourcePath): string
     {
         $contents = (string) file_get_contents($sourcePath);
@@ -159,7 +196,7 @@ final class LivewireSkipLogTest extends AbstractRectorTestCase
 
         yield 'overlap-bail per-property emit (non-overlapping property)' => [
             $base . 'skip_hybrid_validateOnly_with_rules.php.inc',
-            "property `\$email` Livewire attribute key(s) ['email'] do NOT overlap explicit `\$this->validate(...)` key(s) ['name'] — KEY_OVERLAP_BEHAVIOR=bail (default) skips classwide regardless. Set KEY_OVERLAP_BEHAVIOR=partial to convert this property",
+            "property `\$email` Livewire attribute key(s) ['email'] do NOT overlap explicit `\$this->validate(...)` key(s) ['name'] — KEY_OVERLAP_BEHAVIOR=bail (default) skips classwide regardless. Switch to KEY_OVERLAP_BEHAVIOR=partial to release this property from the classwide bail (whether the attribute itself converts depends on its shape — separate per-attr skip-log entries flag non-convertible attrs)",
         ];
     }
 

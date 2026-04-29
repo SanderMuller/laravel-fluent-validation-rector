@@ -47,8 +47,20 @@ trait PredictsLivewireAttributeEmitKeys
 
                 $firstArg = $attr->args[0] ?? null;
 
-                if ($firstArg instanceof Arg
-                    && $firstArg->value instanceof Array_
+                // 1.2.1: bail when the attribute has no positional first
+                // arg — empty marker `#[Validate]` (preserved post-convert
+                // for `wire:model.live` real-time validation) and named-
+                // arg-only attrs like `#[Validate(messages: [...])]` would
+                // both fall through to the property-name push below and
+                // fabricate a key the runtime never emits. Codex review
+                // on the 1.2.1 candidate flagged the over-emit as
+                // misleading both the partial-mode overlap decision and
+                // the new bail-mode per-property message.
+                if (! $firstArg instanceof Arg) {
+                    continue;
+                }
+
+                if ($firstArg->value instanceof Array_
                     && $this->isKeyedArrayAttribute($firstArg->value)) {
                     foreach ($firstArg->value->items as $item) {
                         if ($item instanceof ArrayItem && $item->key instanceof String_) {
