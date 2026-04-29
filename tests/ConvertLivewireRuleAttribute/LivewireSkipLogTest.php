@@ -131,19 +131,16 @@ final class LivewireSkipLogTest extends AbstractRectorTestCase
     {
         $base = __DIR__ . '/Fixture/';
 
-        // 1.2.0 layer-2 compose-conflict warning. Both fixture variants
-        // (direct trait use + inherited via abstract ancestor) emit
-        // the same skip-message wording — the warning is shape-
-        // agnostic about WHERE the trait is declared, only about
-        // whether the class composition includes it.
-        yield 'HasFluentValidation trait + Livewire #[Rule] (direct)' => [
-            $base . 'skip_livewire_attribute_with_fluent_trait_direct.php.inc',
-            'property `$phoneNumber` carries `#[Livewire\\Attributes\\Rule]` (or `#[Validate]`) but class uses `HasFluentValidation` trait — the attribute is silently ignored at runtime',
-        ];
-
+        // 1.2.0 layer-2 compose-conflict warning. The bail covers ONLY
+        // the inherited shape — direct-trait use on the class itself
+        // converts cleanly (rector merges the attribute into a local
+        // `rules()` method, or installs one), so it is intentionally
+        // not flagged here. See `warnLivewireFluentTraitComposeConflict`
+        // PHPDoc for the narrowing rationale (Codex review on the
+        // 1.2.0 candidate).
         yield 'HasFluentValidation trait + Livewire #[Rule] (inherited)' => [
             $base . 'skip_livewire_attribute_with_fluent_trait_inherited.php.inc',
-            'property `$phoneNumber` carries `#[Livewire\\Attributes\\Rule]` (or `#[Validate]`) but class uses `HasFluentValidation` trait — the attribute is silently ignored at runtime',
+            'property `$phoneNumber` carries `#[Livewire\\Attributes\\Rule]` (or `#[Validate]`) but an ancestor class uses `HasFluentValidation` trait — the attribute is silently ignored at runtime',
         ];
     }
 

@@ -425,21 +425,30 @@ CODE_SAMPLE
      *
      *  - The class has at least one Livewire `#[Rule]` / `#[Validate]`
      *    attribute on a property; AND
-     *  - The class uses `HasFluentValidation` (or its Filament variant)
-     *    directly or via any ancestor.
+     *  - An ANCESTOR (not the class itself) uses `HasFluentValidation`
+     *    or `HasFluentValidationForFilament`.
      *
-     * Both conditions together mean the trait's `getRules()` reads the
-     * trait-side `rules()` method but ignores the Livewire attribute
-     * pathway — `validateOnly($prop)` for an attribute-bound property
-     * silently returns `[]` at runtime. Diagnostic only; no auto-rewrite
-     * (the right fix depends on consumer intent — move the rule into
-     * the trait's `rules()` method, or remove the trait if Livewire-
-     * attribute validation is intended).
+     * The narrowing to ancestor-only is intentional: only the inherited
+     * shape carries unfixable conversion risk. The trait's `getRules()`
+     * reads `$this->rules()` — when an ancestor declares the trait AND
+     * also declares `rules(): array`, generating a child `rules()`
+     * overrides the parent's and silently drops parent-owned fields
+     * (and the pre-conversion runtime already silently ignored the
+     * `#[Rule]` attribute, so the user has no working baseline either).
      *
-     * Caller (`shouldProcessClass`) bails conversion when this returns
-     * true: rector-side conversion would generate a child `rules()`
-     * method overriding the parent's, potentially losing parent-owned
-     * fields. Wrong fix shape for this composition.
+     * Direct-trait use on the class itself is NOT flagged here:
+     *
+     *  - Class with local `rules()` method: the rector merges the
+     *    attribute rule into that existing array — no clobber, no
+     *    silent-ignore post-convert.
+     *  - Class with no local `rules()` method: the rector installs one
+     *    holding the attribute rule — runtime now resolves it through
+     *    the trait's `getRules()`, fixing the silent-ignore.
+     *
+     * Either way the direct-trait shape converts cleanly; bailing on
+     * it would block a working transformation. (Codex review on the
+     * 1.2.0 candidate flagged the original "current-or-ancestor"
+     * detection as overbroad for exactly this reason.)
      *
      * Static-deduped by class FQCN so the same class doesn't emit
      * duplicate warnings on re-visits. Mirrors the intra-package
@@ -456,7 +465,7 @@ CODE_SAMPLE
     {
         $fqcn = $this->getName($class);
 
-        if ($fqcn === null || ! $this->classUsesFluentValidationTrait($class)) {
+        if ($fqcn === null || ! $this->ancestorUsesFluentValidationTrait($class)) {
             return false;
         }
 
@@ -489,16 +498,18 @@ CODE_SAMPLE
     }
 
     /**
-     * True when the class uses `HasFluentValidation` (or its Filament
-     * variant) directly or via any ancestor.
+     * True when an ANCESTOR of `$class` (not the class itself) uses
+     * `HasFluentValidation` or `HasFluentValidationForFilament`. Direct
+     * trait use on `$class` returns false here so the convertible
+     * direct-trait shape is not bailed.
      */
-    private function classUsesFluentValidationTrait(Class_ $class): bool
+    private function ancestorUsesFluentValidationTrait(Class_ $class): bool
     {
-        if ($this->currentOrAncestorUsesTrait($class, HasFluentValidation::class)) {
+        if ($this->aliasAwareAncestorUsesTrait($class, HasFluentValidation::class)) {
             return true;
         }
 
-        return $this->currentOrAncestorUsesTrait($class, HasFluentValidationForFilament::class);
+        return $this->aliasAwareAncestorUsesTrait($class, HasFluentValidationForFilament::class);
     }
 
     /**
@@ -512,7 +523,7 @@ CODE_SAMPLE
             $this->logSkip(
                 $class,
                 sprintf(
-                    'property `$%s` carries `#[Livewire\\Attributes\\Rule]` (or `#[Validate]`) but class uses `HasFluentValidation` trait — the attribute is silently ignored at runtime (`validateOnly()` returns `[]` for this field). Either move the rule into the trait\'s `rules()` method, or remove the trait if Livewire-attribute validation is intended.',
+                    'property `$%s` carries `#[Livewire\\Attributes\\Rule]` (or `#[Validate]`) but an ancestor class uses `HasFluentValidation` trait — the attribute is silently ignored at runtime (`validateOnly()` returns `[]` for this field) and rector-side conversion would override the parent\'s `rules()` method, dropping parent-owned fields. Either move the rule into the parent\'s `rules()` method, or remove the trait from the parent if Livewire-attribute validation is intended.',
                     $propertyItem->name->toString(),
                 ),
             );
