@@ -46,6 +46,33 @@ trait ShortCircuitsIrrelevantFiles
     private static array $fileRelevanceCache = [];
 
     /**
+     * Broad needle set covering all rule-bearing surfaces this package
+     * touches: a `rules()` method declaration, a Validator/`validate()`
+     * call site, a `RuleSet::from()` site, the `#[FluentRules]` opt-in
+     * attribute, a fluent-validation trait `use`, or any FluentRule
+     * chain. A file containing none of these has nothing for any of our
+     * rules to do.
+     *
+     * Kept as a constant on the trait so all rules share one canonical
+     * needle list — drift between rules' gates is the failure mode
+     * (under-gating leaves work on the table; over-gating silently
+     * skips a transformation).
+     *
+     * @var list<string>
+     */
+    private const array RULE_BEARING_NEEDLES = [
+        'function rules',
+        'validate(',
+        'validator(',
+        'Validator::',
+        'RuleSet::',
+        'FluentRule',
+        'FluentRules',
+        'HasFluentRules',
+        'HasFluentValidation',
+    ];
+
+    /**
      * @param  list<string>  $needles
      */
     private function currentFileContainsAny(array $needles): bool
@@ -66,5 +93,14 @@ trait ShortCircuitsIrrelevantFiles
         }
 
         return self::$fileRelevanceCache[$path][$cacheKey] = false;
+    }
+
+    /**
+     * Convenience helper: bail if the file contains nothing rule-bearing
+     * any of this package's rules could act on.
+     */
+    private function currentFileLooksRuleBearing(): bool
+    {
+        return $this->currentFileContainsAny(self::RULE_BEARING_NEEDLES);
     }
 }

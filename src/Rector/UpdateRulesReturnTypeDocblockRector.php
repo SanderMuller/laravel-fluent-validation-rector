@@ -34,6 +34,7 @@ use SanderMuller\FluentValidationRector\Rector\Concerns\IdentifiesLivewireClasse
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\NormalizesRulesDocblock;
 use SanderMuller\FluentValidationRector\Rector\Concerns\QualifiesForRulesProcessing;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ShortCircuitsIrrelevantFiles;
 use SanderMuller\FluentValidationRector\Tests\UpdateRulesReturnTypeDocblock\UpdateRulesReturnTypeDocblockRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
@@ -60,6 +61,7 @@ final class UpdateRulesReturnTypeDocblockRector extends AbstractRector implement
     use LogsSkipReasons;
     use NormalizesRulesDocblock;
     use QualifiesForRulesProcessing;
+    use ShortCircuitsIrrelevantFiles;
 
     /**
      * Re-declared on the using class so static analyzers can resolve
@@ -169,6 +171,13 @@ CODE_SAMPLE
     public function refactor(Node $node): ?Node
     {
         if (! $node instanceof Class_) {
+            return null;
+        }
+
+        // File-level relevance gate. Polish only narrows the docblock
+        // when the body is a FluentRule chain, so files without any
+        // rule-bearing tokens cannot trigger this rule.
+        if (! $this->currentFileLooksRuleBearing()) {
             return null;
         }
 

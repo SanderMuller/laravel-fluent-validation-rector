@@ -201,11 +201,10 @@ CODE_SAMPLE
             return null;
         }
 
-        // File-level relevance gate. Promotion only fires on
-        // `FluentRule::field()` / `FluentRule::string()` chains, so
-        // files without `FluentRule` in their source can't contain any
-        // — skip the chain walk entirely.
-        if (! $this->currentFileContainsAny(['FluentRule'])) {
+        // File-level relevance gate. Broad rule-bearing needle set
+        // because upstream converters may synthesize FluentRule chains
+        // mid-pass — see ShortCircuitsIrrelevantFiles for the rationale.
+        if (! $this->currentFileLooksRuleBearing()) {
             return null;
         }
 

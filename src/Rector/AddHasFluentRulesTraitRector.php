@@ -19,6 +19,7 @@ use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
 use SanderMuller\FluentValidationRector\Rector\Concerns\IdentifiesLivewireClasses;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesTraitInsertion;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ShortCircuitsIrrelevantFiles;
 use SanderMuller\FluentValidationRector\Tests\AddHasFluentRulesTrait\AddHasFluentRulesTraitRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
@@ -36,6 +37,7 @@ final class AddHasFluentRulesTraitRector extends AbstractRector implements Confi
     use IdentifiesLivewireClasses;
     use LogsSkipReasons;
     use ManagesTraitInsertion;
+    use ShortCircuitsIrrelevantFiles;
 
     public const string BASE_CLASSES = 'base_classes';
 
@@ -117,6 +119,15 @@ CODE_SAMPLE
     public function refactor(Node $node): ?Node
     {
         if (! $node instanceof Namespace_) {
+            return null;
+        }
+
+        // File-level relevance gate. Broad rule-bearing needle set so
+        // pre-conversion files (`'required|string'` literals that
+        // upstream converters will rewrite into FluentRule chains in the
+        // same pass) still pass through — `getFileContent()` returns the
+        // on-disk source, not the in-memory mutated AST.
+        if (! $this->currentFileLooksRuleBearing()) {
             return null;
         }
 

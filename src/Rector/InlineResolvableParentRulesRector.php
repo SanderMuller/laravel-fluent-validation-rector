@@ -24,6 +24,7 @@ use PhpParser\ParserFactory;
 use Rector\Rector\AbstractRector;
 use ReflectionClass;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ResolvesVariableSpread;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ShortCircuitsIrrelevantFiles;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
 use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
@@ -47,6 +48,7 @@ use Throwable;
 final class InlineResolvableParentRulesRector extends AbstractRector implements DocumentedRuleInterface
 {
     use ResolvesVariableSpread;
+    use ShortCircuitsIrrelevantFiles;
 
     /**
      * Cache parsed parent files across rector invocations within one process
@@ -102,6 +104,13 @@ CODE_SAMPLE
     public function refactor(Node $node): ?Node
     {
         if (! $node instanceof Class_) {
+            return null;
+        }
+
+        // File-level relevance gate. This rule only fires on classes
+        // with `rules()` that spread `parent::rules()`. Both tokens are
+        // cheap to grep before the AST walk.
+        if (! $this->currentFileContainsAny(['parent::rules', 'function rules'])) {
             return null;
         }
 

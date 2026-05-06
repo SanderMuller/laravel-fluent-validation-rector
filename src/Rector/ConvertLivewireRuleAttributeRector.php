@@ -44,6 +44,7 @@ use SanderMuller\FluentValidationRector\Rector\Concerns\QualifiesForRulesProcess
 use SanderMuller\FluentValidationRector\Rector\Concerns\ReportsLivewireAttributeArgs;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ResolvesInheritedRulesVisibility;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ResolvesRealtimeValidationMarker;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ShortCircuitsIrrelevantFiles;
 use SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute\ConvertLivewireRuleAttributeRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
@@ -159,6 +160,7 @@ final class ConvertLivewireRuleAttributeRector extends AbstractRector implements
     use ReportsLivewireAttributeArgs;
     use ResolvesInheritedRulesVisibility;
     use ResolvesRealtimeValidationMarker;
+    use ShortCircuitsIrrelevantFiles;
 
     public function __construct(private readonly UseNodesToAddCollector $useNodesToAddCollector)
     {
@@ -235,6 +237,15 @@ CODE_SAMPLE
     public function refactor(Node $node): ?Node
     {
         if (! $node instanceof Class_) {
+            return null;
+        }
+
+        // File-level relevance gate. Livewire conversion only fires on
+        // files containing `#[Rule(` / `#[Validate(` attributes or one
+        // of the rule-bearing tokens; cheap text scan before the
+        // expensive `shouldProcessClass` pass (which walks ancestry +
+        // attribute groups).
+        if (! $this->currentFileContainsAny(['#[Rule', '#[Validate', 'function rules', 'FluentRule', 'HasFluentValidation'])) {
             return null;
         }
 

@@ -28,6 +28,7 @@ use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsRulesShapedMethods;
 use SanderMuller\FluentValidationRector\Rector\Concerns\IdentifiesLivewireClasses;
 use SanderMuller\FluentValidationRector\Rector\Concerns\QualifiesForRulesProcessing;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ShortCircuitsIrrelevantFiles;
 use SanderMuller\FluentValidationRector\Tests\ValidationStringToFluentRule\ValidationStringToFluentRuleRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
@@ -49,6 +50,7 @@ final class ValidationStringToFluentRuleRector extends AbstractRector implements
     use DetectsRulesShapedMethods;
     use IdentifiesLivewireClasses;
     use QualifiesForRulesProcessing;
+    use ShortCircuitsIrrelevantFiles;
 
     public function __construct(private readonly UseNodesToAddCollector $useNodesToAddCollector)
     {
@@ -105,6 +107,16 @@ CODE_SAMPLE
 
     public function refactor(Node $node): ?Node
     {
+        // File-level relevance gate — covers ClassLike + the four call
+        // node types this rule hooks. Files containing none of the
+        // rule-bearing tokens (rules method, validate(), Validator::,
+        // RuleSet::, FluentRule, #[FluentRules]) have nothing for this
+        // rule to do — skip per-node dispatch entirely. Decision cached
+        // per file path in the trait.
+        if (! $this->currentFileLooksRuleBearing()) {
+            return null;
+        }
+
         if ($node instanceof ClassLike) {
             // Class-qualification gate (silent bail). Without this, the
             // method-name filter inside refactorFormRequest is the only

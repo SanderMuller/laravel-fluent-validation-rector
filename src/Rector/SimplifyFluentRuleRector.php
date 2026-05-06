@@ -133,11 +133,11 @@ CODE_SAMPLE
             return null;
         }
 
-        // File-level relevance gate: this rule only fires on FluentRule
-        // chains, so files without `FluentRule` in their source can't
-        // contain any. Skips the chain-flatten / type-resolution work
-        // for the entire file in O(1) after the first dispatch.
-        if (! $this->currentFileContainsAny(['FluentRule'])) {
+        // File-level relevance gate. Broad rule-bearing needle set —
+        // upstream converters may synthesize FluentRule chains into
+        // AST during the same rector pass while file content is still
+        // the pre-conversion source; `getFileContent()` reads disk.
+        if (! $this->currentFileLooksRuleBearing()) {
             return null;
         }
 

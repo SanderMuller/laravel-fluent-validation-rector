@@ -27,6 +27,7 @@ use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsRulesShapedMethods;
 use SanderMuller\FluentValidationRector\Rector\Concerns\IdentifiesLivewireClasses;
 use SanderMuller\FluentValidationRector\Rector\Concerns\QualifiesForRulesProcessing;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ShortCircuitsIrrelevantFiles;
 use SanderMuller\FluentValidationRector\Tests\ValidationArrayToFluentRule\ValidationArrayToFluentRuleRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
@@ -50,6 +51,7 @@ final class ValidationArrayToFluentRuleRector extends AbstractRector implements 
     use DetectsRulesShapedMethods;
     use IdentifiesLivewireClasses;
     use QualifiesForRulesProcessing;
+    use ShortCircuitsIrrelevantFiles;
 
     public function __construct(private readonly UseNodesToAddCollector $useNodesToAddCollector)
     {
@@ -107,6 +109,15 @@ CODE_SAMPLE
 
     public function refactor(Node $node): ?Node
     {
+        // File-level relevance gate. See ValidationStringToFluentRuleRector
+        // for the rationale — same node-type breadth, same rule-bearing
+        // surface; both rectors share the gate so a non-validation file
+        // costs one str_contains per needle plus a cache hit on subsequent
+        // node visits.
+        if (! $this->currentFileLooksRuleBearing()) {
+            return null;
+        }
+
         if ($node instanceof ClassLike) {
             // Class-qualification gate (silent bail). See
             // QualifiesForRulesProcessing for the rationale: prevents

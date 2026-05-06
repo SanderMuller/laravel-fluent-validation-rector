@@ -337,12 +337,16 @@ CODE_SAMPLE
             return null;
         }
 
-        // File-level relevance gate: this rule only fires on `->rule(...)`
-        // calls rooted at a `FluentRule::factory()` chain. Files with no
-        // mention of `FluentRule` cannot contain such a chain — skip the
-        // expensive receiver-type resolution entirely. Decision cached
-        // per file in the trait.
-        if (! $this->currentFileContainsAny(['FluentRule'])) {
+        // File-level relevance gate. Uses the broad rule-bearing needle
+        // set rather than just `FluentRule` because chains may be
+        // synthesized in-memory by upstream converter rectors during the
+        // same rector pass (Validation*ToFluentRule emits FluentRule
+        // chains into AST while the on-disk file still contains the
+        // original `'required|string'` literals — `getFileContent()`
+        // reads the on-disk source, not the mutated AST). Erring broad
+        // keeps consumer pipelines that combine CONVERT + SIMPLIFY in
+        // one pass safe; the str_contains scan is microsecond-cheap.
+        if (! $this->currentFileLooksRuleBearing()) {
             return null;
         }
 

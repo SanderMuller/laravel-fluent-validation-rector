@@ -35,6 +35,7 @@ use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesNamespaceImports;
 use SanderMuller\FluentValidationRector\Rector\Concerns\NormalizesRulesDocblock;
 use SanderMuller\FluentValidationRector\Rector\Concerns\QualifiesForRulesProcessing;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ShortCircuitsIrrelevantFiles;
 use SanderMuller\FluentValidationRector\Tests\GroupWildcardRulesToEach\GroupWildcardRulesToEachRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
@@ -64,6 +65,7 @@ final class GroupWildcardRulesToEachRector extends AbstractRector implements Doc
     use ManagesNamespaceImports;
     use NormalizesRulesDocblock;
     use QualifiesForRulesProcessing;
+    use ShortCircuitsIrrelevantFiles;
 
     private const int MAX_NESTING_DEPTH = 4;
 
@@ -159,6 +161,14 @@ CODE_SAMPLE
     public function refactor(Node $node): ?Node
     {
         if (! $node instanceof Namespace_) {
+            return null;
+        }
+
+        // File-level relevance gate. Wildcard grouping fires on rules
+        // arrays containing dotted keys (`'roles.*'`); files with no
+        // rule-bearing tokens cannot contain such an array. Cheap text
+        // check before walking every class in the namespace.
+        if (! $this->currentFileLooksRuleBearing()) {
             return null;
         }
 

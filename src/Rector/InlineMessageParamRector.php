@@ -139,14 +139,10 @@ CODE_SAMPLE
             return null;
         }
 
-        // File-level relevance gate: this rule rewrites
-        // `FluentRule::factory()->message(...)` shapes, so files without
-        // `FluentRule` in their source can't contain any. Cheap text
-        // check after the per-node name match — name match alone already
-        // rejects most calls, the file gate handles the rare consumer
-        // class with its own `message()` / `messageFor()` methods on
-        // unrelated objects.
-        if (! $this->currentFileContainsAny(['FluentRule'])) {
+        // File-level relevance gate. Broad rule-bearing needle set
+        // because upstream converters may synthesize FluentRule chains
+        // mid-pass — see ShortCircuitsIrrelevantFiles for the rationale.
+        if (! $this->currentFileLooksRuleBearing()) {
             return null;
         }
 

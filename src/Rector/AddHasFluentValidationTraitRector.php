@@ -25,6 +25,7 @@ use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
 use SanderMuller\FluentValidationRector\Rector\Concerns\IdentifiesLivewireClasses;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesTraitInsertion;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ShortCircuitsIrrelevantFiles;
 use SanderMuller\FluentValidationRector\Tests\AddHasFluentValidationTrait\AddHasFluentValidationTraitRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
@@ -66,6 +67,7 @@ final class AddHasFluentValidationTraitRector extends AbstractRector implements 
     use IdentifiesLivewireClasses;
     use LogsSkipReasons;
     use ManagesTraitInsertion;
+    use ShortCircuitsIrrelevantFiles;
 
     /**
      * Methods that `HasFluentValidationForFilament` overrides in main-package
@@ -139,6 +141,15 @@ CODE_SAMPLE
     public function refactor(Node $node): ?Node
     {
         if (! $node instanceof Namespace_) {
+            return null;
+        }
+
+        // File-level relevance gate. Trait insertion only fires on
+        // Livewire / Filament classes that use FluentRule somewhere
+        // in their rules() method (or already carry one of the package
+        // traits). Files with none of the rule-bearing tokens cannot
+        // qualify — skip the per-class scan.
+        if (! $this->currentFileLooksRuleBearing()) {
             return null;
         }
 
