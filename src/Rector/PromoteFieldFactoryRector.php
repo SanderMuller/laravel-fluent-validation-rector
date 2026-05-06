@@ -24,6 +24,7 @@ use SanderMuller\FluentValidation\Rules\StringRule;
 use SanderMuller\FluentValidationRector\Internal\RunSummary;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ParsesRulePayloads;
 use SanderMuller\FluentValidationRector\Rector\Concerns\PromotesPasswordEmailFactory;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ShortCircuitsIrrelevantFiles;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
 use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
@@ -69,6 +70,7 @@ final class PromoteFieldFactoryRector extends AbstractRector implements Document
 {
     use ParsesRulePayloads;
     use PromotesPasswordEmailFactory;
+    use ShortCircuitsIrrelevantFiles;
 
     /**
      * Conditionable hops that turn the chain receiver into a
@@ -196,6 +198,14 @@ CODE_SAMPLE
     public function refactor(Node $node): ?Node
     {
         if (! $node instanceof MethodCall) {
+            return null;
+        }
+
+        // File-level relevance gate. Promotion only fires on
+        // `FluentRule::field()` / `FluentRule::string()` chains, so
+        // files without `FluentRule` in their source can't contain any
+        // — skip the chain walk entirely.
+        if (! $this->currentFileContainsAny(['FluentRule'])) {
             return null;
         }
 

@@ -38,3 +38,6 @@ PEER_FEEDBACK.md
 # they're reachable from the worktree but kept out of git history.
 .dogfood-baselines/
 .claude/scheduled_tasks.lock
+
+# Autoresearch artefacts (synthetic corpus, benchmarks, progress logs).
+/autoresearch/

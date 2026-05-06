@@ -20,6 +20,7 @@ use Rector\Rector\AbstractRector;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidationRector\Internal\RunSummary;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ShortCircuitsIrrelevantFiles;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
 use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
@@ -42,6 +43,7 @@ use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
 final class InlineMessageParamRector extends AbstractRector implements DocumentedRuleInterface
 {
     use LogsSkipReasons;
+    use ShortCircuitsIrrelevantFiles;
 
     /**
      * Rule-object class-basename to emitted-key mapping for Phase 4's
@@ -133,12 +135,23 @@ CODE_SAMPLE
 
         $methodName = $node->name->toString();
 
-        if ($methodName === 'messageFor') {
-            return $this->refactorMessageFor($node);
+        if ($methodName !== 'message' && $methodName !== 'messageFor') {
+            return null;
         }
 
-        if ($methodName !== 'message') {
+        // File-level relevance gate: this rule rewrites
+        // `FluentRule::factory()->message(...)` shapes, so files without
+        // `FluentRule` in their source can't contain any. Cheap text
+        // check after the per-node name match — name match alone already
+        // rejects most calls, the file gate handles the rare consumer
+        // class with its own `message()` / `messageFor()` methods on
+        // unrelated objects.
+        if (! $this->currentFileContainsAny(['FluentRule'])) {
             return null;
+        }
+
+        if ($methodName === 'messageFor') {
+            return $this->refactorMessageFor($node);
         }
 
         return $this->refactorMessage($node);

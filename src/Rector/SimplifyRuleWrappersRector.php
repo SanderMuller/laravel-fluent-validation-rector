@@ -37,6 +37,7 @@ use SanderMuller\FluentValidationRector\Internal\RunSummary;
 use SanderMuller\FluentValidationRector\Rector\Concerns\AllowlistedRuleFactories;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ParsesRulePayloads;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ShortCircuitsIrrelevantFiles;
 use SanderMuller\FluentValidationRector\Rector\Concerns\WalksConditionableProxies;
 use SanderMuller\FluentValidationRector\Tests\SimplifyRuleWrappers\SimplifyRuleWrappersRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
@@ -59,6 +60,7 @@ final class SimplifyRuleWrappersRector extends AbstractRector implements Configu
     use AllowlistedRuleFactories;
     use LogsSkipReasons;
     use ParsesRulePayloads;
+    use ShortCircuitsIrrelevantFiles;
     use WalksConditionableProxies;
 
     /**
@@ -332,6 +334,15 @@ CODE_SAMPLE
         }
 
         if (! $node->name instanceof Identifier || $node->name->toString() !== 'rule') {
+            return null;
+        }
+
+        // File-level relevance gate: this rule only fires on `->rule(...)`
+        // calls rooted at a `FluentRule::factory()` chain. Files with no
+        // mention of `FluentRule` cannot contain such a chain — skip the
+        // expensive receiver-type resolution entirely. Decision cached
+        // per file in the trait.
+        if (! $this->currentFileContainsAny(['FluentRule'])) {
             return null;
         }
 

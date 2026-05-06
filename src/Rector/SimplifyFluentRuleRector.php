@@ -14,6 +14,7 @@ use PHPStan\Type\ObjectType;
 use Rector\Rector\AbstractRector;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidationRector\Internal\RunSummary;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ShortCircuitsIrrelevantFiles;
 use SanderMuller\FluentValidationRector\Tests\SimplifyFluentRule\SimplifyFluentRuleRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
@@ -28,6 +29,8 @@ use WeakMap;
  */
 final class SimplifyFluentRuleRector extends AbstractRector implements DocumentedRuleInterface
 {
+    use ShortCircuitsIrrelevantFiles;
+
     private const array FACTORY_SHORTCUTS = [
         'string' => [
             'url' => 'url',
@@ -127,6 +130,14 @@ CODE_SAMPLE
     {
         // Skip if already processed as part of a larger chain
         if (isset($this->processedChains[$node])) {
+            return null;
+        }
+
+        // File-level relevance gate: this rule only fires on FluentRule
+        // chains, so files without `FluentRule` in their source can't
+        // contain any. Skips the chain-flatten / type-resolution work
+        // for the entire file in O(1) after the first dispatch.
+        if (! $this->currentFileContainsAny(['FluentRule'])) {
             return null;
         }
 
