@@ -2,6 +2,109 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 1.3.0 - 2026-05-11
+
+### Highlights
+
+`PromoteFieldFactoryRector` now lifts single-rule chains
+`FluentRule::field()->...->rule('accepted')` and
+`FluentRule::field()->...->rule('declined')` to the dedicated
+`FluentRule::accepted()` / `FluentRule::declined()` factories,
+splicing the redundant `->rule('<name>')` hop because the dedicated
+factory's constructor already seeds the constraint.
+
+Before 1.3.0 these chains stayed stuck on `field()`. The intersection-
+based promotion path checks which typed builder exposes every method
+named in the chain; `AcceptedRule` and `DeclinedRule` deliberately do
+NOT expose `->accepted()` / `->declined()` instance methods, so the
+only intersection candidate was `BooleanRule` — which the existing
+divergence guard correctly rejects (boolean's implicit type pre-check
+rejects `"yes"` / `"on"` / `"true"` for `accepted` and `"no"` /
+`"off"` / `"false"` for `declined`, inputs the bare Laravel rule
+permits, including HTML checkbox defaults). The result was a safe
+typed-factory target sitting one hop away with no path to reach it.
+
+Post-1.3.0 a dedicated trigger handles the case directly:
+
+```php
+// Before
+FluentRule::field()->required()->rule('accepted')
+FluentRule::field('Agree to TOS')->required()->rule('accepted')
+
+// After
+FluentRule::accepted()->required()
+FluentRule::accepted('Agree to TOS')->required()
+
+```
+The label-arg variant rebinds cleanly because both `field()` and
+`accepted()` / `declined()` are in `LABEL_FIRST_TARGETS`. A leading
+`->message(...)` hop that PRECEDES the spliced `->rule()` survives
+verbatim, since its `lastConstraint` binding was already set by the
+preceding constraint hop and is unchanged by the splice.
+
+### Bails
+
+Dedicated promotion bails on:
+
+- **Multiple `->rule(...)` payloads** in the chain. `AcceptedRule` /
+  `DeclinedRule` expose no typed methods for further rule names, so
+  lowering a second constraint would `BadMethodCall` after
+  `SimplifyRuleWrappersRector` runs its pass.
+- **Trailing `->message(...)`** after the spliced `->rule()`. Source
+  order binds the message to `lastConstraint`, which the `->rule()`
+  hop set to `'accepted'` / `'declined'`. Splicing the rule away
+  retargets the message to whatever preceded — a silent message
+  rebind. Caught by an adversarial-review pass before tag-cut; a
+  `skip_field_accepted_with_trailing_message` fixture pins the bail.
+- **Conditionable proxies** anywhere in the chain (receiver type isn't
+  guaranteed across the proxy).
+- **Non-rule hops naming a method missing on the dedicated target.**
+
+### Why this matters
+
+The escape hatch — `FluentRule::field()->rule('accepted')` — was
+designed for shapes the rector cannot safely promote. Once a safe
+promotion path exists, leaving the chain on the generic `field()`
+factory carries two costs: the consumer's source reads as if the
+chain is still hedging on a typed factory, and the diff a consumer
+gets when migrating to fluent validation has a permanent
+`->rule('accepted')` blot that looks like the rector didn't finish.
+The 1.3.0 path removes both.
+
+The bail-on-trailing-message guard is the load-bearing safety
+property. Without it, a chain like
+`field()->required()->rule('accepted')->message('You must accept.')`
+would lower to `accepted()->required()->message('You must accept.')`,
+silently rebinding the message from `'accepted'` to `'required'`.
+Cosmetic message text is exactly the kind of regression that escapes
+test coverage and only surfaces in production error bags.
+
+### Versioning rationale
+
+MINOR bump. The change is purely additive on a SIMPLIFY-set rector:
+new promotion target, new bail paths, no public-API surface renamed
+or removed, no fixture in the existing suite flips result. The three
+pre-1.3.0 skip fixtures
+(`skip_field_accepted_semantic_divergence`,
+`skip_field_accepted_with_label_arg`,
+`skip_field_declined_semantic_divergence`) are removed because the
+shapes they covered now promote cleanly — three new
+`promote_field_to_accepted*` / `promote_field_to_declined` fixtures
+take their place, plus two new bail fixtures
+(`skip_field_accepted_with_extra_rule`,
+`skip_field_accepted_with_trailing_message`) pin the post-promotion
+guard boundaries.
+
+Consumers running `SIMPLIFY` will see the rector touch additional
+files — chains previously left on `field()->rule('accepted')` now
+promote. The output is equivalent at the validator level: both
+sides produce a `RuleSet` whose compiled Laravel rules include
+`'accepted'` (verified by the parity harness via three new
+`field_*_promotion.php` fixtures under
+`tests/Parity/Fixture/PromoteFieldFactoryRector/`).
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/1.2.2...1.3.0
+
 ## 1.2.2 - 2026-05-06
 
 Per-file relevance gate cuts the cold parallel rector pipeline by **~15%** on real Laravel codebases (3m 54s → 3m 20s on a 4157-file production app, byte-identical skip-log and transformed-file count).
@@ -732,6 +835,7 @@ Per-file relevance gate cuts the cold parallel rector pipeline by **~15%** on re
 ### Added
 
 - Initial release. Rector rules for migrating Laravel validation to `sandermuller/laravel-fluent-validation`:
+  
   - `ValidationStringToFluentRuleRector` — string-based rules (`'required|email|max:255'`).
   - `ValidationArrayToFluentRuleRector` — array-based rules (`['required', 'email']`).
   - `SimplifyFluentRuleRector` — collapses redundant fluent chains.
@@ -739,4 +843,6 @@ Per-file relevance gate cuts the cold parallel rector pipeline by **~15%** on re
   - `AddHasFluentRulesTraitRector` and `AddHasFluentValidationTraitRector` — trait insertion for FormRequests, Livewire components, custom validators.
   
 - Set lists in `FluentValidationSetList` for individual or full-pipeline runs.
+  
 - Covers `Validator::make()`, FormRequest `rules()`, Livewire `$rules`, inline validator calls.
+  
