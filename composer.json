@@ -20,6 +20,7 @@
     },
     "require-dev": {
         "laravel/pint": "^1.29",
+        "mrpunyapal/rector-pest": "^0.2.7",
         "nikic/php-parser": "^5.4",
         "orchestra/testbench": "^9.0||^10.11||^11.0",
         "pestphp/pest": "^3.0||^4.4",
@@ -27,7 +28,7 @@
         "phpstan/phpstan": "^2.0",
         "phpstan/phpstan-strict-rules": "^2.0",
         "rector/type-perfect": "^2.0",
-        "sandermuller/package-boost": "^0.11.0",
+        "sandermuller/package-boost": "^0.15.0",
         "spaze/phpstan-disallowed-calls": "^4.10",
         "symplify/phpstan-extensions": "^12.0",
         "tomasvotruba/cognitive-complexity": "^1.0",

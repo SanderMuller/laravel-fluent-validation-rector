@@ -208,10 +208,11 @@ Promotes `FluentRule::field()` to a typed factory (`::string()`, `::numeric()`, 
 <summary>Promotion targets, bail conditions, semantic notes</summary>
 
 - **Also promotes**: `FluentRule::string()->rule(Password::default())` / `->rule(Email::default())` → `FluentRule::password()` / `::email()` (same zero-arg source, single Password/Email match, no Conditionable hops).
+- **Also promotes**: `field()->required()->rule('accepted')` → `FluentRule::accepted()->required()` (and the `declined` analog). The dedicated `AcceptedRule` / `DeclinedRule` factories seed the corresponding constraint in their constructors, so the `->rule('<name>')` hop is spliced out. Distinct from intersection-based promotion: promotion to `boolean()` stays blocked because boolean's implicit constraint rejects `"yes"` / `"on"` / `"true"` (`accepted`) and `"no"` / `"off"` / `"false"` (`declined`). Triggers only when the chain has exactly one `->rule(...)` payload and the remaining hops all exist on the dedicated target class.
 - **Bails on**:
   - Conditionable hops in the chain.
   - Chains whose compatible-class intersection isn't a singleton.
-  - `field()->rule('accepted')` / `field()->rule('declined')`. The would-be `boolean()` factory's seed constraint rejects `"yes"` / `"on"` / `"true"` (`accepted`) and `"no"` / `"off"` / `"false"` (`declined`), inputs the original Laravel rule permits (including HTML checkbox defaults). The post-bail skip-log line names the blocked promotion target so consumers can decide between keeping the escape hatch or explicitly using `FluentRule::boolean()->accepted()`.
+  - `field()->rule('accepted'|'declined')` chains carrying additional `->rule(...)` payloads — the dedicated factory has no typed methods for further constraints, so the escape hatch stays.
 - **Semantic note**: `StringRule` adds Laravel's implicit `string` rule (likewise `numeric` for `NumericRule`); `FieldRule` adds neither. Promoting therefore changes validation behavior on non-string inputs. Intent matches in nearly all `max(N)` cases, but review the diff.
 
 </details>

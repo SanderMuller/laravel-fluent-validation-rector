@@ -15,6 +15,7 @@ use SanderMuller\FluentValidation\Rules\AcceptedRule;
 use SanderMuller\FluentValidation\Rules\ArrayRule;
 use SanderMuller\FluentValidation\Rules\BooleanRule;
 use SanderMuller\FluentValidation\Rules\DateRule;
+use SanderMuller\FluentValidation\Rules\DeclinedRule;
 use SanderMuller\FluentValidation\Rules\EmailRule;
 use SanderMuller\FluentValidation\Rules\FileRule;
 use SanderMuller\FluentValidation\Rules\ImageRule;
@@ -28,6 +29,7 @@ use SanderMuller\FluentValidationRector\Rector\Concerns\ShortCircuitsIrrelevantF
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
 use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
+use WeakMap;
 
 /**
  * Promote `FluentRule::field()` to a typed factory (`::string()`, `::numeric()`,
@@ -43,6 +45,12 @@ use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
  *
  * **Runs before** `SimplifyRuleWrappersRector` in the `SIMPLIFY` set so the
  * second rector's next pass picks up the promoted factory.
+ *
+ * **Also promotes** `field()->...->rule('accepted')` /
+ * `field()->...->rule('declined')` to the dedicated `FluentRule::accepted()` /
+ * `FluentRule::declined()` factories, splicing the redundant `->rule()` hop
+ * out (the typed factory's constructor already seeds the constraint).
+ * See `DEDICATED_RULE_FACTORIES` and `applyDedicatedRulePromotion()`.
  *
  * **Semantic note**: StringRule implicitly adds Laravel's `string` rule to
  * the validator output, and NumericRule adds `numeric`. `FieldRule` adds
@@ -107,6 +115,7 @@ final class PromoteFieldFactoryRector extends AbstractRector implements Document
         EmailRule::class => 'email',
         PasswordRule::class => 'password',
         AcceptedRule::class => 'accepted',
+        DeclinedRule::class => 'declined',
     ];
 
     /**
@@ -134,6 +143,7 @@ final class PromoteFieldFactoryRector extends AbstractRector implements Document
         BooleanRule::class,
         EmailRule::class,
         AcceptedRule::class,
+        DeclinedRule::class,
     ];
 
     /**
@@ -163,8 +173,49 @@ final class PromoteFieldFactoryRector extends AbstractRector implements Document
         BooleanRule::class => ['accepted', 'declined'],
     ];
 
+    /**
+     * Rule names whose only safe typed factory is a dedicated `FluentRule`
+     * subclass — distinct from BooleanRule, which `SEMANTICALLY_DIVERGENT_PROMOTION`
+     * forbids for these names. Triggers a splice-and-promote path:
+     * `FluentRule::field()->required()->rule('accepted')`
+     *   → `FluentRule::accepted()->required()`.
+     *
+     * The `->rule('<name>')` hop is removed because the typed factory's
+     * constructor already seeds the constraint (see `AcceptedRule::__construct`
+     * → `seedLastConstraint('accepted')`). Leaving the hop intact would emit
+     * the rule twice to Laravel's validator output.
+     *
+     * Distinct from the intersection-based Trigger A path: the dedicated
+     * subclasses (`AcceptedRule`, `DeclinedRule`) deliberately do NOT expose
+     * `->accepted()` / `->declined()` methods, so the method-availability
+     * probe in `intersectCompatibleBuilders` never picks them. Without this
+     * dedicated trigger, the only intersection candidate is `BooleanRule`,
+     * which the divergence guard then rejects — leaving the chain stuck on
+     * `field()` even though a safe promotion path exists.
+     *
+     * @var array<string, class-string>
+     */
+    private const array DEDICATED_RULE_FACTORIES = [
+        'accepted' => AcceptedRule::class,
+        'declined' => DeclinedRule::class,
+    ];
+
+    /**
+     * Tracks chain roots whose dedicated-factory analysis has already been
+     * decided. Mirrors `PromotesPasswordEmailFactory`: pre-order traversal
+     * fires the outermost `MethodCall` first — the only fire that sees the
+     * full chain when walking `$node->var` down to root. Inner fires arrive
+     * after with a truncated view; without this guard, an inner fire on
+     * `->rule('accepted')` would not see a later `->rule('max:5')` hop and
+     * would unsafely promote.
+     *
+     * @var WeakMap<StaticCall, true>
+     */
+    private WeakMap $dedicatedRuleTriggerVisited;
+
     public function __construct()
     {
+        $this->dedicatedRuleTriggerVisited = new WeakMap();
         RunSummary::registerShutdownHandler();
     }
 
@@ -260,6 +311,12 @@ CODE_SAMPLE
             return null;
         }
 
+        $dedicated = $this->applyDedicatedRulePromotion($root, $node, $ruleCalls);
+
+        if ($dedicated instanceof Node) {
+            return $dedicated;
+        }
+
         $compatIntersection = $this->intersectCompatibleBuilders($ruleCalls);
 
         if ($compatIntersection === null) {
@@ -297,6 +354,189 @@ CODE_SAMPLE
         $root->name = new Identifier($factoryName);
 
         return $node;
+    }
+
+    /**
+     * Trigger A' (dedicated factory): when the chain has exactly one
+     * `->rule('accepted')` or `->rule('declined')` call and no other
+     * `->rule(...)` payloads, promote `FluentRule::field()` to the dedicated
+     * `FluentRule::accepted()` / `FluentRule::declined()` factory and splice
+     * the redundant `->rule(<name>)` hop out. The typed factory's constructor
+     * seeds the corresponding constraint, so keeping the hop would emit the
+     * rule twice in the validator output.
+     *
+     * Bails when:
+     * - More than one `->rule(...)` payload — `AcceptedRule` / `DeclinedRule`
+     *   expose no rule-name-typed methods beyond their constructor seed, so
+     *   any additional `->rule()` constraint would BadMethodCall after
+     *   `SimplifyRuleWrappersRector` lowers it.
+     * - Any non-rule hop is a Conditionable proxy — receiver type isn't
+     *   guaranteed across the proxy.
+     * - Any non-rule hop names a method not declared on the dedicated
+     *   target class.
+     * - The label-arg on a `FluentRule::field('Label')` source rebinds
+     *   incompatibly — both AcceptedRule and DeclinedRule are in
+     *   `LABEL_FIRST_TARGETS`, so this gate is currently a no-op for these
+     *   targets, but the check stays in place for symmetry with Trigger A.
+     *
+     * @param  list<MethodCall>  $ruleCalls
+     */
+    private function applyDedicatedRulePromotion(StaticCall $root, MethodCall $node, array $ruleCalls): ?Node
+    {
+        if (isset($this->dedicatedRuleTriggerVisited[$root])) {
+            return null;
+        }
+
+        $this->dedicatedRuleTriggerVisited[$root] = true;
+
+        if (count($ruleCalls) !== 1) {
+            return null;
+        }
+
+        $ruleCall = $ruleCalls[0];
+
+        if (count($ruleCall->args) !== 1 || ! $ruleCall->args[0] instanceof Arg) {
+            return null;
+        }
+
+        $parsed = $this->parseRulePayload($ruleCall->args[0]->value);
+
+        if ($parsed === null) {
+            return null;
+        }
+
+        [$ruleName, $ruleArgs] = $parsed;
+
+        if ($ruleArgs !== []) {
+            return null;
+        }
+
+        $targetClass = self::DEDICATED_RULE_FACTORIES[$ruleName] ?? null;
+
+        if ($targetClass === null) {
+            return null;
+        }
+
+        if (! class_exists($targetClass)) {
+            return null;
+        }
+
+        $factoryName = self::TYPED_BUILDER_TO_FACTORY[$targetClass];
+
+        if ($root->args !== [] && ! in_array($targetClass, self::LABEL_FIRST_TARGETS, true)) {
+            return null;
+        }
+
+        if (! $this->dedicatedNonRuleHopsAvailable($root, $node, $ruleCall, $targetClass)) {
+            return null;
+        }
+
+        return $this->spliceRuleHopAndPromote($root, $node, $ruleCall, $factoryName);
+    }
+
+    /**
+     * Verify every non-rule, non-Conditionable hop between `$root` and
+     * `$node` is a public instance method on `$targetClass`. The matched
+     * `->rule()` hop is excluded — it gets spliced out.
+     *
+     * Also bails on `->message(...)` calls that appear AFTER the rule hop
+     * in source order. `HasFieldModifiers::message()` binds to the
+     * `$lastConstraint` that the most-recent rule-setting hop left behind.
+     * Splicing the `->rule('accepted')` hop would re-target that message
+     * to whatever rule preceded it in the chain — a silent validation-
+     * message regression. Walked hops are in reverse source order
+     * (`$node->var` walks toward root), so positions strictly before the
+     * rule hop in the walked list correspond to positions AFTER it in
+     * source. Message hops BEFORE the rule hop in source order are safe:
+     * the constraint they bound to (e.g. `required` in
+     * `required()->message('m')->rule('accepted')`) is preserved verbatim
+     * after promotion.
+     *
+     * @param  class-string  $targetClass
+     */
+    private function dedicatedNonRuleHopsAvailable(StaticCall $root, MethodCall $node, MethodCall $ruleHop, string $targetClass): bool
+    {
+        $hops = [];
+        $current = $node;
+
+        while ($current instanceof MethodCall) {
+            $hops[] = $current;
+            $current = $current->var;
+        }
+
+        if ($current !== $root) {
+            return false;
+        }
+
+        $ruleHopIndex = null;
+
+        foreach ($hops as $index => $hop) {
+            if ($hop === $ruleHop) {
+                $ruleHopIndex = $index;
+
+                break;
+            }
+        }
+
+        if ($ruleHopIndex === null) {
+            return false;
+        }
+
+        foreach ($hops as $index => $hop) {
+            if ($hop === $ruleHop) {
+                continue;
+            }
+
+            if (! $hop->name instanceof Identifier) {
+                return false;
+            }
+
+            $hopName = $hop->name->toString();
+
+            if (in_array($hopName, self::CONDITIONABLE_HOPS, true)) {
+                return false;
+            }
+
+            // `->message()` after the spliced rule hop would re-target to
+            // the wrong constraint. See method docblock.
+            if ($hopName === 'message' && $index < $ruleHopIndex) {
+                return false;
+            }
+
+            // Reuses the cached public-instance-method probe from
+            // `PromotesPasswordEmailFactory`; both triggers ask the same
+            // question (is `<method>` callable on the promoted target).
+            if (! $this->methodExistsOnPasswordEmailTarget($targetClass, $hopName)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function spliceRuleHopAndPromote(StaticCall $root, MethodCall $node, MethodCall $ruleHop, string $factoryName): Node
+    {
+        if ($ruleHop === $node) {
+            $replacement = $ruleHop->var;
+        } else {
+            $current = $node;
+
+            while ($current instanceof MethodCall) {
+                if ($current->var === $ruleHop) {
+                    $current->var = $ruleHop->var;
+
+                    break;
+                }
+
+                $current = $current->var;
+            }
+
+            $replacement = $node;
+        }
+
+        $root->name = new Identifier($factoryName);
+
+        return $replacement;
     }
 
     /**
@@ -341,18 +581,6 @@ CODE_SAMPLE
         return false;
     }
 
-    /**
-     * Trigger B (spec `password-email-factory-promotion.md`):
-     * `FluentRule::string()->…->rule(Password::default())` → `FluentRule::password()`
-     * (and `Password::min($literal)`, `Email::default()` analogs).
-     *
-     * Splices the matched `->rule(Password::*)` / `->rule(Email::default())` hop
-     * out of the chain and rewrites the root factory. Safety-gated per spec §2b:
-     * zero-arg source factory, no other `->rule()` payloads, no Conditionable
-     * hops, and every non-rule chain modifier must be available on the target
-     * rule class (PasswordRule lacks `same()`/`different()`; collectiq dogfood
-     * verified this would BadMethodCall-at-runtime without the gate).
-     */
     /**
      * Walk `$methodCall->var` down until hitting the root of the chain.
      * Returns the root if it's a `StaticCall`; otherwise null. Handles
