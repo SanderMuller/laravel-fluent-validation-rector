@@ -25,7 +25,7 @@ Run the checks **in this order**. Each must pass before moving to the next. Fix 
 
 Always append `|| true` to verification commands so output is captured even on failure (per repo `CLAUDE.md` rule). Pass/fail is determined from the captured output, not the exit status alone.
 
-**The order is 1 → 2 → 3 → 4 → 5a → 5b → 5c → commit → push → 6 → 7 (draft notes) → user cuts tag → 8a (pre-tag gate, just before `gh release create`) → 8b (post-tag watch).** Do not jump from step 5 straight to drafting release notes. The release-notes file is written only after the changes have been committed, pushed, and CI is green on that exact SHA (step 6). Writing notes earlier claims facts ("tests pass on CI matrix", "2,092 tests / 2,941 assertions") that are not yet proven. If you find yourself about to `Write` a file under `internal/release-notes-<version>.md` and the last thing you did was a local quality check, stop — you skipped commit/push/CI. And if the tag is cut without step 8a's live-remote + CI re-check, or without waiting on step 8b's tag-ref runs, the release ships on unverified facts even if steps 1-7 all passed.
+**The order is 1 → 2 → 3 → 4 → 5a → 5b → 5c → commit → push → 6 → 7 (draft notes) → user cuts tag → 8a (pre-tag gate, just before `gh release create`) → 8b (post-tag watch).** Do not jump from step 5 straight to drafting release notes. The release-notes file is written only after the changes have been committed, pushed, and CI is green on that exact SHA (step 6). Writing notes earlier claims facts ("tests pass on CI matrix", "2,092 tests / 2,941 assertions") that are not yet proven. If you find yourself about to `Write` a file under `RELEASE_NOTES_<version>.md` and the last thing you did was a local quality check, stop — you skipped commit/push/CI. And if the tag is cut without step 8a's live-remote + CI re-check, or without waiting on step 8b's tag-ref runs, the release ships on unverified facts even if steps 1-7 all passed.
 
 ### 1. Rector
 
@@ -195,7 +195,7 @@ On failure:
 
 ### 7. Release notes (ONLY after step 6 CI-green)
 
-This is where agents most commonly slip: running the local gauntlet (steps 1-5), then jumping straight to `Write internal/release-notes-<version>.md` without committing, pushing, or watching CI. **Do not do that.** Notes claim CI-matrix facts; CI must have produced those facts first.
+This is where agents most commonly slip: running the local gauntlet (steps 1-5), then jumping straight to `Write RELEASE_NOTES_<version>.md` without committing, pushing, or watching CI. **Do not do that.** Notes claim CI-matrix facts; CI must have produced those facts first.
 
 **Release notes are public artefacts — do NOT name or reference peers.** The release body is rendered on GitHub, prepended to `CHANGELOG.md` by CI, and indexed by Packagist. Anything written here is visible to every downstream consumer and shows up in search. Internal peer instances (`e0cp6lq3`, `2op9yaul`, etc.), peer-level adoption reports, and claude-peers channels are *process* concerns, not product concerns — consumers don't know or care about them, and leaking the IDs exposes internal architecture.
 
@@ -211,9 +211,16 @@ This is where agents most commonly slip: running the local gauntlet (steps 1-5),
 - Named public contributors only: GitHub usernames / real-name contributors who filed issues, PRs, or are otherwise publicly part of the conversation. If you have an external user or named downstream app that consented to being credited, name them. Otherwise, stay generic.
 - The technical reasoning (why the decision was made) without tying it to a specific internal agent session.
 
-**Scope of the rule:** applies to every file written under `internal/release-notes-<version>.md`, since that body text flows directly to the public GitHub release + CHANGELOG. Internal planning files (`internal/roadmap.md`, `internal/specs/*.md`) CAN reference peer IDs — those stay out of the package's git history (`internal/` is gitignored) and are legitimate session-to-session continuity aids.
+**Scope of the rule:** applies to `RELEASE_NOTES_<version>.md` at the repo root (the file CI promotes into `CHANGELOG.md` and into the public GitHub release body). Internal planning files in any gitignored location (e.g. `internal/roadmap.md`, `internal/specs/*.md`, `notes/`) CAN reference peer IDs — they stay out of the package's git history and are legitimate session-to-session continuity aids.
 
-**Quick scrub checklist before `Write`ing the notes file:** grep your draft for `peer`, any 8-character alphanumeric sequence that looks like a peer ID (`[a-z0-9]{8}`), and "claude-peers" / "claude-code". If any match, rewrite or delete the phrase before saving.
+**Quick scrub checklist before `Write`ing the notes file:** grep your draft for `peer`, "claude-peers", "claude-code", and any peer-ID-shaped token. Peer IDs mix digits and letters (`e0cp6lq3`, `2op9yaul`), so plain `[a-z0-9]{8}` matches plain English words like "Highlights" — filter to tokens that have BOTH a digit and a letter:
+
+```bash
+grep -nE 'peer|claude-peers|claude-code' "$NOTES"
+grep -oE '\b[a-z0-9]{8}\b' "$NOTES" | grep -E '[0-9]' | grep -E '[a-z]'
+```
+
+The two-stage grep on the second line extracts 8-char tokens, keeps only those with at least one digit, then keeps only those with at least one letter — exactly the peer-ID shape. Full 40-char git SHAs do NOT match because `\b` word-boundary requires the whole token be 8 chars; only abbreviated SHAs typed as standalone 8-char tokens (`d8c0a3c6` alone) would match — ignore those by eye. If any actual peer-ID-shaped token remains, rewrite or delete the phrase before saving.
 
 **Preflight — run these three commands and confirm all three before you create the release-notes file.** If any fail, you are not ready to draft notes; go back to whichever earlier step is incomplete.
 
@@ -229,9 +236,9 @@ SHA=$(git rev-parse HEAD)
 gh run list --commit "$SHA" --json name,status,conclusion
 ```
 
-Only when (1) status is empty, (2) echoes `pushed`, and (3) every run is `completed` + `{success, skipped}` may you `Write` to `internal/release-notes-<version>.md`.
+Only when (1) status is empty, (2) echoes `pushed`, and (3) every run is `completed` + `{success, skipped}` may you `Write` to `RELEASE_NOTES_<version>.md`.
 
-Draft into `internal/release-notes-<version>.md`. The user reads the draft, creates the tag, and publishes the release themselves — do not cut the tag, do not run `gh release create`, do not push tags. Once the release-notes file exists and CI is green, report "ready to tag" and stop.
+Draft into `RELEASE_NOTES_<version>.md`. The user reads the draft, creates the tag, and publishes the release themselves — do not cut the tag, do not run `gh release create`, do not push tags. Once the release-notes file exists and CI is green, report "ready to tag" and stop.
 
 **Pin the verified SHA in the notes file.** The very first line of the notes file must be an HTML comment recording the green SHA. GitHub strips HTML comments when rendering the release body, so this is invisible to readers but greppable by step 8:
 
@@ -256,7 +263,7 @@ Step 7 proves CI green at draft time. Step 8 proves CI is *still* green at tag t
 ```bash
 SHA=$(git rev-parse HEAD)
 VERSION="<version>"  # e.g. 1.17.2
-NOTES="internal/release-notes-${VERSION}.md"
+NOTES="RELEASE_NOTES_${VERSION}.md"
 
 # A. Notes file exists and pins this SHA (anchored regex — tolerant of surrounding blank lines,
 #    strict about the line itself so a rewrite of the SHA breaks the gate)
@@ -339,8 +346,8 @@ Wait until terminal. If red:
 | 5c. PUBLIC_API.md  | manual audit: every entry resolves in src/, every public src/ class listed                     | no stale entries; no undocumented public surface |
 | **commit + push**  | user confirms changes + `git push`                                                             | HEAD pushed to `origin/main`                  |
 | 6. CI green-light  | `gh run list --commit "$(git rev-parse HEAD)"` all complete + no failure                       | every run for the SHA in `{success, skipped}` |
-| 7. Release notes   | preflight (clean tree + pushed + CI green) → `Write internal/release-notes-<version>.md`       | first line is `<!-- verified-sha: $SHA -->`   |
-| 8a. Pre-tag gate   | one-liner asserts SHA-drift, push state, CI-still-green immediately before `gh release create` | prints `OK to tag`                            |
+| 7. Release notes   | preflight (clean tree + pushed via tracking ref `origin/main` + CI green) → `Write RELEASE_NOTES_<version>.md` | first line is `<!-- verified-sha: $SHA -->`   |
+| 8a. Pre-tag gate   | one-liner asserts SHA-drift, push state via **live `git ls-remote`** (not tracking ref — may be stale), CI-still-green immediately before `gh release create` | prints `OK to tag`                            |
 | 8b. Post-tag watch | `gh run list --commit "$TAG_SHA"` filtered by `headBranch == $TAG`                             | tag-ref + release-event workflows all green   |
 
 ## Important
