@@ -2,6 +2,50 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 1.4.0 - 2026-06-02
+
+<!-- verified-sha: ab37495ee3b926b0a0256cd3e7e9b5ce22439c10 -->
+`ValidationArrayToFluentRuleRector` now folds `Rule::` presence conditionals into their dedicated fluent methods. The minimum PHP and `laravel-fluent-validation` versions also move up.
+
+### Added
+
+- `Rule::requiredIf` / `requiredUnless` / `excludeIf` / `excludeUnless` / `prohibitedIf` / `prohibitedUnless` with a **closure or bool-literal** argument now convert to the matching dedicated fluent method:
+  
+  ```php
+  // before
+  'role' => ['nullable', Rule::requiredIf(fn () => $this->isAdmin())],
+  
+  // after
+  'role' => FluentRule::field()->nullable()->requiredIf(fn () => $this->isAdmin()),
+  
+  ```
+  Matching is case-insensitive — `Rule::requiredif(...)` converts to the canonical `->requiredIf(...)` too.
+  
+
+### Fixed
+
+- `Rule::requiredIf(...)` (and the other five presence conditionals) no longer emit the invalid `->rule(Rule::requiredIf(...))` wrapper. An argument whose runtime type can't be proven a closure or bool — a variable, or a string the fluent method would read as a *field name* — is now left as the native array rather than converted unsafely.
+- `Rule::when()` / `Rule::unless()` (`ConditionalRules`) and `Rule::forEach()` (`NestedRules`) are left as the native array. They have no faithful fluent equivalent, so the field is preserved untouched instead of being wrapped.
+
+### Requirements
+
+#### Minimum PHP is now 8.3
+
+`require.php` moves from `^8.2` to `^8.3`. This is not a breaking API change: Composer's platform resolver simply won't offer 1.4+ to projects still on PHP 8.2 — they stay on the latest compatible 1.3.x with no install or runtime breakage. Projects on PHP 8.3+ are unaffected.
+
+The package source remains 8.2-compatible; the floor follows the supported and CI-tested runtime (the dev toolchain, notably `laravel/pao`, requires 8.3).
+
+#### Minimum `laravel-fluent-validation` is now ^1.27.2
+
+`require.sandermuller/laravel-fluent-validation` moves from `^1.20` to `^1.27.2`. 1.27.2 fixes a self-validation null short-circuit so a `nullable` field carrying a required-family conditional validates identically to the native array form — the new conversion relies on that behaviour. As with the PHP floor, Composer holds projects on an older fluent-validation at the latest compatible 1.3.x; projects already on `^1.27.2` are unaffected.
+
+### Internal / tooling (no consumer impact)
+
+- AI tooling migrated to `sandermuller/package-boost-php`; boost config moved to `.config/boost.php` (conventions + a pinned remote `rector-developer` skill).
+- Dev test matrix dropped the Laravel 11 lane (the `laravel/pao` dev dep conflicts `laravel/framework <12`); dev floors raised to Pest 4.6.3 and Collision 8.9.3. The package declares no `illuminate/*` runtime dependency, so consumer Laravel-version support is unchanged.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/1.3.0...1.4.0
+
 ## 1.3.0 - 2026-05-11
 
 ### Highlights
@@ -34,6 +78,7 @@ FluentRule::field('Agree to TOS')->required()->rule('accepted')
 // After
 FluentRule::accepted()->required()
 FluentRule::accepted('Agree to TOS')->required()
+
 
 ```
 The label-arg variant rebinds cleanly because both `field()` and
