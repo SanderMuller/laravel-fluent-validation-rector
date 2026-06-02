@@ -43,7 +43,7 @@ final class RectorInternalContractsTest extends TestCase
      *
      * @var list<array{class: class-string, const: string, extractor: callable(array<int|string, mixed>): list<class-string>}>
      */
-    private const HARDCODED_CLASS_TABLES = [
+    private const array HARDCODED_CLASS_TABLES = [
         [
             'class' => SimplifyRuleWrappersRector::class,
             'const' => 'FACTORY_BASELINE',

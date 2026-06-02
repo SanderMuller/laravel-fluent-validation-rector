@@ -35,14 +35,14 @@ use OutOfBoundsException;
  */
 final class Diagnostics
 {
-    public const VERBOSE_ENV = 'FLUENT_VALIDATION_RECTOR_VERBOSE';
+    public const string VERBOSE_ENV = 'FLUENT_VALIDATION_RECTOR_VERBOSE';
 
     /**
      * Filename written under the verbose log directory. Kept stable
      * across the .cache/ relocation so consumers grepping for the file
      * still find it.
      */
-    public const VERBOSE_LOG_FILENAME = 'rector-fluent-validation-skips.log';
+    public const string VERBOSE_LOG_FILENAME = 'rector-fluent-validation-skips.log';
 
     /**
      * Subdirectory under the project root where the verbose log lands.
@@ -52,33 +52,33 @@ final class Diagnostics
      * by `verboseLogPath()` if missing; falls back to cwd root if the
      * subdirectory can't be created (read-only mount, etc.).
      */
-    public const VERBOSE_LOG_DIR = '.cache';
+    public const string VERBOSE_LOG_DIR = '.cache';
 
     /**
      * Legacy filename — used by `allSkipLogArtifacts()` so the cleanup
      * sweep still removes pre-0.14.1 cwd-root logs that consumers may
      * have inherited. Not written to by anything in 0.14.1+.
      */
-    public const LEGACY_VERBOSE_LOG_FILENAME = '.rector-fluent-validation-skips.log';
+    public const string LEGACY_VERBOSE_LOG_FILENAME = '.rector-fluent-validation-skips.log';
 
     /**
      * Default tier — only always-on (non-`verboseOnly`) entries surface.
      */
-    public const TIER_OFF = 'off';
+    public const string TIER_OFF = 'off';
 
     /**
      * Middle tier — surfaces `verboseOnly` entries flagged `actionable: true`
      * in addition to the always-on set. Skips non-actionable noise
      * (trait-already-present, Livewire-detected-not-FormRequest, etc.).
      */
-    public const TIER_ACTIONABLE = 'actionable';
+    public const string TIER_ACTIONABLE = 'actionable';
 
     /**
      * Legacy "everything" tier. `VERBOSE_ENV=1` / `=true` / `=all` all
      * resolve here. Preserves pre-0.13 behaviour exactly — every
      * `verboseOnly` entry writes regardless of actionable flag.
      */
-    public const TIER_ALL = 'all';
+    public const string TIER_ALL = 'all';
 
     /**
      * OS env only. `$_SERVER` / `$_ENV` are intentionally not consulted:
