@@ -50,5 +50,4 @@ PEER_FEEDBACK.md
 .claude/skills/
 .config/boost/
 .github/prompts/
-/.boost-remote-manifest.json
 # <<< boost (managed) <<<
