@@ -87,6 +87,39 @@ trait ConvertsValidationRuleArrays
         'doesntContain',
     ];
 
+    /**
+     * `Rule::` presence-conditional builders that map onto a dedicated fluent
+     * method. Keys are the lowercased facade method name (PHP method calls are
+     * case-insensitive, so `Rule::REQUIREDIF(...)` must match too); values are
+     * the fluent method to emit. Only the unambiguous closure / bool-literal
+     * condition form is converted — see `convertPresenceConditional()`.
+     *
+     * @var array<string, string>
+     */
+    private const array RULE_FACADE_PRESENCE_CONDITIONALS = [
+        'requiredif' => 'requiredIf',
+        'requiredunless' => 'requiredUnless',
+        'excludeif' => 'excludeIf',
+        'excludeunless' => 'excludeUnless',
+        'prohibitedif' => 'prohibitedIf',
+        'prohibitedunless' => 'prohibitedUnless',
+    ];
+
+    /**
+     * `Rule::` composite builders with no faithful fluent or `->rule()`
+     * representation — `when` / `unless` build `ConditionalRules`, `forEach`
+     * builds `NestedRules`. Encountering any bails the whole array conversion
+     * so the original native rules survive untouched. Stored lowercased for
+     * case-insensitive matching (PHP method calls are case-insensitive).
+     *
+     * @var list<string>
+     */
+    private const array RULE_FACADE_COMPOSITE_BUILDERS = [
+        'when',
+        'unless',
+        'foreach',
+    ];
+
     /** @var list<string> */
     private const array RULE_FACTORY_METHODS = [
         'string',
@@ -467,8 +500,76 @@ trait ConvertsValidationRuleArrays
             return $this->convertRulePassthrough($expr, $staticCall, $methodName, $type);
         }
 
+        // Presence conditionals (requiredIf / excludeIf / prohibitedIf): fold
+        // the unambiguous closure/bool form into the dedicated fluent method
+        // (`->requiredIf(fn)`), which is the intended idiom and exactly
+        // equivalent. Ambiguous argument shapes bail — see
+        // convertPresenceConditional(). Lowercase the method name because PHP
+        // static method calls are case-insensitive.
+        $lowerMethod = strtolower($methodName);
+
+        if ($className === Rule::class
+            && isset(self::RULE_FACADE_PRESENCE_CONDITIONALS[$lowerMethod])) {
+            return $this->convertPresenceConditional(
+                $expr,
+                $staticCall,
+                self::RULE_FACADE_PRESENCE_CONDITIONALS[$lowerMethod],
+            );
+        }
+
+        // Composite Rule:: builders (when / unless / forEach) have no faithful
+        // fluent or ->rule() representation. Bail so the original native rules
+        // array survives untouched rather than emitting code that misbehaves.
+        if ($className === Rule::class
+            && in_array($lowerMethod, self::RULE_FACADE_COMPOSITE_BUILDERS, true)) {
+            return null;
+        }
+
         // Any other Rule:: or non-Rule static call → wrap in ->rule()
         return $this->wrapInRuleCall($expr, $staticCall);
+    }
+
+    /**
+     * Fold `Rule::requiredIf(<closure|bool>)` (and the other five presence
+     * conditionals) into the dedicated fluent method `->requiredIf(<arg>)`.
+     *
+     * Only the unambiguous closure / bool-literal condition form is converted:
+     * it maps exactly onto the fluent method's `Closure|bool` branch
+     * (`new RequiredIf($condition)`). Any other argument shape — a variable or
+     * other expression whose runtime type we cannot prove — is ambiguous,
+     * because the same fluent method reads a *string* argument as a FIELD NAME
+     * (`required_if:field,…`). Rather than risk that divergence we bail
+     * (`return null`), leaving the original native rules array untouched.
+     *
+     * (A `nullable` + required-family combination was unsafe to convert on
+     * fluent-validation <= 1.26, where the self-validation null short-circuit
+     * dropped the requirement; the `^1.27.2` floor fixes that for every form,
+     * so no `nullable` guard is needed here.)
+     */
+    private function convertPresenceConditional(Expr $expr, StaticCall $staticCall, string $fluentMethod): ?Expr
+    {
+        // The Rule:: presence builders take exactly one condition argument.
+        if (count($staticCall->args) !== 1) {
+            return null;
+        }
+
+        $arg = $staticCall->args[0];
+
+        if (! $arg instanceof Arg || $arg->unpack) {
+            return null;
+        }
+
+        $condition = $arg->value;
+
+        $isClosure = $condition instanceof Closure || $condition instanceof ArrowFunction;
+        $isBoolLiteral = $condition instanceof ConstFetch
+            && in_array(strtolower($this->getName($condition->name) ?? ''), ['true', 'false'], true);
+
+        if (! $isClosure && ! $isBoolLiteral) {
+            return null;
+        }
+
+        return new MethodCall($expr, new Identifier($fluentMethod), [new Arg($condition)]);
     }
 
     /**

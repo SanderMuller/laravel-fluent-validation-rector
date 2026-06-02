@@ -3,14 +3,13 @@
 namespace SanderMuller\FluentValidationRector\Tests\ValidationArrayToFluentRule\Fixture;
 
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class MixedOrderingFormRequest extends FormRequest
 {
     public function rules(): array
     {
         return [
-            'field' => ['bail', 'required', new \App\Rules\CustomRule(), Rule::requiredIf(fn () => true), 'string', 'max:255'],
+            'field' => ['bail', 'required', new \App\Rules\CustomRule(), new \App\Rules\AnotherRule(), 'string', 'max:255'],
         ];
     }
 }
@@ -23,15 +22,15 @@ namespace SanderMuller\FluentValidationRector\Tests\ValidationArrayToFluentRule\
 
 use SanderMuller\FluentValidation\FluentRule;
 use App\Rules\CustomRule;
+use App\Rules\AnotherRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class MixedOrderingFormRequest extends FormRequest
 {
     public function rules(): array
     {
         return [
-            'field' => FluentRule::string()->bail()->required()->rule(new CustomRule())->rule(Rule::requiredIf(fn () => true))->max(255),
+            'field' => FluentRule::string()->bail()->required()->rule(new CustomRule())->rule(new AnotherRule())->max(255),
         ];
     }
 }

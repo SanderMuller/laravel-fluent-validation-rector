@@ -62,7 +62,7 @@ public function rules(): array
 composer require --dev sandermuller/laravel-fluent-validation-rector
 ```
 
-**Requirements**: PHP 8.2+, Rector 2.4+, [`sandermuller/laravel-fluent-validation`](https://github.com/sandermuller/laravel-fluent-validation) ^1.20.
+**Requirements**: PHP 8.3+, Rector 2.4+, [`sandermuller/laravel-fluent-validation`](https://github.com/sandermuller/laravel-fluent-validation) ^1.27.2.
 
 If you're on an older fluent-validation:
 
@@ -117,6 +117,8 @@ Converts array-based rules (`['required', 'string', Rule::unique(...)]`), includ
 - **Non-conditional tuples accept dynamic expressions**: `['max', $this->limit ?? 10]`, `['between', config('a'), config('b')]`, `['max', match($x) { ... }]`, via a permissive emittable-arg check on the fluent-lowering and `->rule([...])` escape-hatch paths.
 - **Non-conditional tuples bail on**: object/callable/array producers (`new Obj()`, `fn() => 5`, `[1, 2]`) and side-effectful mutators (`$x = 5`, `$i++`). Preserves the original failure mode.
 - **COMMA_SEPARATED conditional rules** keep strict string-like args to avoid `Closure|bool|string $field` overload ambiguity.
+- **`Rule::` presence conditionals**: `Rule::requiredIf` / `requiredUnless` / `excludeIf` / `excludeUnless` / `prohibitedIf` / `prohibitedUnless` with a **closure or bool-literal** argument convert to the dedicated fluent method (`Rule::requiredIf(fn () => $this->isAdmin())` → `->requiredIf(fn () => $this->isAdmin())`); matching is case-insensitive. Any other argument shape (a variable or string the fluent method would read as a *field name*) is left as the native array.
+- **Composite `Rule::` builders bail**: `Rule::when()` / `Rule::unless()` (`ConditionalRules`) and `Rule::forEach()` (`NestedRules`) have no faithful fluent equivalent — the field's native array is preserved untouched.
 
 </details>
 

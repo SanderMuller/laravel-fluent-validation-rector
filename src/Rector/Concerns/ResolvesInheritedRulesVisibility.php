@@ -2,6 +2,7 @@
 
 namespace SanderMuller\FluentValidationRector\Rector\Concerns;
 
+use PhpParser\Modifiers;
 use PhpParser\Node\Name;
 use PhpParser\Node\Stmt\Class_;
 use Rector\Rector\AbstractRector;
@@ -19,8 +20,8 @@ use ReflectionClass;
  *   bail with a skip-log entry rather than ship broken output.
  * - Visibility can be widened but not narrowed. If an ancestor has
  *   `public rules()`, the subclass must also be `public` — narrowing to
- *   `protected` is a fatal covariance violation. Return `MODIFIER_PUBLIC`.
- * - No ancestor `rules()` → default to `MODIFIER_PROTECTED` (Livewire
+ *   `protected` is a fatal covariance violation. Return `Modifiers::PUBLIC`.
+ * - No ancestor `rules()` → default to `Modifiers::PROTECTED` (Livewire
  *   invokes `rules()` from validator machinery internally, external
  *   visibility is not useful).
  *
@@ -28,7 +29,7 @@ use ReflectionClass;
  * than the child itself — the child is typically parsed from a file that
  * isn't autoloadable at rector-time, while the parent (vendor/, project
  * src/) is expected to be. When the parent can't be autoloaded, fall back
- * to `MODIFIER_PROTECTED`; the covariance check at actual class-load time
+ * to `Modifiers::PROTECTED`; the covariance check at actual class-load time
  * would surface any real conflict.
  *
  * @internal
@@ -40,13 +41,13 @@ trait ResolvesInheritedRulesVisibility
     private function resolveGeneratedRulesVisibility(Class_ $class): ?int
     {
         if (! $class->extends instanceof Name) {
-            return Class_::MODIFIER_PROTECTED;
+            return Modifiers::PROTECTED;
         }
 
         $parentName = $this->getName($class->extends);
 
         if ($parentName === null || ! class_exists($parentName)) {
-            return Class_::MODIFIER_PROTECTED;
+            return Modifiers::PROTECTED;
         }
 
         return $this->walkAncestorChainForRulesVisibility(new ReflectionClass($parentName));
@@ -66,16 +67,16 @@ trait ResolvesInheritedRulesVisibility
                 }
 
                 if ($parentRules->isPublic()) {
-                    return Class_::MODIFIER_PUBLIC;
+                    return Modifiers::PUBLIC;
                 }
 
-                return Class_::MODIFIER_PROTECTED;
+                return Modifiers::PROTECTED;
             }
 
             $next = $parent->getParentClass();
 
             if ($next === false) {
-                return Class_::MODIFIER_PROTECTED;
+                return Modifiers::PROTECTED;
             }
 
             $parent = $next;

@@ -16,6 +16,8 @@ on:
       - 'phpstan.neon.dist'
       - 'phpstan-baseline.neon'
       - '.github/workflows/phpstan.yml'
+      - 'composer.json'
+      - 'composer.lock'
 
 jobs:
   phpstan:
