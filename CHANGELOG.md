@@ -2,6 +2,32 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 1.4.1 - 2026-06-04
+
+<!-- verified-sha: e49a390185949064073baf1e7447c6e40c7342ec -->
+`SimplifyRuleWrappersRector` now unwraps `->rule(Rule::requiredIf(...))` escape-hatch calls into the dedicated fluent method. 1.4.0 added this for the array form (`['nullable', Rule::requiredIf(...)]`); this release covers the `Rule::` facade form on a FluentRule chain, which was still being left as a wrapper.
+
+### Fixed
+
+- `FluentRule::email()->rule(Rule::requiredIf($cond))` now simplifies to `FluentRule::email()->requiredIf($cond)`, and likewise for the `requiredUnless` / `excludeIf` / `excludeUnless` / `prohibitedIf` / `prohibitedUnless` siblings. Previously only the array/string token forms were rewritten — the `Rule::` facade form fell through and stayed on the escape hatch.
+  
+  ```php
+  // before
+  'email' => FluentRule::email()->bail()->rule(Rule::requiredIf($userEmailEnabled)),
+  
+  // after
+  'email' => FluentRule::email()->bail()->requiredIf($userEmailEnabled),
+  
+  ```
+- A literal-`null` condition is left untouched. `Rule::requiredIf(null)` is valid Laravel (the condition normalizes to `false`), but the native fluent method is typed `Closure|bool|string`, so rewriting to `->requiredIf(null)` would `TypeError` at runtime. The wrapper is preserved instead.
+  
+- Named arguments on any `Rule::` facade call (`Rule::in(values: [...])`, `Rule::requiredIf(callback: $cond)`) are left untouched. Parameter names differ between the `Rule::` facade and the FluentRule builder, so a positional rewrite could bind to the wrong slot.
+  
+
+A multi-argument facade conditional (not valid Laravel usage) is also left as-is.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/1.4.0...1.4.1
+
 ## 1.4.0 - 2026-06-02
 
 <!-- verified-sha: ab37495ee3b926b0a0256cd3e7e9b5ce22439c10 -->
@@ -17,6 +43,7 @@ All notable changes to `sandermuller/laravel-fluent-validation-rector` will be d
   
   // after
   'role' => FluentRule::field()->nullable()->requiredIf(fn () => $this->isAdmin()),
+  
   
   ```
   Matching is case-insensitive — `Rule::requiredif(...)` converts to the canonical `->requiredIf(...)` too.
@@ -78,6 +105,7 @@ FluentRule::field('Agree to TOS')->required()->rule('accepted')
 // After
 FluentRule::accepted()->required()
 FluentRule::accepted('Agree to TOS')->required()
+
 
 
 ```
