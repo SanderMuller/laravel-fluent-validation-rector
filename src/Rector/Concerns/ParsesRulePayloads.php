@@ -163,7 +163,7 @@ trait ParsesRulePayloads
             // differ between the `Rule::` facade and the FluentRule builder,
             // so a verbatim copy would bind to the wrong slot or arity-fail.
             // Refuse to rewrite any facade call carrying one.
-            if (! $arg instanceof Arg || $arg->byRef || $arg->unpack || $arg->name !== null) {
+            if (! $arg instanceof Arg || $arg->byRef || $arg->unpack || $arg->name instanceof Identifier) {
                 return null;
             }
 
