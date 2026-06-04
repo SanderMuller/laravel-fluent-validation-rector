@@ -85,6 +85,21 @@ trait ParsesRulePayloads
         'filled',
     ];
 
+    /**
+     * `Rule::{name}($condition)` facade-form conditional rules. The `Rule`
+     * facade exposes these as camelCase statics taking a single
+     * `Closure|bool` condition — distinct from the snake_case array/string
+     * token form, which targets the `(string $field, ...$values)` overload.
+     * `parseRuleFacadeCall` gates these to arity 1.
+     *
+     * @var list<string>
+     */
+    private const array FACADE_CONDITIONAL_RULES = [
+        'requiredIf', 'requiredUnless',
+        'excludeIf', 'excludeUnless',
+        'prohibitedIf', 'prohibitedUnless',
+    ];
+
     /** @var list<string> */
     private const array COMMA_SEPARATED_PURE_FIELDS_RULES = [
         'required_with', 'required_with_all', 'required_without', 'required_without_all',
@@ -143,7 +158,12 @@ trait ParsesRulePayloads
         $args = [];
 
         foreach ($call->args as $arg) {
-            if (! $arg instanceof Arg || $arg->byRef || $arg->unpack) {
+            // Named args (`Rule::in(values: [...])`) can't be threaded
+            // positionally into the native fluent method — parameter names
+            // differ between the `Rule::` facade and the FluentRule builder,
+            // so a verbatim copy would bind to the wrong slot or arity-fail.
+            // Refuse to rewrite any facade call carrying one.
+            if (! $arg instanceof Arg || $arg->byRef || $arg->unpack || $arg->name !== null) {
                 return null;
             }
 
@@ -163,6 +183,29 @@ trait ParsesRulePayloads
         // multi-arg facade calls bail.
         if ($name === 'enum' && count($args) !== 1) {
             return null;
+        }
+
+        // `Rule::requiredIf($cond)` & siblings — the facade form takes a
+        // single `Closure|bool` condition. Arity != 1 isn't valid Laravel
+        // and would TypeError after lowering to the `(Closure|bool)` fluent
+        // overload, so bail. The condition arg passes through verbatim; the
+        // COMMA_SEPARATED scalar-safety whitelist applies only to the
+        // array/string `(string $field, ...$values)` form, not this one.
+        if (in_array($name, self::FACADE_CONDITIONAL_RULES, true)) {
+            if (count($args) !== 1) {
+                return null;
+            }
+
+            // `Rule::requiredIf(null)` / `requiredUnless(null)` are valid
+            // Laravel — the RequiredIf/RequiredUnless ctor normalizes a null
+            // condition to `false`. The native fluent methods are typed
+            // `Closure|bool|string`, so `->requiredIf(null)` would TypeError
+            // at runtime. Refuse to rewrite a statically-literal null
+            // condition. (Variable conditions still pass through — the rector
+            // trusts variables; only the provable null literal is caught.)
+            if ($args[0]->value instanceof ConstFetch && $this->isNames($args[0]->value, ['null'])) {
+                return null;
+            }
         }
 
         return [$name, $args];

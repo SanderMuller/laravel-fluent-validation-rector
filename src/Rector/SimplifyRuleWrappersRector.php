@@ -192,6 +192,18 @@ final class SimplifyRuleWrappersRector extends AbstractRector implements Configu
         'present_unless' => 'presentUnless',
         'missing_if' => 'missingIf',
         'missing_unless' => 'missingUnless',
+        // `Rule::requiredIf($cond)` facade form — the `Rule` facade exposes
+        // these conditional rules as camelCase statics taking a single
+        // `Closure|bool` condition (the first fluent overload), distinct from
+        // the snake_case array/string token form above which targets the
+        // `(string $field, ...$values)` overload. Both lower to the same
+        // native method. `parseRuleFacadeCall` gates these to arity 1.
+        'requiredIf' => 'requiredIf',
+        'requiredUnless' => 'requiredUnless',
+        'excludeIf' => 'excludeIf',
+        'excludeUnless' => 'excludeUnless',
+        'prohibitedIf' => 'prohibitedIf',
+        'prohibitedUnless' => 'prohibitedUnless',
         // Category B — pure variadic fields:
         'required_with' => 'requiredWith',
         'required_with_all' => 'requiredWithAll',
