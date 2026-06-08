@@ -15,13 +15,13 @@ use SanderMuller\BoostCore\Skills\Remote\RemoteSkillSource;
  * Docs: https://github.com/sandermuller/boost-core
  */
 return BoostConfig::configure()
-    ->withTags(
+    ->withTags([
         Tag::Github,
         Tag::Laravel,
         Tag::Php,
         Tag::Pest,
         'release-automation',
-    )
+    ])
     ->withAgents([
         Agent::CLAUDE_CODE,
         Agent::COPILOT,
