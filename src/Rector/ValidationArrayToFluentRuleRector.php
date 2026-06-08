@@ -131,18 +131,18 @@ CODE_SAMPLE
             return $this->emitWithImport($this->refactorFormRequest($node));
         }
 
-        if ($node instanceof MethodCall && $this->isName($node->name, 'validate')) {
+        if ($node instanceof MethodCall && $this->callNameMatches($node, 'validate')) {
             return $this->emitWithImport($this->refactorValidateCall($node));
         }
 
-        if (($node instanceof StaticCall || $node instanceof MethodCall) && $this->isName($node->name, 'make')) {
+        if (($node instanceof StaticCall || $node instanceof MethodCall) && $this->callNameMatches($node, 'make')) {
             return $this->emitWithImport($this->refactorValidatorMake($node));
         }
 
         // `Validator::validate(<data>, <rules>)` — same arg layout as
         // `Validator::make()`; reuse the same handler. See sibling rector
         // for the rationale.
-        if ($node instanceof StaticCall && $this->isName($node->name, 'validate')) {
+        if ($node instanceof StaticCall && $this->callNameMatches($node, 'validate')) {
             return $this->emitWithImport($this->refactorValidatorMake($node));
         }
 

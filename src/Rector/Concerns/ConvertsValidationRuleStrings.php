@@ -1216,6 +1216,22 @@ trait ConvertsValidationRuleStrings
     }
 
     /**
+     * Cheap call-name match for the per-node dispatch hot path.
+     *
+     * Equivalent to `$this->isName($node->name, $name)` for a method/static
+     * call name (PHP method names are case-insensitive, matching
+     * NodeNameResolver::isStringName's strcasecmp), but avoids the
+     * resolver indirection on every MethodCall/StaticCall node visited.
+     * A non-Identifier name (dynamic `->$method()`) never matches, which
+     * is exactly what isName() returns there too.
+     */
+    private function callNameMatches(MethodCall|StaticCall $node, string $name): bool
+    {
+        return $node->name instanceof Identifier
+            && strcasecmp($node->name->name, $name) === 0;
+    }
+
+    /**
      * Process $request->validate([...]) calls.
      */
     private function refactorValidateCall(MethodCall $methodCall): ?MethodCall

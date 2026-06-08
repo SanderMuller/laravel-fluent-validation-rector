@@ -132,11 +132,11 @@ CODE_SAMPLE
             return $this->emitWithImport($this->refactorFormRequest($node));
         }
 
-        if ($node instanceof MethodCall && $this->isName($node->name, 'validate')) {
+        if ($node instanceof MethodCall && $this->callNameMatches($node, 'validate')) {
             return $this->emitWithImport($this->refactorValidateCall($node));
         }
 
-        if (($node instanceof StaticCall || $node instanceof MethodCall) && $this->isName($node->name, 'make')) {
+        if (($node instanceof StaticCall || $node instanceof MethodCall) && $this->callNameMatches($node, 'make')) {
             return $this->emitWithImport($this->refactorValidatorMake($node));
         }
 
@@ -146,7 +146,7 @@ CODE_SAMPLE
         // inside `refactorValidatorMake` already gates on
         // `Illuminate\Support\Facades\Validator` (handles aliased
         // imports too).
-        if ($node instanceof StaticCall && $this->isName($node->name, 'validate')) {
+        if ($node instanceof StaticCall && $this->callNameMatches($node, 'validate')) {
             return $this->emitWithImport($this->refactorValidatorMake($node));
         }
 
