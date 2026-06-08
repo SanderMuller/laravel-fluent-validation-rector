@@ -101,6 +101,26 @@ trait ShortCircuitsIrrelevantFiles
      */
     private function currentFileLooksRuleBearing(): bool
     {
-        return $this->currentFileContainsAny(self::RULE_BEARING_NEEDLES);
+        // Hot path: dispatched once per ClassLike/MethodCall/StaticCall/FuncCall
+        // node across every relevant file. Precompute the (constant) cache key
+        // once per class instead of imploding the 9-needle array on every call.
+        static $cacheKey = null;
+        $cacheKey ??= implode("\0", self::RULE_BEARING_NEEDLES);
+
+        $path = $this->getFile()->getFilePath();
+
+        if (isset(self::$fileRelevanceCache[$path][$cacheKey])) {
+            return self::$fileRelevanceCache[$path][$cacheKey];
+        }
+
+        $content = $this->getFile()->getFileContent();
+
+        foreach (self::RULE_BEARING_NEEDLES as $needle) {
+            if (str_contains($content, $needle)) {
+                return self::$fileRelevanceCache[$path][$cacheKey] = true;
+            }
+        }
+
+        return self::$fileRelevanceCache[$path][$cacheKey] = false;
     }
 }
