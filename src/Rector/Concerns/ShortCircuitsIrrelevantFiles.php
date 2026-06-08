@@ -77,8 +77,32 @@ trait ShortCircuitsIrrelevantFiles
      */
     private function currentFileContainsAny(array $needles): bool
     {
+        return $this->fileContainsAnyNeedle($needles, implode("\0", $needles));
+    }
+
+    /**
+     * Convenience helper: bail if the file contains nothing rule-bearing
+     * any of this package's rules could act on.
+     *
+     * Dispatched once per ClassLike/MethodCall/StaticCall/FuncCall node across
+     * every relevant file, so it passes the precomputed constant cache key
+     * rather than re-imploding the 9-needle array on every call.
+     */
+    private function currentFileLooksRuleBearing(): bool
+    {
+        return $this->fileContainsAnyNeedle(self::RULE_BEARING_NEEDLES, self::ruleBearingCacheKey());
+    }
+
+    /**
+     * Per-file text-needle scan, memoized by (file path, cache key). The cache
+     * key identifies the needle set so callers with different needles don't
+     * collide.
+     *
+     * @param  list<string>  $needles
+     */
+    private function fileContainsAnyNeedle(array $needles, string $cacheKey): bool
+    {
         $path = $this->getFile()->getFilePath();
-        $cacheKey = implode("\0", $needles);
 
         if (isset(self::$fileRelevanceCache[$path][$cacheKey])) {
             return self::$fileRelevanceCache[$path][$cacheKey];
@@ -95,42 +119,14 @@ trait ShortCircuitsIrrelevantFiles
         return self::$fileRelevanceCache[$path][$cacheKey] = false;
     }
 
-    /**
-     * Convenience helper: bail if the file contains nothing rule-bearing
-     * any of this package's rules could act on.
-     */
-    private function currentFileLooksRuleBearing(): bool
-    {
-        // Hot path: dispatched once per ClassLike/MethodCall/StaticCall/FuncCall
-        // node across every relevant file. Precompute the (constant) cache key
-        // once per class instead of imploding the 9-needle array on every call.
-        $cacheKey = self::ruleBearingCacheKey();
-
-        $path = $this->getFile()->getFilePath();
-
-        if (isset(self::$fileRelevanceCache[$path][$cacheKey])) {
-            return self::$fileRelevanceCache[$path][$cacheKey];
-        }
-
-        $content = $this->getFile()->getFileContent();
-
-        foreach (self::RULE_BEARING_NEEDLES as $needle) {
-            if (str_contains($content, $needle)) {
-                return self::$fileRelevanceCache[$path][$cacheKey] = true;
-            }
-        }
-
-        return self::$fileRelevanceCache[$path][$cacheKey] = false;
-    }
-
     /** Memoized concatenation of RULE_BEARING_NEEDLES; '' until first computed. */
     private static string $ruleBearingCacheKey = '';
 
     /**
      * The concatenated `RULE_BEARING_NEEDLES` cache key, computed once per
-     * process. Extracted into a `string`-returning helper so the hot-path
-     * caller gets a guaranteed-string array key (the inline `static $k = null;
-     * $k ??= …` form left PHPStan inferring a nullable key).
+     * process. A `string`-returning helper backed by a typed static property
+     * keeps the hot-path array key guaranteed-string (an inline
+     * `static $k = null; $k ??= …` left PHPStan inferring a nullable key).
      */
     private static function ruleBearingCacheKey(): string
     {

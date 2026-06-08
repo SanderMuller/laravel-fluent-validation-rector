@@ -1122,14 +1122,10 @@ trait ConvertsValidationRuleStrings
      */
     private function persistUnsafeParent(string $parentFqcn): void
     {
-        // Append each FQCN to the shared file at most once per process. The
-        // detection path (collectUnsafeParentClassesFromFile) re-runs on every
-        // refactorFormRequest call — per converter, per traversal pass — so
-        // without this guard the same FQCN is appended dozens of times,
-        // bloating the append-only file and (post mtime-gate) forcing a
-        // re-read on every spurious append. Cross-worker visibility is
-        // unaffected: each worker still writes its newly-detected parents, and
-        // readers pick them up via loadUnsafeParentsFromDisk.
+        // Append each FQCN at most once per process. Detection re-runs per
+        // converter per traversal pass, so without this guard the same FQCN is
+        // appended repeatedly — bloating the append-only file and forcing a
+        // re-read on every spurious append (defeating the mtime gate below).
         if (isset(self::$persistedUnsafeParents[$parentFqcn])) {
             return;
         }
