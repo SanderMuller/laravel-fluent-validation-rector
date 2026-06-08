@@ -1133,6 +1133,7 @@ trait ConvertsValidationRuleStrings
         if (isset(self::$persistedUnsafeParents[$parentFqcn])) {
             return;
         }
+
         self::$persistedUnsafeParents[$parentFqcn] = true;
 
         $path = self::unsafeParentsCachePath();
