@@ -104,8 +104,7 @@ trait ShortCircuitsIrrelevantFiles
         // Hot path: dispatched once per ClassLike/MethodCall/StaticCall/FuncCall
         // node across every relevant file. Precompute the (constant) cache key
         // once per class instead of imploding the 9-needle array on every call.
-        static $cacheKey = null;
-        $cacheKey ??= implode("\0", self::RULE_BEARING_NEEDLES);
+        $cacheKey = self::ruleBearingCacheKey();
 
         $path = $this->getFile()->getFilePath();
 
@@ -122,5 +121,23 @@ trait ShortCircuitsIrrelevantFiles
         }
 
         return self::$fileRelevanceCache[$path][$cacheKey] = false;
+    }
+
+    /** Memoized concatenation of RULE_BEARING_NEEDLES; '' until first computed. */
+    private static string $ruleBearingCacheKey = '';
+
+    /**
+     * The concatenated `RULE_BEARING_NEEDLES` cache key, computed once per
+     * process. Extracted into a `string`-returning helper so the hot-path
+     * caller gets a guaranteed-string array key (the inline `static $k = null;
+     * $k ??= …` form left PHPStan inferring a nullable key).
+     */
+    private static function ruleBearingCacheKey(): string
+    {
+        if (self::$ruleBearingCacheKey === '') {
+            self::$ruleBearingCacheKey = implode("\0", self::RULE_BEARING_NEEDLES);
+        }
+
+        return self::$ruleBearingCacheKey;
     }
 }
