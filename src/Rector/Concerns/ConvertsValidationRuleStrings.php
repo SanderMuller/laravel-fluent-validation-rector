@@ -1130,8 +1130,6 @@ trait ConvertsValidationRuleStrings
             return;
         }
 
-        self::$persistedUnsafeParents[$parentFqcn] = true;
-
         $path = self::unsafeParentsCachePath();
         $fp = fopen($path, 'a');
 
@@ -1139,10 +1137,20 @@ trait ConvertsValidationRuleStrings
             return;
         }
 
+        $line = $parentFqcn . "\n";
         flock($fp, LOCK_EX);
-        fwrite($fp, $parentFqcn . "\n");
+        $written = fwrite($fp, $line);
         flock($fp, LOCK_UN);
         fclose($fp);
+
+        // Mark as persisted only after the full line reached the file. A
+        // transient failure (EMFILE, short write, disk full) leaves the FQCN
+        // unmarked so a later detection retries — preserving the original
+        // every-call-attempt resilience that the cross-worker safety path
+        // relies on, while still deduping the common success case.
+        if ($written === strlen($line)) {
+            self::$persistedUnsafeParents[$parentFqcn] = true;
+        }
     }
 
     /**
