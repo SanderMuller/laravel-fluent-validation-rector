@@ -134,7 +134,149 @@ trait ParsesRulePayloads
             return $this->parseArrayRule($payload);
         }
 
+        if ($payload instanceof Concat) {
+            return $this->parseConcatRule($payload);
+        }
+
         return null;
+    }
+
+    /**
+     * Recognise `'<rule>:' . $expr [. ...]` concatenations for the
+     * pure-field comma-separated family (`required_with`, `prohibits`, …).
+     *
+     * The fluent variadic methods build `'<rule>:' . implode(',', $fields)`,
+     * so passing the ENTIRE post-colon expression as a single field arg
+     * reproduces the exact rule string at runtime — even when the dynamic
+     * tail resolves to a comma-joined list, because re-imploding a one-element
+     * list is a no-op. That equivalence holds only for the pure-field family:
+     * the field-values family (`required_if`, …) can't statically separate
+     * the leading `$field` from trailing values inside a dynamic expression,
+     * so a Concat payload for those bails and stays an escape hatch.
+     *
+     * @return array{0: string, 1: list<Arg>}|null
+     */
+    private function parseConcatRule(Concat $concat): ?array
+    {
+        $operands = $this->flattenConcat($concat);
+
+        $first = $operands[0];
+
+        // The rule name must be a static literal prefix; a fully-dynamic
+        // left operand (`$prefix . ...`) can't be resolved to a rule token.
+        if (! $first instanceof String_) {
+            return null;
+        }
+
+        $colon = strpos($first->value, ':');
+
+        if ($colon === false) {
+            return null;
+        }
+
+        $name = substr($first->value, 0, $colon);
+
+        if (! in_array($name, self::COMMA_SEPARATED_PURE_FIELDS_RULES, true)) {
+            return null;
+        }
+
+        // Reassemble everything after the first colon into the field
+        // expression. A non-empty remainder from the leading literal
+        // (`'required_with:end_' . $suffix`) becomes the left-most operand.
+        $remainder = substr($first->value, $colon + 1);
+
+        $fieldParts = $remainder === '' ? [] : [new String_($remainder)];
+
+        foreach (array_slice($operands, 1) as $operand) {
+            // Structural gate: the dynamic operands bind into
+            // `requiredWith(string ...$fields)`, so only statically-simple,
+            // string-oriented shapes are trusted — an arbitrary expression
+            // (method call, arithmetic, ternary) could produce a non-string
+            // that TypeErrors under the consumer's strict_types, turning
+            // working code into a runtime fault. Bail to the escape hatch
+            // instead. Trusted shapes (string literals, variables, class
+            // constants, enum-case `->value`) mirror the array-form path's
+            // `isSafeCommaSeparatedArg` policy for the same rule family — a
+            // field name is a string by Laravel contract, so a constant /
+            // variable in that slot is treated as one. A `getType()`-based
+            // refinement was evaluated and dropped: Rector's resolver does not
+            // reliably type same-file class constants here, so it would imply
+            // a safety it can't deliver.
+            if (! $this->isSafeConcatFieldOperand($operand)) {
+                return null;
+            }
+
+            $fieldParts[] = $operand;
+        }
+
+        if ($fieldParts === []) {
+            // `'required_with:'` with nothing after the colon — no field.
+            return null;
+        }
+
+        return [$name, [new Arg($this->rebuildConcat($fieldParts))]];
+    }
+
+    /**
+     * Whether a dynamic Concat operand is a trusted, string-oriented field
+     * reference. Accepts string literals, variables, class constants
+     * (`self::FIELD`), `Enum::CASE->value`, and nested Concats of those —
+     * the same shapes the array-form whitelist trusts, minus the numeric /
+     * boolean literals that make no sense as a field name and would risk a
+     * string-typed-param TypeError. Rejects everything else (method calls,
+     * arithmetic, ternaries) so the rewrite stays an escape hatch.
+     */
+    private function isSafeConcatFieldOperand(Expr $expr): bool
+    {
+        if ($expr instanceof String_ || $expr instanceof Variable || $expr instanceof ClassConstFetch) {
+            return true;
+        }
+
+        if ($expr instanceof Concat) {
+            return $this->isSafeConcatFieldOperand($expr->left)
+                && $this->isSafeConcatFieldOperand($expr->right);
+        }
+
+        // `Enum::CASE->value` — PropertyFetch on a ClassConstFetch.
+        return $expr instanceof PropertyFetch
+            && $expr->var instanceof ClassConstFetch
+            && $expr->name instanceof Identifier
+            && $expr->name->toString() === 'value';
+    }
+
+    /**
+     * Flatten a left-associative Concat tree into its left-to-right operands.
+     *
+     * @return non-empty-list<Expr>
+     */
+    private function flattenConcat(Concat $concat): array
+    {
+        $left = $concat->left instanceof Concat
+            ? $this->flattenConcat($concat->left)
+            : [$concat->left];
+
+        $right = $concat->right instanceof Concat
+            ? $this->flattenConcat($concat->right)
+            : [$concat->right];
+
+        return array_merge($left, $right);
+    }
+
+    /**
+     * Rebuild a left-associative Concat chain from an ordered operand list.
+     * A single operand returns verbatim (no wrapping Concat).
+     *
+     * @param  non-empty-list<Expr>  $parts
+     */
+    private function rebuildConcat(array $parts): Expr
+    {
+        $expr = $parts[0];
+
+        foreach (array_slice($parts, 1) as $part) {
+            $expr = new Concat($expr, $part);
+        }
+
+        return $expr;
     }
 
     /**
@@ -289,11 +431,63 @@ trait ParsesRulePayloads
             return $tail === '' ? [] : null;
         }
 
+        // Comma-separated conditional rules in string form
+        // (`'required_with:end_date'` → `->requiredWith('end_date')`). The
+        // array-form path applies a strict static-safety whitelist because
+        // its tail items can be arbitrary expressions; the string form has no
+        // such risk — every segment is a literal split out of the rule string
+        // — so the whitelist is unnecessary here. Pure-field family needs at
+        // least one field; field-values family needs field + at least one
+        // value.
+        if (in_array($name, self::COMMA_SEPARATED_PURE_FIELDS_RULES, true)) {
+            return $this->buildCommaSeparatedArgsFromStringTail($tail, minArity: 1);
+        }
+
+        if (in_array($name, self::COMMA_SEPARATED_FIELD_VALUES_RULES, true)) {
+            return $this->buildCommaSeparatedArgsFromStringTail($tail, minArity: 2);
+        }
+
         // `enum` deliberately has no string-form support in v1 — the
         // class-string would need backslash-escape handling that's out
         // of scope. Returning null lets the rector silently no-op; the
         // user keeps the `->rule('enum:...')` escape hatch.
         return null;
+    }
+
+    /**
+     * Split a comma-separated rule tail into String_ args. Every value is a
+     * static string literal split out of the rule string, so the strict
+     * arg-safety whitelist the array-form path applies
+     * (`isSafeCommaSeparatedArg`) is unnecessary — there's no dynamic
+     * expression to guard. Bails on an empty tail, a below-arity segment
+     * count, or any empty segment (`'required_if:type,'`), which would lower
+     * to an empty `''` field/value the original rule string didn't intend.
+     *
+     * @return list<Arg>|null
+     */
+    private function buildCommaSeparatedArgsFromStringTail(string $tail, int $minArity): ?array
+    {
+        if ($tail === '') {
+            return null;
+        }
+
+        $parts = explode(',', $tail);
+
+        if (count($parts) < $minArity) {
+            return null;
+        }
+
+        $args = [];
+
+        foreach ($parts as $part) {
+            if ($part === '') {
+                return null;
+            }
+
+            $args[] = new Arg(new String_($part));
+        }
+
+        return $args;
     }
 
     /**
