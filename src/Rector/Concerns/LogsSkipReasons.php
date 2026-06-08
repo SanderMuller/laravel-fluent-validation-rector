@@ -106,6 +106,14 @@ trait LogsSkipReasons
      */
     private function logSkip(Class_ $class, string $reason, bool $verboseOnly = false, bool $actionable = true, ?Node $location = null): void
     {
+        // Hot happy-path bail: suppressed verboseOnly skips (the default tier
+        // discards them) fire on every Livewire / already-has-trait class.
+        // Resolving the class name and start line first is wasted work when
+        // the entry won't be written — writeSkipEntry re-checks defensively.
+        if ($verboseOnly && ! self::tierAllowsVerboseOnly($actionable)) {
+            return;
+        }
+
         $className = $class->namespacedName?->toString()
             ?? ($class->name instanceof Identifier ? $class->name->toString() : 'anonymous');
 
@@ -126,6 +134,10 @@ trait LogsSkipReasons
      */
     private function logSkipByName(string $className, string $reason, bool $verboseOnly = false, bool $actionable = true, ?Node $location = null): void
     {
+        if ($verboseOnly && ! self::tierAllowsVerboseOnly($actionable)) {
+            return;
+        }
+
         $line = $location instanceof Node ? self::resolveStartLine($location) : null;
 
         $this->writeSkipEntry($className, $reason, $verboseOnly, $actionable, $line);
