@@ -189,6 +189,38 @@ trait ConvertsValidationRuleArrays
     ];
 
     /**
+     * Conditional rules whose fluent method emits `name:` . <single string arg>
+     * with nothing appended — so feeding a dynamic Concat tail as ONE argument
+     * reproduces the native `'name:' . <tail>` rule string exactly.
+     *
+     * Two safe shapes:
+     *  - pure variadic (`string ...$fields` → `name:` . implode(',', $fields));
+     *    a single arg implodes to itself, no trailing separator.
+     *  - single field (`string $field` → `name:` . $field, optional message
+     *    arg untouched).
+     *
+     * DELIBERATELY EXCLUDES the `*If`/`*Unless` family (`requiredIf`,
+     * `excludeUnless`, `presentIf`, `missingUnless`, …). Those build
+     * `name:` . $field . ',' . serializeValues($values) — the `,` is appended
+     * unconditionally, so a single whole-tail argument (empty `$values`) emits a
+     * spurious trailing comma (`required_if:status,active,`) that Laravel parses
+     * as an extra empty match value, diverging from the native string. Those
+     * rules fall through to the `->rule(<concat>)` escape hatch, which is always
+     * exact.
+     *
+     * @var list<string>
+     */
+    private const array CONCAT_SAFE_CONDITIONAL_RULES = [
+        // pure variadic (`name:` . implode(',', $fields)) — every entry of
+        // PURE_FIELDS_VARIADIC_RULES qualifies; reused so the two stay in sync.
+        ...self::PURE_FIELDS_VARIADIC_RULES,
+        // single field — `name:` . $field (no values appended)
+        'requiredIfAccepted', 'requiredIfDeclined',
+        'prohibitedIfAccepted', 'prohibitedIfDeclined',
+        'excludeWith', 'excludeWithout',
+    ];
+
+    /**
      * Per-type whitelists of methods safe to pass through from Rule:: factory chains.
      *
      * @var array<string, list<string>>
@@ -482,7 +514,144 @@ trait ConvertsValidationRuleArrays
             return $this->wrapInRuleCall($expr, $value);
         }
 
+        // Dynamically-built rule string: `'required_if_accepted:' . $field`.
+        // A Concat always evaluates to a string, so it is a valid rule string
+        // — lower it to the native fluent method when the rule name is
+        // statically determinable, else keep it via the ->rule() escape hatch.
+        if ($value instanceof Concat) {
+            return $this->classifyConcatRuleString($expr, $value, $type);
+        }
+
         return null;
+    }
+
+    /**
+     * Lower a dynamically-built rule string (`'required_if_accepted:' . $field`,
+     * `'regex:' . $pattern`, `'same:' . self::OTHER`) to a fluent method call
+     * when the rule name is a statically-determinable leading literal and the
+     * rule takes the post-colon tail as a single verbatim string argument.
+     * Falls back to the `->rule(<concat>)` escape hatch otherwise.
+     *
+     * Why a Concat is always safe to pass as ONE string argument:
+     *  - A `.` expression is provably string-typed, so it can never bind to a
+     *    conditional method's `Closure|bool` overload — only the field-string
+     *    overload is reachable, matching the native `'name:' . <dynamic>`
+     *    string-rule semantics exactly (no overload-ambiguity bail needed,
+     *    unlike the array-tuple path).
+     *  - Comma-separated rules (`requiredIf`, `requiredIfAccepted`, …)
+     *    reconstitute `name:` . implode(',', $args); passing the whole tail as
+     *    one string yields the identical rule string whether or not the runtime
+     *    value contains commas (`implode(',', ['a,b'])` === `'a,b'`).
+     */
+    private function classifyConcatRuleString(Expr $expr, Concat $concat, string $type): Expr
+    {
+        $operands = $this->flattenConcat($concat);
+        $first = $operands[0];
+
+        // The rule name must live in a leading string literal carrying the
+        // `name:` delimiter — otherwise the rule name isn't statically known
+        // and the whole expression stays in the ->rule() escape hatch.
+        // `parseRulePart` returns a null `args` when there is no colon.
+        if ($first instanceof String_) {
+            $parsed = $this->parseRulePart($first->value);
+            $normalized = $this->normalizeRuleName($parsed['name']);
+
+            if ($parsed['args'] !== null && $parsed['name'] !== '' && $this->isConcatConvertibleRule($type, $normalized)) {
+                $argExpr = $this->rebuildConcatArg($parsed['args'], array_slice($operands, 1));
+
+                if ($argExpr instanceof Expr) {
+                    return new MethodCall($expr, new Identifier($normalized), [new Arg($argExpr)]);
+                }
+            }
+        }
+
+        // Not statically lowerable to a native method — keep the dynamic rule
+        // string verbatim via the escape hatch (`->rule('name:' . $field)`),
+        // which is exactly equivalent to it being a native array element.
+        return $this->wrapInRuleCall($expr, $concat);
+    }
+
+    /**
+     * Whether a rule whose argument arrives as a dynamic Concat tail can be
+     * lowered to a native fluent method. Limited to rules whose fluent method
+     * emits `name:` . <single string arg> with nothing appended, so passing the
+     * whole tail as one argument reconstitutes `name:<tail>` exactly: the
+     * concat-safe conditional subset plus the single-string-argument rules.
+     * Numeric / array-valued rules (`min`, `in`, …) and the `,`-appending
+     * `*If`/`*Unless` family are excluded — see CONCAT_SAFE_CONDITIONAL_RULES.
+     */
+    private function isConcatConvertibleRule(string $type, string $normalized): bool
+    {
+        if (! $this->isModifierValidForType($type, $normalized)) {
+            return false;
+        }
+
+        return in_array($normalized, self::CONCAT_SAFE_CONDITIONAL_RULES, true)
+            || in_array($normalized, self::STRING_ARG_RULES, true)
+            || in_array($normalized, self::SINGLE_STRING_ARG_RULES, true);
+    }
+
+    /**
+     * Flatten a left-associative Concat tree into its operands in source order.
+     * Mirrors `GroupWildcardRulesToEachRector::flattenConcat`.
+     *
+     * @return list<Expr>
+     */
+    private function flattenConcat(Expr $node): array
+    {
+        if ($node instanceof Concat) {
+            return [...$this->flattenConcat($node->left), ...$this->flattenConcat($node->right)];
+        }
+
+        return [$node];
+    }
+
+    /**
+     * Reassemble the rule's argument expression from the post-colon literal
+     * tail (when non-empty) plus the remaining concat operands, folded
+     * left→right.
+     *
+     * String-coercion safety: the original element is a `.` expression, which
+     * coerces every operand to string. The rebuilt argument preserves that
+     * coercion only when it is itself a `Concat` (has a `.`) or a string
+     * literal. A bare single non-literal operand (`'same:' . $field` →
+     * `$field`) would hand the fluent method the raw runtime value — losing
+     * the coercion and risking a `TypeError` against the method's `string`
+     * parameter under `declare(strict_types=1)`. In that one case return null
+     * so the caller keeps the exact original concat via the `->rule(<concat>)`
+     * escape hatch. (Flagged by codex-review, 2026-06-08.)
+     *
+     * @param  list<Expr>  $restOperands
+     */
+    private function rebuildConcatArg(string $tailLiteral, array $restOperands): ?Expr
+    {
+        $parts = [];
+
+        if ($tailLiteral !== '') {
+            $parts[] = new String_($tailLiteral);
+        }
+
+        foreach ($restOperands as $operand) {
+            $parts[] = $operand;
+        }
+
+        if ($parts === []) {
+            return null;
+        }
+
+        // Single operand that isn't a string literal → not provably string-
+        // typed (the `.` coercion is gone). Bail to the escape hatch.
+        if (count($parts) === 1 && ! $parts[0] instanceof String_) {
+            return null;
+        }
+
+        $expr = $parts[0];
+
+        for ($i = 1, $count = count($parts); $i < $count; ++$i) {
+            $expr = new Concat($expr, $parts[$i]);
+        }
+
+        return $expr;
     }
 
     private function classifyStaticCall(Expr $expr, StaticCall $staticCall, string $type): ?Expr
