@@ -2,6 +2,21 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 1.5.1 - 2026-06-08
+
+<!-- verified-sha: df42f00c490c1f07248f5c38939b3a84a9f31234 -->
+Performance release. The rule pipeline does substantially less work per file, and the temporary file used to coordinate cross-worker safety decisions no longer grows without bound across runs. Emitted code is unchanged — conversions are byte-identical.
+
+### Fixed
+
+- **The shared unsafe-parents temp file no longer grows without bound.** The converter rectors coordinate "this parent class is unsafe to convert" decisions across parallel workers through an append-only file under the system temp directory (scoped to the working directory). It was appended to on every detection and re-read in full on nearly every class visited, so over repeated Rector runs it accumulated thousands of duplicate entries — and that growing re-read had become the dominant cost of the FormRequest conversion path. Each parent FQCN is now written at most once per process, and the file is re-parsed only when it has actually changed (gated on its size and modification time), collapsing the steady state to a single `stat`. Cross-worker detection is unchanged, including a retry on a transient write failure so a momentary error can't drop the signal.
+
+### Internal
+
+- Lower per-node overhead across the rule pipeline, with no effect on emitted code: the per-file relevance gate no longer rebuilds its lookup key on every node; the validation converters use a direct identifier comparison instead of the name-resolver call when matching `validate()` / `make()` call sites; and suppressed verbose skip-log entries bail before resolving the class name and line.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/1.5.0...1.5.1
+
 ## 1.5.0 - 2026-06-08
 
 <!-- verified-sha: a235374968f0496bc011b877de9a7c56f469298f -->
@@ -39,6 +54,7 @@ All notable changes to `sandermuller/laravel-fluent-validation-rector` will be d
   'email' => FluentRule::email()->bail()->requiredIf($userEmailEnabled),
   
   
+  
   ```
 - A literal-`null` condition is left untouched. `Rule::requiredIf(null)` is valid Laravel (the condition normalizes to `false`), but the native fluent method is typed `Closure|bool|string`, so rewriting to `->requiredIf(null)` would `TypeError` at runtime. The wrapper is preserved instead.
   
@@ -64,6 +80,7 @@ A multi-argument facade conditional (not valid Laravel usage) is also left as-is
   
   // after
   'role' => FluentRule::field()->nullable()->requiredIf(fn () => $this->isAdmin()),
+  
   
   
   
@@ -127,6 +144,7 @@ FluentRule::field('Agree to TOS')->required()->rule('accepted')
 // After
 FluentRule::accepted()->required()
 FluentRule::accepted('Agree to TOS')->required()
+
 
 
 
