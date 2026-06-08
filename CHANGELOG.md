@@ -2,6 +2,26 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 1.5.0 - 2026-06-08
+
+<!-- verified-sha: a235374968f0496bc011b877de9a7c56f469298f -->
+### Added
+
+- **`ValidationArrayToFluentRuleRector` now converts dynamically-built rule strings.** A rules-array element assembled by concatenation — e.g. `'required_if_accepted:' . $field` — lowers to the native fluent method (`->requiredIfAccepted($field)`) when the rule name is a static leading literal and the rule takes the post-colon tail as a single string argument. Previously any such element bailed the entire array back to its native form.
+  
+  When a native lowering can't be proven safe, the element is kept on a `->rule(<concat>)` escape hatch instead of bailing the whole array — so the surrounding rules still convert. This applies to two cases: a single non-literal operand, where the concatenation's string coercion can't be statically guaranteed (passing the raw value could `TypeError` against the method's `string` parameter under `declare(strict_types=1)`); and the value-appending `requiredIf` / `requiredUnless` / `excludeIf` / `excludeUnless` / `prohibitedIf` / `prohibitedUnless` / `presentIf` / `presentUnless` / `missingIf` / `missingUnless` family, where collapsing the whole tail into one argument would emit a stray trailing comma.
+  
+
+### Fixed
+
+- **`GroupWildcardRulesToEachRector` no longer drops a non-redundant wildcard parent's rules.** When a wildcard group had only fixed children and no wildcard children — e.g. `'address.*' => FluentRule::string()->min(2)` next to `'address.street'` and `'address.city'` — the parent was absorbed and the group folded into `->children([...])`, silently discarding the `address.*` constraint. The group now stays unfolded (with a skip log) so the type-specific parent rule is preserved.
+
+### Internal
+
+- Bumped the `sandermuller/package-boost-php` development dependency to `^1.0`. This is dev-only tooling and does not affect the shipped package.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/1.4.1...1.5.0
+
 ## 1.4.1 - 2026-06-04
 
 <!-- verified-sha: e49a390185949064073baf1e7447c6e40c7342ec -->
@@ -17,6 +37,7 @@ All notable changes to `sandermuller/laravel-fluent-validation-rector` will be d
   
   // after
   'email' => FluentRule::email()->bail()->requiredIf($userEmailEnabled),
+  
   
   ```
 - A literal-`null` condition is left untouched. `Rule::requiredIf(null)` is valid Laravel (the condition normalizes to `false`), but the native fluent method is typed `Closure|bool|string`, so rewriting to `->requiredIf(null)` would `TypeError` at runtime. The wrapper is preserved instead.
@@ -43,6 +64,7 @@ A multi-argument facade conditional (not valid Laravel usage) is also left as-is
   
   // after
   'role' => FluentRule::field()->nullable()->requiredIf(fn () => $this->isAdmin()),
+  
   
   
   ```
@@ -105,6 +127,7 @@ FluentRule::field('Agree to TOS')->required()->rule('accepted')
 // After
 FluentRule::accepted()->required()
 FluentRule::accepted('Agree to TOS')->required()
+
 
 
 
