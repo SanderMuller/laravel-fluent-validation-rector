@@ -1323,7 +1323,7 @@ CODE_SAMPLE
         // Absorb the wildcard parent (items.*) only when redundant. When
         // $eachScalar is set we've already consumed it above.
         if ($eachScalar === null && $group['wildcardParentKey'] !== null && isset($entries[$group['wildcardParentKey']])) {
-            if ($eachItems !== [] && ! $this->isRedundantWildcardParent($entries[$group['wildcardParentKey']]['value'])) {
+            if (! $this->isRedundantWildcardParent($entries[$group['wildcardParentKey']]['value'])) {
                 $this->logGroupSkip(sprintf(
                     "wildcard parent '%s' has type-specific rules that would be lost in grouping",
                     $group['wildcardParentKey'],
