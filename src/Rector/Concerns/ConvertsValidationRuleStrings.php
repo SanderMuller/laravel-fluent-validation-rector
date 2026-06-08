@@ -941,6 +941,20 @@ trait ConvertsValidationRuleStrings
     /** Whether the filesystem scan has been performed in this process */
     private static bool $filesystemScanDone = false;
 
+    /** Memoized shared temp-file path (getcwd + hash computed once per process). */
+    private static ?string $unsafeParentsCachePathMemo = null;
+
+    /**
+     * (mtime, size) of the shared temp file at the last successful read.
+     * `loadUnsafeParentsFromDisk` is hit on nearly every class on every
+     * cache miss; gating the re-parse on this snapshot turns the steady
+     * state (file unchanged since our last read) into a single stat call
+     * instead of a full read + explode of an ever-growing append log.
+     *
+     * @var array{mtime: int, size: int}
+     */
+    private static array $unsafeParentsDiskState = ['mtime' => -1, 'size' => -1];
+
     /**
      * Build the unsafe-parent skip-log message. When the in-process detail
      * map has captured a specific descendant + method + op, names them so
@@ -1119,9 +1133,26 @@ trait ConvertsValidationRuleStrings
      */
     private function loadUnsafeParentsFromDisk(): void
     {
-        $path = self::unsafeParentsCachePath();
+        $path = self::$unsafeParentsCachePathMemo ??= self::unsafeParentsCachePath();
 
-        if (! file_exists($path)) {
+        // Drop PHP's stat cache for this path so a concurrent worker's append
+        // (parallel mode) is visible — preserves the cross-worker race-close
+        // the full re-read previously provided.
+        clearstatcache(true, $path);
+
+        $stat = @stat($path);
+
+        if ($stat === false) {
+            // File doesn't exist yet — nothing persisted by any worker.
+            self::$unsafeParentsDiskState = ['mtime' => -1, 'size' => -1];
+
+            return;
+        }
+
+        // Unchanged since our last read → the in-memory set is already current.
+        // This is the hot steady state: one stat call, no read/parse.
+        if ($stat['mtime'] === self::$unsafeParentsDiskState['mtime']
+            && $stat['size'] === self::$unsafeParentsDiskState['size']) {
             return;
         }
 
@@ -1136,6 +1167,8 @@ trait ConvertsValidationRuleStrings
                 self::$unsafeParentClasses[$fqcn] = true;
             }
         }
+
+        self::$unsafeParentsDiskState = ['mtime' => $stat['mtime'], 'size' => $stat['size']];
     }
 
     /**
