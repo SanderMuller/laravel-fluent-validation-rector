@@ -941,6 +941,14 @@ trait ConvertsValidationRuleStrings
     /** Whether the filesystem scan has been performed in this process */
     private static bool $filesystemScanDone = false;
 
+    /**
+     * FQCNs this process has already appended to the shared temp file.
+     * Bounds the append-only file to one line per unsafe parent per process.
+     *
+     * @var array<string, true>
+     */
+    private static array $persistedUnsafeParents = [];
+
     /** Memoized shared temp-file path (getcwd + hash computed once per process). */
     private static ?string $unsafeParentsCachePathMemo = null;
 
@@ -1114,6 +1122,19 @@ trait ConvertsValidationRuleStrings
      */
     private function persistUnsafeParent(string $parentFqcn): void
     {
+        // Append each FQCN to the shared file at most once per process. The
+        // detection path (collectUnsafeParentClassesFromFile) re-runs on every
+        // refactorFormRequest call — per converter, per traversal pass — so
+        // without this guard the same FQCN is appended dozens of times,
+        // bloating the append-only file and (post mtime-gate) forcing a
+        // re-read on every spurious append. Cross-worker visibility is
+        // unaffected: each worker still writes its newly-detected parents, and
+        // readers pick them up via loadUnsafeParentsFromDisk.
+        if (isset(self::$persistedUnsafeParents[$parentFqcn])) {
+            return;
+        }
+        self::$persistedUnsafeParents[$parentFqcn] = true;
+
         $path = self::unsafeParentsCachePath();
         $fp = fopen($path, 'a');
 
