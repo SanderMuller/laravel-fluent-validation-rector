@@ -23,7 +23,6 @@ testbench.yaml
 composer.lock
 .phpunit.result.cache
 
-RELEASE_NOTES*.md
 SPEC_*.md
 PEER_FEEDBACK.md
 
