@@ -5,7 +5,7 @@ namespace SanderMuller\FluentValidationRector\Tests\GroupWildcardRulesToEach\Fix
 use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\FluentRule;
 
-// 0.20.0 mijntp dogfood pin: `'literal.' . CONST` concat keys are
+// 0.20.0 consumer dogfood pin: `'literal.' . CONST` concat keys are
 // genuinely out-of-scope for the wildcard-prefix fold (the prefix
 // isn't `'*.'`). Pre-0.20.0 the skip message read "concat key too
 // complex to parse for grouping" which inverted which side was the

@@ -16,7 +16,7 @@ use SanderMuller\FluentValidationRector\Internal\Diagnostics;
  *
  * Version resolution must stay sourced from a single path
  * (`Composer\InstalledVersions::getPrettyVersion()`) so cross-version
- * triage signals stay consistent. Mijntp 0.20.x finding #5 prompted
+ * triage signals stay consistent. A 0.20.x consumer dogfood finding prompted
  * the audit; this test pins the resolution path so a future refactor
  * (e.g. reading composer.json directly, hard-coded constant) is
  * caught at CI time.

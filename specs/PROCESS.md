@@ -83,7 +83,7 @@ method body, the anchor must be defined explicitly:
 
 ### Origin
 
-0.19.1 P0 (RuleSet::from descent). hihaho + mijntp dogfood both
+0.19.1 (RuleSet::from descent). Two consumer dogfood codebases both
 flagged false-positive multi-return detection on their codebases when
 naive grep counted closure-internal `return` tokens. Direct-child
 anchoring is the right level.
@@ -106,7 +106,7 @@ Before widening the predicate:
 
 ### Origin
 
-0.19.1 P1. Initial peer report named the predicate as the bug; static
+0.19.1. Initial peer report named the predicate as the bug; static
 fixture against `'*' => FluentRule::array()->children([Array_])`
 passed clean. Real bug is downstream of the predicate. Premature
 predicate widening would have papered over the real cause.
@@ -138,7 +138,7 @@ that directory.
 
 ### Origin
 
-0.19.1 P1 diagnosis. The initial reproduction fixture under
+0.19.1 diagnosis. The initial reproduction fixture under
 `tests/FullPipeline/` masked the bug for 30 minutes because POLISH
 wasn't loaded — `UpdateRulesReturnTypeDocblockRector` simply didn't
 run, making it impossible to tell whether the predicate fix had
@@ -183,11 +183,11 @@ For each gating-signal dogfood ask:
 
 ### Origin
 
-0.20.1 → 0.21.0 cycle on `ServiceProviderAdminPage` false-positive.
-The 0.20.1 ping pre-defined the three outcomes; mijntp's reply
+0.20.1 → 0.21.0 cycle on `SettingsAdminPage` false-positive.
+The 0.20.1 ping pre-defined the three outcomes; Consumer B's reply
 unambiguously surfaced "concerning case" → escalated 0.21.0
 data-flow tightening to 1.0 RC blocker. The 0.21.0 ping reused the
-same matrix; mijntp reported "best case" → closed the work item
+same matrix; Consumer B reported "best case" → closed the work item
 cleanly.
 
 ## 6. Lens-diversity invariant on dogfood asks
@@ -230,13 +230,13 @@ When pinging for a release verification:
 ### Origin
 
 The 0.20.x cycle surfaced findings that NO lens caught alone:
-collectiq's cold-consumer lens caught FQN-leak + skip-message-
-wiring-ambiguity; mijntp's skip-log signal-to-noise lens caught
-unsafe-parent-on-Filament-pages noise; hihaho's deep-dogfood lens
-caught the 12 spread/method-chain `parent::rules()` shapes that
-empirically locked OQ #1 = (a). Three lenses produced three
-different findings → three different fixes → 0.21.0 ships with a
-heuristic that no single-lens audit could have validated.
+Consumer C's cold-consumer lens caught FQN-leak + skip-message-
+wiring-ambiguity; Consumer B's skip-log signal-to-noise lens caught
+unsafe-parent-on-Filament-pages noise; Consumer A's deep-dogfood lens
+caught the spread/method-chain `parent::rules()` shapes that
+empirically locked the relevant open-question resolution. Three lenses
+produced three different findings → three different fixes → 0.21.0
+ships with a heuristic that no single-lens audit could have validated.
 
 ## 7. Saturation criteria for 1.0 RC readiness
 
@@ -275,9 +275,9 @@ genuinely converged on the project's behavior.
 
 ### Origin
 
-0.21.0 → 0.21.1 cycle. mijntp reported "1.0 RC ready from my side"
+0.21.0 → 0.21.1 cycle. Consumer B reported "1.0 RC ready from my side"
 on 0.21.0 — first formal saturation declaration from any consumer
-lens. Hihaho confirmed on 0.21.1 — second lens converged. Collectiq
+lens. Consumer A confirmed on 0.21.1 — second lens converged. Consumer C
 converged at the same time via the cross-lens line-resolution
 finding being fixed in 0.21.1. The N=2 criterion is satisfied for
 the 0.21.x release pair across the three-lens panel.
@@ -318,7 +318,7 @@ the expected-state-reference role is not.
 
 ### Origin
 
-Hihaho 0.21.0 dogfood disclosure (2026-04-28): all
+Consumer A 0.21.0 dogfood disclosure (2026-04-28): all
 `.dogfood-baselines/0.16-0.20.x/*` JSON outputs reflected working-
 tree state never committed to branch HEAD. Audit conclusions held
 because peer-shared SHAPES (PHP source pasted in messages) drove
@@ -357,10 +357,10 @@ next-minor cycle.
 
 ### Origin
 
-0.20.0 → 0.20.1 (closure-scope fix shipped within hours of mijntp's
+0.20.0 → 0.20.1 (closure-scope fix shipped within hours of Consumer B's
 finding). 0.21.0 → 0.21.1 (Class\_ line-resolution fix shipped
-within ~10 minutes of collectiq's finding). Both reinforced the
-"small findings ship fast" norm; hihaho's arc-retrospective on
+within ~10 minutes of Consumer C's finding). Both reinforced the
+"small findings ship fast" norm; Consumer A's arc-retrospective on
 0.21.0 explicitly cited fast turnaround as one of four reasons the
 release sequence worked cleanly.
 
@@ -461,14 +461,14 @@ fully.
 ### Origin
 
 Three Pest-flake observations across the 0.22.x → 1.1.0 release
-cadence (2026-04-29). Mijntp's 1.0 adversarial pass surfaced the
-hypothetical rector-worker shape (Q1 unverified-coverage gap) at
+cadence (2026-04-29). A consumer's 1.0 adversarial pass surfaced the
+hypothetical rector-worker shape (an unverified-coverage gap) at
 the same time. Both shapes share the parallel-mode-on-fs-race-
 prone-conditions surface category. Candidate-pen entry banked
-mijntp's observations + dogfood-side mitigation proposal; 1.1.0
+that consumer's observations + dogfood-side mitigation proposal; 1.1.0
 fix-commit's third Pest-flake occurrence + N=2 stopping-rule
 satisfaction promoted the entry to numbered §10. Promotion patch
-explicitly surfaced as a process-meta decision (mijntp's
+explicitly surfaced as a process-meta decision (the consumer's
 gate-discipline call: "won't auto-promote on momentum, even though
 the evidence is there") rather than landing as a side-effect of
 the 1.1.0 release cycle.
@@ -777,8 +777,8 @@ broadens and finds new gaps.
 **Operational implication for the panel-ledger framing**: every
 "lens BEST" entry in saturation evidence should explicitly
 document the lens's *audited scope* alongside its methodology,
-not just its methodology. "collectiq BEST on PUBLIC_API.md
-cold-read" is a stronger claim than "collectiq BEST on
+not just its methodology. "Consumer C BEST on PUBLIC_API.md
+cold-read" is a stronger claim than "Consumer C BEST on
 cold-consumer surface" — the first is verifiable, the second
 implicitly claims surface-coverage that the methodology may not
 have actually tested.

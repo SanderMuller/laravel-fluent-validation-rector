@@ -6,20 +6,19 @@ use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidation\HasFluentRules;
 
-// 0.19.1 peer-sourced fixture: hihaho dogfood synthetic
-// `Tests\Dogfood\SyntheticInteractionGroupRequestPlainArray`
-// (.dogfood-baselines/0.19.0-hihaho-acceptance/dryrun-synthetic-plain-array.json
+// 0.19.1 peer-sourced fixture: consumer dogfood synthetic
+// `Tests\Dogfood\SyntheticTagRequestPlainArray`
+// (synthetic-plain-array dry-run
 // truth-file). Bare-array variant — pins the canonical
 // `'*' => FluentRule::array()->children([CONST => …])` fold AND
 // the post-fold UpdateRulesReturnTypeDocblockRector narrow as a
-// regression guard against the `App\Models\InteractionGroup` →
+// regression guard against the model →
 // `*.NAME / *.SORT_ORDER` shape the consumer ships.
 //
-// Const host substituted per peer guidance: hihaho uses
-// `App\Models\InteractionGroup`; this fixture uses a synthetic
-// `Sandbox\InteractionGroup` shape locally so the fixture is
+// Const host substituted per peer guidance; this fixture uses a synthetic
+// `Sandbox\Tag` shape locally so the fixture is
 // self-contained.
-final class SyntheticInteractionGroup
+final class SyntheticTag
 {
     public const string NAME = 'name';
 
@@ -33,8 +32,8 @@ final class PeerSyntheticPlainArrayRequest extends FormRequest
     public function rules(): array
     {
         return [
-            '*.' . SyntheticInteractionGroup::NAME => FluentRule::string()->nullable()->max(255),
-            '*.' . SyntheticInteractionGroup::SORT_ORDER => FluentRule::integer()->nullable()->min(0),
+            '*.' . SyntheticTag::NAME => FluentRule::string()->nullable()->max(255),
+            '*.' . SyntheticTag::SORT_ORDER => FluentRule::integer()->nullable()->min(0),
         ];
     }
 }
@@ -50,20 +49,19 @@ use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidation\HasFluentRules;
 
-// 0.19.1 peer-sourced fixture: hihaho dogfood synthetic
-// `Tests\Dogfood\SyntheticInteractionGroupRequestPlainArray`
-// (.dogfood-baselines/0.19.0-hihaho-acceptance/dryrun-synthetic-plain-array.json
+// 0.19.1 peer-sourced fixture: consumer dogfood synthetic
+// `Tests\Dogfood\SyntheticTagRequestPlainArray`
+// (synthetic-plain-array dry-run
 // truth-file). Bare-array variant — pins the canonical
 // `'*' => FluentRule::array()->children([CONST => …])` fold AND
 // the post-fold UpdateRulesReturnTypeDocblockRector narrow as a
-// regression guard against the `App\Models\InteractionGroup` →
+// regression guard against the model →
 // `*.NAME / *.SORT_ORDER` shape the consumer ships.
 //
-// Const host substituted per peer guidance: hihaho uses
-// `App\Models\InteractionGroup`; this fixture uses a synthetic
-// `Sandbox\InteractionGroup` shape locally so the fixture is
+// Const host substituted per peer guidance; this fixture uses a synthetic
+// `Sandbox\Tag` shape locally so the fixture is
 // self-contained.
-final class SyntheticInteractionGroup
+final class SyntheticTag
 {
     public const string NAME = 'name';
 
@@ -80,8 +78,8 @@ final class PeerSyntheticPlainArrayRequest extends FormRequest
     public function rules(): array
     {
         return ['*' => FluentRule::array()->children([
-            SyntheticInteractionGroup::NAME => FluentRule::string()->nullable()->max(255),
-            SyntheticInteractionGroup::SORT_ORDER => FluentRule::integer()->nullable()->min(0),
+            SyntheticTag::NAME => FluentRule::string()->nullable()->max(255),
+            SyntheticTag::SORT_ORDER => FluentRule::integer()->nullable()->min(0),
         ])];
     }
 }

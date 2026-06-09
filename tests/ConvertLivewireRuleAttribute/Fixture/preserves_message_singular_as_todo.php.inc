@@ -5,7 +5,7 @@ namespace SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute
 use Livewire\Attributes\Validate;
 use Livewire\Component;
 
-final class ReportContentButton extends Component
+final class SaveSettingsButton extends Component
 {
     #[Validate('required', message: 'Please select a category.')]
     public string $category = '';
@@ -25,7 +25,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
 
-final class ReportContentButton extends Component
+final class SaveSettingsButton extends Component
 {
     #[Validate]
     public string $category = '';

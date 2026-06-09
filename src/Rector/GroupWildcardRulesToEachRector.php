@@ -249,7 +249,7 @@ CODE_SAMPLE
         // whose parent class postprocesses `rulesWithoutPrefix()`
         // output (e.g. prefix-prepend walks). The fold's nested-key
         // shape doesn't round-trip through such postprocessors.
-        // Surfaced on hihaho's JsonAdaptiveSubjectImportValidator,
+        // Surfaced on a downstream consumer's ArticleImportValidator,
         // 2026-04-27. Skip-and-log so the user knows why.
         if (! $this->qualifiesForShapeChange($class)) {
             $this->logSkip(
@@ -298,7 +298,7 @@ CODE_SAMPLE
                     // Grouping flat wildcards into `array()->each(...)` changes the
                     // terminal Rule subclass (e.g. StringRule → ArrayRule), which
                     // invalidates narrow author-written `@return` annotations. See
-                    // NormalizesRulesDocblock for rationale; mijntp's 0.4.14 run
+                    // NormalizesRulesDocblock for rationale; a consumer's 0.4.14 run
                     // surfaced 5 production files with this exact shape.
                     $this->normalizeRulesDocblockIfStale($method);
                 }
@@ -530,9 +530,9 @@ CODE_SAMPLE
      *   → prefixId: '__concat_self::INTERACTIONS__'
      *
      * **Kind `string_prefix_const_suffix`** — new in 0.19, peer-shared:
-     *   `'*.' . InteractionGroup::NAME`
+     *   `'*.' . Tag::NAME`
      *   → prefix: '*.'
-     *   → constExpr: ClassConstFetch(InteractionGroup, NAME)
+     *   → constExpr: ClassConstFetch(Tag, NAME)
      *
      * The two kinds drive different fold output paths in the
      * indexer/grouper/emitter chain. The new kind folds to
@@ -547,7 +547,7 @@ CODE_SAMPLE
      * Specific failure reason for a concat key that `parseConcatKey()`
      * couldn't parse. Walks the same flatten + classify path as the parser,
      * but returns a consumer-actionable string per failure kind:
-     *  - `'literal.' . CONST` — non-wildcard literal prefix (mijntp-shape).
+     *  - `'literal.' . CONST` — non-wildcard literal prefix (consumer-shape).
      *    Wraps the actual literal prefix in single quotes so the consumer
      *    can grep for it.
      *  - `'*.' . CONST . '.suffix'` — multi-part suffix in wildcard concat.
@@ -555,7 +555,7 @@ CODE_SAMPLE
      *  - `$var . '.' . CONST` — variable or method-call part (non-static).
      *
      * Each kind has a different remediation, so the message reflects which
-     * one fired. mijntp dogfood (2026-04-27) caught the original message
+     * one fired. A consumer dogfood run (2026-04-27) caught the original message
      * inverting which side was the disqualifier on the literal-prefix case.
      */
     private function describeConcatKeyFailure(Concat $concat): string
@@ -1242,7 +1242,7 @@ CODE_SAMPLE
             // field() doesn't support each()/children() — only array() and
             // field() do", which reads contradictory because `field()` IS one
             // of the supported children() factories — it just doesn't support
-            // each(). Split per-case for accuracy. (0.20.0 hihaho dogfood
+            // each(). Split per-case for accuracy. (0.20.0 consumer dogfood
             // 2026-04-27.)
             $reason = $needsEach
                 ? sprintf("parent factory %s() doesn't support each() — only array() does (parent: '%s')", $factory, $parentKey)

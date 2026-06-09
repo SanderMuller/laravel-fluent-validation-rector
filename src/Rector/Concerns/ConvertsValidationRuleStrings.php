@@ -292,7 +292,7 @@ trait ConvertsValidationRuleStrings
      * or any subclass through intermediate base classes.
      *
      * Instead of checking the parent class name (which misses intermediate classes
-     * like SessionRequest → PlayerAjaxRequest → FormRequest), we detect any class
+     * like BaseFormRequest → PostAjaxRequest → FormRequest), we detect any class
      * that has a rules() method with array return type.
      */
     private function refactorFormRequest(ClassLike $classLike): ?ClassLike
@@ -345,12 +345,12 @@ trait ConvertsValidationRuleStrings
         // irreducible noise. If the class has nothing the rector would
         // convert anyway (no rules() / no #[FluentRules] / no auto-detect-
         // qualified rules-shaped method), suppress the skip — it's noise,
-        // not actionable diagnostic. Surfaced via mijntp 0.20.1 dogfood:
-        // 9 Filament-Page descendants of `ServiceProviderAdminPage`, none
+        // not actionable diagnostic. Surfaced via a consumer 0.20.1 dogfood:
+        // several Filament-Page descendants of a shared admin-page base, none
         // with rules-bearing methods, all generating noise skips.
         //
         // NOTE: A `#[FluentRules]` audit-assertion bypass at this site was
-        // considered (mijntp finding #43) but conflicts with the pinned
+        // considered (a consumer finding) but conflicts with the pinned
         // design in `skip_attributed_method_when_subclass_manipulates.php.inc`
         // where parent-safety explicitly wins over the per-method attribute.
         // The semantic distinction (audit-safety on the method body itself
@@ -415,7 +415,7 @@ trait ConvertsValidationRuleStrings
                 // Body mutation may have invalidated a narrow `@return` annotation
                 // written against the pre-conversion rule shape. Normalize now,
                 // before Pint touches the file — see NormalizesRulesDocblock for
-                // the rationale and mijntp's 0.4.14 finding.
+                // the rationale and a consumer's 0.4.14 finding.
                 $this->normalizeRulesDocblockIfStale($classMethod);
             }
         }
@@ -502,8 +502,8 @@ trait ConvertsValidationRuleStrings
      * Livewire wrapper components, etc.) that qualify via ancestry but
      * declare no validation rules — emitting the unsafe-parent skip on
      * such a class generates pure noise: there's nothing the rector would
-     * convert anyway. Surfaced via mijntp 0.20.1 dogfood
-     * (`ServiceProviderAdminPage` + 9 Filament-Page descendants).
+     * convert anyway. Surfaced via a consumer 0.20.1 dogfood
+     * (a shared admin-page base + several Filament-Page descendants).
      */
     private function hasRulesBearingSurface(Class_ $class): bool
     {
@@ -635,8 +635,8 @@ trait ConvertsValidationRuleStrings
                 // function (ArrayRule $r): ArrayRule { … })` shapes
                 // false-positive: the outer parent::*() coexists with
                 // the closure-body's array ops, but they're unrelated.
-                // hihaho 0.20.0 dogfood (2026-04-28) caught this on
-                // `UpdateQuestionRequest::rules()`.
+                // a consumer 0.20.0 dogfood (2026-04-28) caught this on
+                // `UpdatePostRequest::rules()`.
                 if ($node instanceof Closure
                     || $node instanceof ArrowFunction
                     || $node instanceof Function_
@@ -733,14 +733,14 @@ trait ConvertsValidationRuleStrings
      * body, regardless of whether the array op operated on the parent's
      * return value — generating false positives on real-world Filament/
      * Livewire codebases where unrelated `parent::canAccess()` +
-     * `array_map($users)` shapes coexist (mijntp 0.20.1 dogfood:
-     * `ServiceProviderAdminPage`).
+     * `array_map($users)` shapes coexist (a consumer 0.20.1 dogfood on
+     * a shared admin-page base).
      *
-     * Direct-only depth is empirically justified: hihaho's 12
+     * Direct-only depth is empirically justified: a consumer's
      * `parent::rules()` usages are all spread (`[...parent::rules(), …]`)
      * or method-chain (`parent::rules()->modify(…)`), neither of which
-     * is an array op as classified by `matchArrayManipulationOp`. Mijntp
-     * + collectiq have zero `parent::rules()` references at all. Aliased
+     * is an array op as classified by `matchArrayManipulationOp`. Multiple
+     * consumer codebases have zero `parent::rules()` references at all. Aliased
      * shapes (`$base = parent::rules(); array_merge($base, …)`) don't
      * exist in any audited consumer codebase. Reopen-on-consumer-signal
      * pattern reserves full alias trace (b)/(c) for future need.
@@ -911,7 +911,7 @@ trait ConvertsValidationRuleStrings
             return $funcName . '()';
         }
 
-        // 0.20.0 mijntp catch: Laravel's `Arr::except()` / `Arr::only()` and
+        // 0.20.0 consumer catch: Laravel's `Arr::except()` / `Arr::only()` and
         // similar `Illuminate\Support\Arr` helpers are the same hazard class
         // as `array_*` free functions but use static-call shape.
         if ($node instanceof StaticCall
@@ -975,7 +975,7 @@ trait ConvertsValidationRuleStrings
      * The hedge matters: the detector flags a parent unsafe when ANY
      * descendant method has BOTH a `parent::*()` call AND an array op,
      * even if the array op doesn't operate on the parent's return value.
-     * mijntp 2026-04-27 dogfood caught this on a Filament base class
+     * A consumer's 2026-04-27 dogfood caught this on a Filament base class
      * with `parent::canAccess()` + unrelated `array_map()` in the same
      * method. Naming the offender lets the consumer verify; hedging
      * avoids overclaiming when the detail map is empty.

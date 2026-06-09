@@ -36,7 +36,7 @@ final class ParseConcatKeyTest extends TestCase
     public function testNewShapePreservesClassConstFetchIdentity(): void
     {
         $literal = new String_('*.');
-        $constFetch = new ClassConstFetch(new Name('App\\Models\\InteractionGroup'), new Identifier('NAME'));
+        $constFetch = new ClassConstFetch(new Name('App\\Models\\Tag'), new Identifier('NAME'));
         $concat = new Concat($literal, $constFetch);
 
         $result = $this->invokeParseConcatKey($concat);

@@ -225,8 +225,8 @@ trait QualifiesForRulesProcessing
      * postprocessor's prepend-walk, which then sees nested keys as
      * top-level fields with int indices.
      *
-     * Hihaho 0.17.0 dogfood, 2026-04-27, surfaced this on
-     * `JsonAdaptiveSubjectImportValidator`: 5/5 of its tests failed
+     * A consumer's 0.17.0 dogfood, 2026-04-27, surfaced this on
+     * `ArticleImportValidator`: 5/5 of its tests failed
      * after `GroupWildcardRulesToEachRector` produced a structurally
      * correct fold that broke the prefix-postprocessor chain. The
      * predicate exists to refuse shape changes on these shapes.

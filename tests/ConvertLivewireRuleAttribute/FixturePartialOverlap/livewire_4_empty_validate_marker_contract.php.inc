@@ -5,7 +5,7 @@ namespace SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute
 use Livewire\Attributes\Validate;
 use Livewire\Component;
 
-// **Livewire 4 runtime contract** (collectiq dogfood 2026-04-26 follow-up).
+// **Livewire 4 runtime contract** (consumer dogfood 2026-04-26 follow-up).
 //
 // Under `OVERLAP_BEHAVIOR_PARTIAL`, when a property's `#[Validate('rule')]`
 // is converted to `rules()`, the rector preserves an empty `#[Validate]`
@@ -56,7 +56,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
 
-// **Livewire 4 runtime contract** (collectiq dogfood 2026-04-26 follow-up).
+// **Livewire 4 runtime contract** (consumer dogfood 2026-04-26 follow-up).
 //
 // Under `OVERLAP_BEHAVIOR_PARTIAL`, when a property's `#[Validate('rule')]`
 // is converted to `rules()`, the rector preserves an empty `#[Validate]`

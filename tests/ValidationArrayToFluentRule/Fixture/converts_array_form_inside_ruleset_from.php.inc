@@ -7,8 +7,8 @@ use Illuminate\Validation\Rule;
 use SanderMuller\FluentValidation\RuleSet;
 
 // 1.1.0 fixture (TDD pre-implementation): array-form conversion
-// inside `RuleSet::from([...])` wrapper. Mirrors mijntp's
-// `AttachUserToCompanyAction` shape directly — array-form rule lists
+// inside `RuleSet::from([...])` wrapper. Mirrors a downstream consumer's
+// action-class shape directly — array-form rule lists
 // with mixed string rules and `Rule::*` factory calls.
 //
 // Pre-1.1.0 the wrapper case silently skips. Post-1.1.0 the inner
@@ -54,8 +54,8 @@ use Illuminate\Validation\Rule;
 use SanderMuller\FluentValidation\RuleSet;
 
 // 1.1.0 fixture (TDD pre-implementation): array-form conversion
-// inside `RuleSet::from([...])` wrapper. Mirrors mijntp's
-// `AttachUserToCompanyAction` shape directly — array-form rule lists
+// inside `RuleSet::from([...])` wrapper. Mirrors a downstream consumer's
+// action-class shape directly — array-form rule lists
 // with mixed string rules and `Rule::*` factory calls.
 //
 // Pre-1.1.0 the wrapper case silently skips. Post-1.1.0 the inner

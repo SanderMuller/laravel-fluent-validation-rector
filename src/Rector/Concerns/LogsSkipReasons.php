@@ -150,7 +150,7 @@ trait LogsSkipReasons
      * "unknown" sentinel; we convert to null so the caller can omit
      * the line from the skip-log entry rather than print `:-1`.
      *
-     * 0.21.1 Class_-resolution fix (collectiq dogfood, 2026-04-28):
+     * 0.21.1 Class_-resolution fix (consumer dogfood, 2026-04-28):
      * `Class_::getStartLine()` returns the position of the first
      * attached token — which for classes with `#[Layout]` attributes
      * returns the attribute line, with attached docblocks returns the
@@ -158,7 +158,7 @@ trait LogsSkipReasons
      * statements via attached whitespace token positions. Result:
      * the `:line` suffix on class-wide skips landed on use-imports,
      * trait-use blocks, or class-level attributes ~40% of the time on
-     * collectiq's surface. Special-case `Class_` to use the
+     * a consumer's surface. Special-case `Class_` to use the
      * Identifier's position (`$class->name->getStartLine()`) — the
      * Identifier always sits on the `class Foo` declaration line
      * because that's where the name token literally appears in source.
@@ -247,7 +247,7 @@ trait LogsSkipReasons
      * window for the sentinel check to be reliable.
      *
      * Without this, per-process static flags cause later workers to
-     * truncate entries written by earlier workers — observed by mijntp
+     * truncate entries written by earlier workers — observed by a consumer
      * under `withParallel(300, 15, 15)` as a deterministic data loss
      * where only the last-writing worker's entries survived.
      */
@@ -311,7 +311,7 @@ trait LogsSkipReasons
             // the first worker already appended. `flock(LOCK_UN)` is POSIX
             // advisory-only and does NOT imply a buffer flush; `fclose`
             // implicitly flushes but runs in finally, i.e. AFTER unlock.
-            // Caught by mijntp: under `withParallel()` on macOS/APFS the
+            // Caught by a consumer: under `withParallel()` on macOS/APFS the
             // unflushed window was wide enough to fire 100% of the time on
             // small file counts (2-file bail-only runs produced zero log
             // output across 3 consecutive runs).

@@ -11,7 +11,7 @@ use SanderMuller\FluentValidation\RuleSet;
 // the converter visits any `RuleSet::from([Array_])` static call
 // regardless of surrounding-method-name qualification.
 //
-// Mijntp's exact `AttachUserToCompanyAction` shape: inline assignment
+// A downstream consumer's exact action-class shape: inline assignment
 // + chain-method call + ->safe() retrieval. Pre-1.1.0 silently
 // no-ops. Post-1.1.0 inner Array_ converts; outer chain stays
 // verbatim.
@@ -60,7 +60,7 @@ use SanderMuller\FluentValidation\RuleSet;
 // the converter visits any `RuleSet::from([Array_])` static call
 // regardless of surrounding-method-name qualification.
 //
-// Mijntp's exact `AttachUserToCompanyAction` shape: inline assignment
+// A downstream consumer's exact action-class shape: inline assignment
 // + chain-method call + ->safe() retrieval. Pre-1.1.0 silently
 // no-ops. Post-1.1.0 inner Array_ converts; outer chain stays
 // verbatim.

@@ -12,7 +12,7 @@ use Rector\Testing\PHPUnit\AbstractRectorTestCase;
  * additive post-migration cleanup set (README §Sets); this test
  * pins the contract for consumers who follow the docs and load both.
  *
- * 0.19.1 origin: hihaho dogfood reported the docblock-narrow rector
+ * 0.19.1 origin: a consumer dogfood run reported the docblock-narrow rector
  * skipping post-fold output. The FullPipeline test (ALL only) didn't
  * cover this because POLISH wasn't loaded; this test does.
  */

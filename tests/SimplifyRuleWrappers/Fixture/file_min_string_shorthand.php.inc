@@ -12,7 +12,7 @@ class FileMinStringShorthand
         // The literal coercion preserves non-numeric tokens as strings.
         return [
             'avatar' => FluentRule::file()->rule('min:1'),
-            'video' => FluentRule::file()->rule('max:50mb'),
+            'attachment' => FluentRule::file()->rule('max:50mb'),
         ];
     }
 }
@@ -33,7 +33,7 @@ class FileMinStringShorthand
         // The literal coercion preserves non-numeric tokens as strings.
         return [
             'avatar' => FluentRule::file()->min(1),
-            'video' => FluentRule::file()->max('50mb'),
+            'attachment' => FluentRule::file()->max('50mb'),
         ];
     }
 }

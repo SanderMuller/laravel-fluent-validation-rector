@@ -12,7 +12,7 @@ use SanderMuller\FluentValidation\FluentRule;
 // root and matches FluentRule, so the @return narrows correctly.
 // Pre-investigation peer report suggested the predicate was bailing
 // on the MethodCall shape; turned out to be a separate issue (the
-// fold didn't run on JsonAdaptive because GroupWildcard's gate
+// fold didn't run on ArticleImport because GroupWildcard's gate
 // fixed in 0.17.1 prevents the fold; the docblock-narrow path was
 // fine).
 class FoldedWildcardRequest extends FormRequest
@@ -45,7 +45,7 @@ use SanderMuller\FluentValidation\FluentRule;
 // root and matches FluentRule, so the @return narrows correctly.
 // Pre-investigation peer report suggested the predicate was bailing
 // on the MethodCall shape; turned out to be a separate issue (the
-// fold didn't run on JsonAdaptive because GroupWildcard's gate
+// fold didn't run on ArticleImport because GroupWildcard's gate
 // fixed in 0.17.1 prevents the fold; the docblock-narrow path was
 // fine).
 class FoldedWildcardRequest extends FormRequest

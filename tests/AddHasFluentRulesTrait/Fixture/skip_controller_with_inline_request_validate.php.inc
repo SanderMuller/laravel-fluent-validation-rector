@@ -11,7 +11,7 @@ use SanderMuller\FluentValidation\FluentRule;
 // every method and matched the FluentRule usage, then incorrectly
 // added the FormRequest-internal `HasFluentRules` trait. Controllers
 // never invoke `createDefaultValidator()`, so the trait is dead code
-// — but worse, hihaho dogfood (2026-04-26) found 14 such Controllers
+// — but worse, a consumer dogfood run (2026-04-26) found such Controllers
 // got the trait inserted. The class qualification gate must require
 // FormRequest ancestry before the trait is added.
 final class StoreBugReportController extends Controller

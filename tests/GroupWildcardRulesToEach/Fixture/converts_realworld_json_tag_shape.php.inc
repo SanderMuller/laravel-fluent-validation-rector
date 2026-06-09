@@ -6,7 +6,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\FluentRule;
 
 // 0.19.0 Phase 6 — real-world-shape fixture mirroring the
-// `JsonInteractionGroupImportValidator::rulesWithoutPrefix()` shape
+// `JsonTagImportValidator::rulesWithoutPrefix()` shape
 // from production-dogfood code (consumer-committed
 // `.dogfood-baselines/0.19-prep/fixture-source/`). Synthetic
 // FormRequest framing per peer review's "don't try to bypass the
@@ -23,7 +23,7 @@ use SanderMuller\FluentValidation\FluentRule;
 // structurally identical to this from the rector's perspective —
 // the const-host class's parent doesn't affect ClassConstFetch
 // resolution. Covered by `converts_wildcard_prefix_concat_mixed_const_host.php.inc`.
-final class JsonInteractionGroupShape
+final class JsonTagShape
 {
     public const string NAME = 'name';
 
@@ -34,15 +34,15 @@ final class JsonInteractionGroupShape
     public const string INTERACTIONS = 'interactions';
 }
 
-final class RealworldJsonInteractionGroupRequest extends FormRequest
+final class RealworldJsonTagRequest extends FormRequest
 {
     public function rules(): array
     {
         return [
-            '*.' . JsonInteractionGroupShape::NAME => FluentRule::string()->nullable()->max(255),
-            '*.' . JsonInteractionGroupShape::COLOR => FluentRule::string()->nullable()->rule('regex:/^#[0-9A-Fa-f]{6}$/'),
-            '*.' . JsonInteractionGroupShape::SORT_ORDER => FluentRule::integer()->nullable()->min(0),
-            '*.' . JsonInteractionGroupShape::INTERACTIONS => FluentRule::array()->required(),
+            '*.' . JsonTagShape::NAME => FluentRule::string()->nullable()->max(255),
+            '*.' . JsonTagShape::COLOR => FluentRule::string()->nullable()->rule('regex:/^#[0-9A-Fa-f]{6}$/'),
+            '*.' . JsonTagShape::SORT_ORDER => FluentRule::integer()->nullable()->min(0),
+            '*.' . JsonTagShape::INTERACTIONS => FluentRule::array()->required(),
         ];
     }
 }
@@ -57,7 +57,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\FluentRule;
 
 // 0.19.0 Phase 6 — real-world-shape fixture mirroring the
-// `JsonInteractionGroupImportValidator::rulesWithoutPrefix()` shape
+// `JsonTagImportValidator::rulesWithoutPrefix()` shape
 // from production-dogfood code (consumer-committed
 // `.dogfood-baselines/0.19-prep/fixture-source/`). Synthetic
 // FormRequest framing per peer review's "don't try to bypass the
@@ -74,7 +74,7 @@ use SanderMuller\FluentValidation\FluentRule;
 // structurally identical to this from the rector's perspective —
 // the const-host class's parent doesn't affect ClassConstFetch
 // resolution. Covered by `converts_wildcard_prefix_concat_mixed_const_host.php.inc`.
-final class JsonInteractionGroupShape
+final class JsonTagShape
 {
     public const string NAME = 'name';
 
@@ -85,15 +85,15 @@ final class JsonInteractionGroupShape
     public const string INTERACTIONS = 'interactions';
 }
 
-final class RealworldJsonInteractionGroupRequest extends FormRequest
+final class RealworldJsonTagRequest extends FormRequest
 {
     public function rules(): array
     {
         return ['*' => FluentRule::array()->children([
-            JsonInteractionGroupShape::NAME => FluentRule::string()->nullable()->max(255),
-            JsonInteractionGroupShape::COLOR => FluentRule::string()->nullable()->rule('regex:/^#[0-9A-Fa-f]{6}$/'),
-            JsonInteractionGroupShape::SORT_ORDER => FluentRule::integer()->nullable()->min(0),
-            JsonInteractionGroupShape::INTERACTIONS => FluentRule::array()->required(),
+            JsonTagShape::NAME => FluentRule::string()->nullable()->max(255),
+            JsonTagShape::COLOR => FluentRule::string()->nullable()->rule('regex:/^#[0-9A-Fa-f]{6}$/'),
+            JsonTagShape::SORT_ORDER => FluentRule::integer()->nullable()->min(0),
+            JsonTagShape::INTERACTIONS => FluentRule::array()->required(),
         ])];
     }
 }

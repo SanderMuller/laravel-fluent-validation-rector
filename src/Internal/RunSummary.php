@@ -164,9 +164,9 @@ final class RunSummary
             // trait, Livewire-detected). Consumers running with `=1` (legacy
             // alias for `=all`) often want the actionable subset instead;
             // surface the filter knob in-band so they don't have to re-discover
-            // it from PUBLIC_API.md. Collectiq 1.2.0 dogfeed (2026-04-29)
-            // measured 110 entries at TIER_ALL vs. 5 at TIER_ACTIONABLE on the
-            // same surface — the tip cuts the firehose ~22× when applied.
+            // it from PUBLIC_API.md. A consumer dogfood run (2026-04-29)
+            // measured far more entries at TIER_ALL than at TIER_ACTIONABLE on
+            // the same surface — the tip cuts the firehose substantially.
             $tip = Diagnostics::verbosityTier() === Diagnostics::TIER_ALL
                 ? sprintf(' (tip: %s=actionable filters informational entries)', Diagnostics::VERBOSE_ENV)
                 : '';

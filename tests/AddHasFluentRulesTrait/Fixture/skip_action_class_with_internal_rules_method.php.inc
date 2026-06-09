@@ -12,8 +12,8 @@ use SanderMuller\FluentValidation\FluentRule;
 // rules-shape detector matched on the internal `rules()` method, then
 // the trait rector incorrectly added `HasFluentRules`. The trait
 // overrides `createDefaultValidator(ValidationFactory)` — a
-// FormRequest-internal hook never invoked on an Action class. Hihaho
-// dogfood (2026-04-26) found this on 3 such Action classes.
+// FormRequest-internal hook never invoked on an Action class. A consumer
+// dogfood run (2026-04-26) found this on several such Action classes.
 final class CreateNewUser implements CreatesNewUsers
 {
     public function create(array $input): void

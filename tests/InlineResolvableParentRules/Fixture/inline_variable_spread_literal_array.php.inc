@@ -9,7 +9,7 @@ final class InlineVariableSpreadLiteralArray extends FormRequest
     public function rules(): array
     {
         $base = [
-            'player_id' => 'required|string',
+            'author_id' => 'required|string',
             'session_id' => 'required|string|uuid',
         ];
 
@@ -33,7 +33,7 @@ final class InlineVariableSpreadLiteralArray extends FormRequest
     public function rules(): array
     {
         return [
-            'player_id' => 'required|string',
+            'author_id' => 'required|string',
             'session_id' => 'required|string|uuid',
             'action' => 'required|string',
         ];

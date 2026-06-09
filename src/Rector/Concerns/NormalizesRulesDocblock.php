@@ -11,7 +11,7 @@ use PhpParser\Node\Stmt\ClassMethod;
  *
  * Context: when any body-mutation rector rewrites the array returned by
  * `rules()`, the method's pre-existing `@return` annotation may no longer
- * match the new body's inferred type. Mijntp ran 0.4.14 across a production
+ * match the new body's inferred type. A consumer ran 0.4.14 across a production
  * app and found 5 files with annotations like `@return array<string, StringRule>`
  * on methods whose rector-produced body now returned `array<string, ArrayRule>`
  * (because `GroupWildcardRulesToEachRector` folded wildcards into an
@@ -107,7 +107,7 @@ trait NormalizesRulesDocblock
      * partially rewritten, leaving dangling continuation lines behind. Without
      * the blank-line stop, a trailing blank `*` separator (visual gap before
      * the next tag) would be consumed by the body capture and lost on
-     * replacement — surfaced by collectiq dogfood (2026-04-26): `@return`
+     * replacement — surfaced by a consumer dogfood run (2026-04-26): `@return`
      * followed by a blank `*` line followed by another PHPDoc tag (e.g.
      * `@phpstan-*` annotations, `@param`) had its separator eaten by the
      * rewrite.

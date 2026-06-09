@@ -162,8 +162,8 @@ CODE_SAMPLE
     {
         // Skip Livewire classes — they use HasFluentValidation, not HasFluentRules.
         // Downgraded to verboseOnly: on Livewire/Filament-heavy codebases this fires
-        // on every component (84/118 log lines in collectiq, 72/336 in hihaho, 125/261
-        // in mijntp — all reports converge on this being the dominant noise source).
+        // on every component — the dominant noise source across consumer
+        // dogfood runs.
         // Users debugging "why didn't the trait get added?" can still see it with
         // FLUENT_VALIDATION_RECTOR_VERBOSE=1.
         if ($this->isLivewireClass($class)) {
@@ -198,7 +198,7 @@ CODE_SAMPLE
         // FormRequest-internal hook — adding it to a non-FormRequest
         // class is dead code at best (Controller / Action / Test /
         // Nova Resource / DataObject / standalone Validator subclass)
-        // and misleading at worst. Hihaho dogfood (2026-04-26) found
+        // and misleading at worst. A consumer dogfood run (2026-04-26) found
         // ~26 false positives across 6 categories on 0.14.0 because
         // the widened `usesFluentRule()` matched FluentRule anywhere
         // in the class without a class-shape gate. Silent skip — these

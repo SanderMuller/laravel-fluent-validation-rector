@@ -5,7 +5,7 @@ namespace SanderMuller\FluentValidationRector\Tests\SimplifyRuleWrappers\Fixture
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidation\Rules\StringRule;
 
-// Hihaho peer must-have: 3-arg `when(value, callback, default)` — callback
+// Downstream consumer must-have: 3-arg `when(value, callback, default)` — callback
 // satisfies the invariant but `default` returns a different rule type.
 // Invariant must apply to BOTH callbacks. Bail.
 

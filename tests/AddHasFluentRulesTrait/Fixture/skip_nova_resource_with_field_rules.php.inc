@@ -10,12 +10,12 @@ use SanderMuller\FluentValidation\FluentRule;
 // Nova resource with `fields()` chaining `->rules([FluentRule::*])`
 // per field. Nova has its own validation pipeline that calls each
 // Field's rule list directly — `HasFluentRules::createDefaultValidator`
-// is never invoked on a Nova Resource. Hihaho dogfood (2026-04-26)
-// found `Nova\Playlist\Playlist` got the trait inserted. The class is
+// is never invoked on a Nova Resource. A consumer dogfood run (2026-04-26)
+// found a Nova Resource got the trait inserted. The class is
 // not on the FormRequest ancestor chain.
-class Playlist extends NovaResource
+class Post extends NovaResource
 {
-    public static string $model = 'App\\Models\\Playlist';
+    public static string $model = 'App\\Models\\Post';
 
     public function fields(NovaRequest $request): array
     {

@@ -173,8 +173,8 @@ final class RunSummaryTest extends TestCase
 
     public function testAllTierAppendsActionableTip(): void
     {
-        // 1.2.1 collectiq dogfeed (2026-04-29) measured 110 entries at TIER_ALL
-        // vs. 5 at TIER_ACTIONABLE on the same surface — the legacy `=1` alias
+        // 1.2.1 consumer dogfood (2026-04-29) measured many more entries at TIER_ALL
+        // than at TIER_ACTIONABLE on the same surface — the legacy `=1` alias
         // gives consumers the firehose without an in-band hint pointing at the
         // filtering knob. Pin the tip in the stderr line so a future refactor
         // can't silently drop it. Test runs at TIER_ALL via the `=all` value

@@ -5,7 +5,7 @@ namespace SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute
 use Livewire\Attributes\Rule;
 use SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute\FixtureSupport\BaseWithFluentValidationTrait;
 
-// 1.2.0 fixture: the canonical mijntp shape. Concrete child has
+// 1.2.0 fixture: the canonical downstream consumer shape. Concrete child has
 // property-level `#[Rule]` attribute; abstract parent uses
 // `HasFluentValidation`. The trait's `getRules()` reads only the
 // parent's `rules(): array` method, not Livewire attribute metadata

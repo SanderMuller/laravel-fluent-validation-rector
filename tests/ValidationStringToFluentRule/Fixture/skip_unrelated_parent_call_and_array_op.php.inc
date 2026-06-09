@@ -9,7 +9,7 @@ use Illuminate\Foundation\Http\FormRequest;
 // same method body should NOT trigger the unsafe-parent skip — the
 // array op doesn't operate on the parent's return value. Pre-0.21.0
 // the loose coexistence heuristic flagged this as a false positive
-// (mijntp 0.20.1 dogfood: ServiceProviderAdminPage with 9
+// (a 0.20.1 consumer dogfood run: a Filament admin page with several
 // descendants generating noise skips). 0.21.0 data-flow trace
 // tightens to direct-only: only flag when an array op's args
 // contain a literal `parent::*()` call.
@@ -64,7 +64,7 @@ use Illuminate\Foundation\Http\FormRequest;
 // same method body should NOT trigger the unsafe-parent skip — the
 // array op doesn't operate on the parent's return value. Pre-0.21.0
 // the loose coexistence heuristic flagged this as a false positive
-// (mijntp 0.20.1 dogfood: ServiceProviderAdminPage with 9
+// (a 0.20.1 consumer dogfood run: a Filament admin page with several
 // descendants generating noise skips). 0.21.0 data-flow trace
 // tightens to direct-only: only flag when an array op's args
 // contain a literal `parent::*()` call.

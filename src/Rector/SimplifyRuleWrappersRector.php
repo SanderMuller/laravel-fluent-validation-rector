@@ -452,8 +452,8 @@ CODE_SAMPLE
             // exists on string/numeric/array/file and the intersection isn't
             // a singleton. Enrich the skip line with candidate factories so
             // verbose-mode triage can point users at the right replacement
-            // instead of having them read the rule code. Surfaced by hihaho
-            // peer (yw6d2sll) on 0.12.0 dogfood.
+            // instead of having them read the rule code. Surfaced by a
+            // peer review on 0.12.0 dogfood.
             if ($resolution['class'] === FieldRule::class
                 && in_array($targetMethod, self::POLYMORPHIC_TYPED_VERBS, true)) {
                 $reason .= sprintf(
@@ -469,7 +469,7 @@ CODE_SAMPLE
                 // message reads as "you did the right thing", which
                 // is confirmation, not actionable. Suppress the
                 // entire skip log entry on this combination (GH #2,
-                // hihaho dogfood 2026-04-26). Other classes
+                // consumer dogfood 2026-04-26). Other classes
                 // (`BooleanRule`, etc.) still emit because there's a
                 // genuine hint to share.
                 return null;
@@ -656,11 +656,11 @@ CODE_SAMPLE
             $className = $scope->getClassReflection()->getName();
         }
 
-        // 0.21.0 #44: pass the offending MethodCall as location so the
+        // 0.21.0: pass the offending MethodCall as location so the
         // skip log entry includes `:<line>` on the file path. Lets
         // consumers click straight to the offending chain (e.g.
         // `FluentRule::field()->required()->rule('min:1')` on line 39
-        // of BoatCoverageRowHandler.php — mijntp dogfood example).
+        // of OrderRowHandler.php — consumer dogfood example).
         $this->logSkipByName($className, $reason, $verboseOnly, $actionable, $node);
     }
 

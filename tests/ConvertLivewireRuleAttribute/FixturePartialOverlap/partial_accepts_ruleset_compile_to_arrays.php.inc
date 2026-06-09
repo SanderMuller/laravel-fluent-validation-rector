@@ -7,7 +7,7 @@ use Livewire\Component;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidation\RuleSet;
 
-// `RuleSet::compileToArrays([literalArray])` is the idiom collectiq uses
+// `RuleSet::compileToArrays([literalArray])` is the idiom a downstream consumer uses
 // to pass fluent rules through the compile step. Accepted wrapper —
 // keys extracted from the inner literal, partial overlap logic applies
 // as if the outer wrapping weren't there.
@@ -40,7 +40,7 @@ use Livewire\Component;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidation\RuleSet;
 
-// `RuleSet::compileToArrays([literalArray])` is the idiom collectiq uses
+// `RuleSet::compileToArrays([literalArray])` is the idiom a downstream consumer uses
 // to pass fluent rules through the compile step. Accepted wrapper —
 // keys extracted from the inner literal, partial overlap logic applies
 // as if the outer wrapping weren't there.

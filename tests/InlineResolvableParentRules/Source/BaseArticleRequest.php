@@ -9,7 +9,7 @@ namespace SanderMuller\FluentValidationRector\Tests\InlineResolvableParentRules\
  * reflection against the child class's parent hits a real autoloadable
  * file with a resolvable `getFileName()`.
  */
-abstract class BasePlayerSessionHistoryRequest
+abstract class BaseArticleRequest
 {
     /**
      * @return array<string, string>
@@ -17,7 +17,7 @@ abstract class BasePlayerSessionHistoryRequest
     public function rules(): array
     {
         return [
-            'player_id' => 'required|string',
+            'author_id' => 'required|string',
             'session_id' => 'required|string|uuid',
         ];
     }

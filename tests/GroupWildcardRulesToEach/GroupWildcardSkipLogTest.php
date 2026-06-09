@@ -162,7 +162,7 @@ final class GroupWildcardSkipLogTest extends AbstractRectorTestCase
             'concat key contains a non-static part (variable / method call)',
         ];
 
-        yield "0.20.0 mijntp dogfood — literal-prefix concat key 'credentials.' isn't `'*.'` wildcard form" => [
+        yield "0.20.0 consumer dogfood — literal-prefix concat key 'credentials.' isn't `'*.'` wildcard form" => [
             $base . 'skip_literal_prefix_concat.php.inc',
             "concat-key prefix 'credentials.' isn't the canonical `'*.'` wildcard form",
         ];

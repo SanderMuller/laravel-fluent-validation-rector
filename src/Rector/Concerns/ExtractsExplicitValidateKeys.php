@@ -139,7 +139,7 @@ trait ExtractsExplicitValidateKeys
      * underlying `Array_` literal. Two shapes are accepted:
      *
      *   - Direct `Array_` literal: `$this->validate(['title' => ...])`.
-     *   - `RuleSet::compileToArrays($literalArray)` wrap (collectiq's
+     *   - `RuleSet::compileToArrays($literalArray)` wrap (a consumer's
      *     idiom to pass fluent rules through the compile step).
      *
      * Anything else — `array_merge(...)`, bare variable, method call,

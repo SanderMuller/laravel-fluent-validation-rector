@@ -2,9 +2,9 @@
 
 namespace SanderMuller\FluentValidationRector\Tests\InlineResolvableParentRules\Fixture;
 
-use SanderMuller\FluentValidationRector\Tests\InlineResolvableParentRules\Source\BasePlayerSessionHistoryRequest;
+use SanderMuller\FluentValidationRector\Tests\InlineResolvableParentRules\Source\BaseArticleRequest;
 
-final class InlineVariableSpreadFromParentRules extends BasePlayerSessionHistoryRequest
+final class InlineVariableSpreadFromParentRules extends BaseArticleRequest
 {
     public function rules(): array
     {
@@ -23,14 +23,14 @@ final class InlineVariableSpreadFromParentRules extends BasePlayerSessionHistory
 
 namespace SanderMuller\FluentValidationRector\Tests\InlineResolvableParentRules\Fixture;
 
-use SanderMuller\FluentValidationRector\Tests\InlineResolvableParentRules\Source\BasePlayerSessionHistoryRequest;
+use SanderMuller\FluentValidationRector\Tests\InlineResolvableParentRules\Source\BaseArticleRequest;
 
-final class InlineVariableSpreadFromParentRules extends BasePlayerSessionHistoryRequest
+final class InlineVariableSpreadFromParentRules extends BaseArticleRequest
 {
     public function rules(): array
     {
         return [
-            'player_id' => 'required|string',
+            'author_id' => 'required|string',
             'session_id' => 'required|string|uuid',
             'action' => 'required|string',
         ];

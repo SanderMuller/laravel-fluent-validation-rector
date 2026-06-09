@@ -126,7 +126,7 @@ trait PromotesPasswordEmailFactory
         // `different()` / `in()` / `regex()` etc. are declared per-rule and
         // absent from PasswordRule. Without this gate, promoting
         // `string()->same(...)` to `password()->same(...)` BadMethodCalls at
-        // runtime (collectiq peer review, 2026-04-24).
+        // runtime (consumer peer review, 2026-04-24).
         if (! $this->allModifiersAvailableOnTarget($hops, $match['index'], $match['promotion']['target_class'])) {
             return null;
         }

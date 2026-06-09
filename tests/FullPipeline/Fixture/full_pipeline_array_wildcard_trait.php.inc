@@ -4,7 +4,7 @@ namespace SanderMuller\FluentValidationRector\Tests\FullPipeline\Fixture;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class UpdateVideoRequest extends FormRequest
+class UpdatePostRequest extends FormRequest
 {
     public function rules(): array
     {
@@ -25,7 +25,7 @@ use SanderMuller\FluentValidation\FluentRule;
 use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\HasFluentRules;
 
-class UpdateVideoRequest extends FormRequest
+class UpdatePostRequest extends FormRequest
 {
     use HasFluentRules;
 

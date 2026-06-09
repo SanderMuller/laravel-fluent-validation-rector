@@ -14,7 +14,7 @@ use OutOfBoundsException;
  * but the log file must not appear in the consumer's project root — CI
  * auto-fix workflows were picking the file up as a dirty artifact and
  * attempting to commit+push it (blocked on protected branches, broke
- * mijntp's pipeline). Off-mode writes go to a cwd-hash-scoped path under
+ * a downstream consumer's pipeline). Off-mode writes go to a cwd-hash-scoped path under
  * `sys_get_temp_dir()` so they never surface in the repo. The RunSummary
  * unlinks the off-mode file after emitting its hint line.
  *

@@ -68,7 +68,7 @@ trait ParsesRulePayloads
      * builder; `isMethodAvailable` still gates per-receiver to catch any
      * future divergence.
      *
-     * `bail` excluded — hihaho 0.12.0 dogfood confirmed zero wild usage as a
+     * `bail` excluded — a consumer's 0.12.0 dogfood confirmed zero wild usage as a
      * `->rule('bail')` wrapper. Always authored as pipe-prefix (`'bail|…'`)
      * or chained `->bail()`.
      *
@@ -424,7 +424,7 @@ trait ParsesRulePayloads
         // Zero-arg tokens written as `->rule('accepted')` / `->rule('nullable')`
         // etc. RULE_NAME_TO_METHOD maps the names to fluent methods; here the
         // only job is to confirm the token has no tail args and emit an empty
-        // arg list. Excludes `bail` — peer review (hihaho 0.12.0 dogfood)
+        // arg list. Excludes `bail` — peer review (consumer 0.12.0 dogfood)
         // confirmed zero wild usage as a wrapper, only as pipe-prefix or
         // chained `->bail()`.
         if (in_array($name, self::ZERO_ARG_RULE_TOKENS, true)) {

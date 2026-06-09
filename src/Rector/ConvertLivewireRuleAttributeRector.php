@@ -993,7 +993,7 @@ CODE_SAMPLE
         // Merging new entries into an existing rules() body invalidates any
         // author-written narrow `@return` annotation that was accurate for
         // the pre-merge shape. See NormalizesRulesDocblock for the rationale
-        // and mijntp's 0.4.14 finding on 5 production files.
+        // and a consumer's 0.4.14 finding on 5 production files.
         $this->normalizeRulesDocblockIfStale($method);
 
         return true;

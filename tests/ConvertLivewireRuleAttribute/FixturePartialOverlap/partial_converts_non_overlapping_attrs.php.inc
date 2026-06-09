@@ -5,7 +5,7 @@ namespace SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute
 use Livewire\Attributes\Validate;
 use Livewire\Component;
 
-// Collectiq shape: action-method `$this->validate([...])` with explicit
+// Downstream consumer shape: action-method `$this->validate([...])` with explicit
 // keys overlaps SOME attrs, not others. Partial mode converts the
 // non-overlapping attrs; overlapping attrs + the validate() call stay
 // untouched.
@@ -38,7 +38,7 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
 
-// Collectiq shape: action-method `$this->validate([...])` with explicit
+// Downstream consumer shape: action-method `$this->validate([...])` with explicit
 // keys overlaps SOME attrs, not others. Partial mode converts the
 // non-overlapping attrs; overlapping attrs + the validate() call stay
 // untouched.

@@ -254,8 +254,8 @@ CODE_SAMPLE
         // When the class never invokes any of those (no `$this->validate(...)`,
         // no `$this->validateOnly(...)`, no `#[Validate]` attribute, no
         // `rules()` / attributed / rules-shaped method), the trait is
-        // dead code — its overrides have no caller. Collectiq dogfood
-        // (2026-04-26) found `ReadingStatsPage` got the trait inserted
+        // dead code — its overrides have no caller. A consumer dogfood run
+        // (2026-04-26) found `ReportsPage` got the trait inserted
         // because it uses FluentRule inside a standalone
         // `Validator::make([...])->validate()` call. Silent skip — the
         // class isn't doing Livewire validation at all.
@@ -426,7 +426,7 @@ CODE_SAMPLE
      * Without any of these, the class IS a Livewire component and DOES
      * use FluentRule, but never invokes the entry points the trait
      * overrides — adding the trait would be dead code. Codex 2026-04-26
-     * (collectiq dogfood) caught the gap on `ReadingStatsPage`, which
+     * (consumer dogfood) caught the gap on `ReportsPage`, which
      * uses FluentRule only inside a standalone `Validator::make([...])`
      * call.
      */

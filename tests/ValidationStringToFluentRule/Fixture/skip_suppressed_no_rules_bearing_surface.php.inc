@@ -4,7 +4,7 @@ namespace SanderMuller\FluentValidationRector\Tests\ValidationStringToFluentRule
 
 use Illuminate\Foundation\Http\FormRequest;
 
-// 0.20.2 mijntp dogfood: Filament-Page / Livewire-wrapper-shape
+// 0.20.2 consumer dogfood: Filament-Page / Livewire-wrapper-shape
 // classes qualify via Livewire ancestry but declare no validation
 // rules. When such a class extends an unsafe parent (a parent
 // whose other descendants do array_merge(parent::rules(), …)),
@@ -19,9 +19,9 @@ use Illuminate\Foundation\Http\FormRequest;
 // on classes the rector would have actually attempted to convert
 // without the unsafe-parent flag.
 //
-// Synthetic shape mirroring mijntp's
-// `App\Filament\Pages\ServiceProviderAdmin\ServiceProviderAdminPage`
-// (which has 9 descendants, none with rules-bearing methods).
+// Synthetic shape mirroring a downstream consumer's
+// Filament admin page (which has several descendants, none with
+// rules-bearing methods).
 // Pre-0.20.2 this fixture would have emitted the unsafe-parent
 // skip; post-0.20.2 it emits no skip and produces no diff.
 class UnsafeParentBaseRequest extends FormRequest

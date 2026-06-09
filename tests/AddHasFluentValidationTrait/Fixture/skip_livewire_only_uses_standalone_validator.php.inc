@@ -14,9 +14,9 @@ use SanderMuller\FluentValidation\FluentRule;
 // every method and matched the FluentRule usage, then added
 // `HasFluentValidation` — but the trait overrides Livewire-internal
 // validate/validateOnly methods that this class never invokes, so the
-// trait is dead code (collectiq dogfood, 2026-04-26). Bail when the
+// trait is dead code (a consumer dogfood run, 2026-04-26). Bail when the
 // class shows no Livewire-side validation surface.
-class ReadingStatsPage extends Component
+class ReportsPage extends Component
 {
     public function recompute(array $input): void
     {

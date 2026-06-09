@@ -6,10 +6,10 @@ use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidation\HasFluentRules;
 
-// 0.19.1 peer-sourced fixture: hihaho dogfood synthetic
+// 0.19.1 peer-sourced fixture: consumer dogfood synthetic
 // `Tests\Dogfood\SyntheticReverseOrder` (children-ordering
 // invariant pin).
-// `.dogfood-baselines/0.19.0-hihaho-acceptance/dryrun-source-order-verified.json`.
+// Source-order-verified dry-run truth-file.
 //
 // Deliberately non-alphabetical input order
 // (SORT_ORDER, NAME, COLOR — alphabetical would be COLOR, NAME,
@@ -49,10 +49,10 @@ use Illuminate\Foundation\Http\FormRequest;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidation\HasFluentRules;
 
-// 0.19.1 peer-sourced fixture: hihaho dogfood synthetic
+// 0.19.1 peer-sourced fixture: consumer dogfood synthetic
 // `Tests\Dogfood\SyntheticReverseOrder` (children-ordering
 // invariant pin).
-// `.dogfood-baselines/0.19.0-hihaho-acceptance/dryrun-source-order-verified.json`.
+// Source-order-verified dry-run truth-file.
 //
 // Deliberately non-alphabetical input order
 // (SORT_ORDER, NAME, COLOR — alphabetical would be COLOR, NAME,

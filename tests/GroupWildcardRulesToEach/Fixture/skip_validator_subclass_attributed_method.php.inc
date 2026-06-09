@@ -5,7 +5,7 @@ namespace SanderMuller\FluentValidationRector\Tests\GroupWildcardRulesToEach\Fix
 use SanderMuller\FluentValidation\FluentRules;
 use SanderMuller\FluentValidation\FluentValidator;
 
-// Regression fixture for the 0.17.1 fix. `JsonAdaptiveSubject`-shaped
+// Regression fixture for the 0.17.1 fix. `ArticleImport`-shaped
 // Validator subclass: qualifies for rule conversion via `#[FluentRules]`
 // on `rulesWithoutPrefix()`, but its parent class
 // (`JsonImportValidator::rulesWithPrefix()` in real codebases) walks
@@ -16,13 +16,13 @@ use SanderMuller\FluentValidation\FluentValidator;
 // top-level fields with int indices, hitting
 // `RuleSet::extractObjectMetadata()` with the wrong type.
 //
-// Hihaho 0.17.0 dogfood, 2026-04-27, surfaced this on
-// `JsonAdaptiveSubjectImportValidator`: 5/5 of its tests failed
+// A consumer dogfood run, 0.17.0, 2026-04-27, surfaced this on
+// `ArticleImportValidator`: its tests failed
 // post-fold. The fix gates GroupWildcard behind the
 // `qualifiesForShapeChange()` predicate, which excludes
 // attribute-only Validator subclasses. The wildcard sibling rules
 // stay flat and the runtime contract holds.
-class JsonAdaptiveSubjectImportValidator extends FluentValidator
+class ArticleImportValidator extends FluentValidator
 {
     #[FluentRules]
     protected function rulesWithoutPrefix(): array

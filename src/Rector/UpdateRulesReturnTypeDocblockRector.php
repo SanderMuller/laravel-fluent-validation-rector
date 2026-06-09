@@ -96,8 +96,8 @@ final class UpdateRulesReturnTypeDocblockRector extends AbstractRector implement
      * so static analyzers resolve the short name correctly. Pre-0.14.1
      * the body emitted the FQN inline, which Pint's
      * `fully_qualified_strict_types` cleaned up afterwards — every
-     * rector run forced a follow-up Pint pass. Surfaced by collectiq
-     * dogfood (2026-04-26).
+     * rector run forced a follow-up Pint pass. Surfaced by a consumer
+     * dogfood run (2026-04-26).
      */
     private const string CONTRACT_ANNOTATION_BODY = 'array<string, FluentRuleContract>';
 
@@ -430,7 +430,7 @@ CODE_SAMPLE
         // authored after adding a `use ...\FluentRuleContract;` statement.
         // Without the short-name form here, the rule would log 40+
         // "user-customized — respecting" verbose entries per run on
-        // codebases that adopted the contract via import (mijntp dogfood
+        // codebases that adopted the contract via import (consumer dogfood
         // against 0.12.0).
         if (in_array(trim($existingBody), self::ALREADY_NARROWED_BODIES, true)) {
             return false;
@@ -490,7 +490,7 @@ CODE_SAMPLE
         // chain (shape: MethodCall)`. Matches the same widening pattern
         // already in GroupWildcardRulesToEachRector::getFluentRuleFactory.
         // Diagnosed via tests/FullPipeline/Fixture/post_fold_docblock_narrow_children.php.inc
-        // (0.19.1 hihaho dogfood reproduction).
+        // (0.19.1 consumer dogfood reproduction).
         return $className === FluentRule::class || $className === 'FluentRule';
     }
 
@@ -598,8 +598,8 @@ CODE_SAMPLE
             // pre-dates generic array syntax. Semantically `array<int|string, T>`,
             // but our condition-3 check already guarantees string keys so
             // narrowing to `array<string, FluentRuleContract>` tightens the
-            // key type legitimately. Real-world shape flagged by mijntp peer
-            // dry-run against ~43 rules() methods.
+            // key type legitimately. Real-world shape flagged by a peer
+            // review dry-run against many rules() methods.
             foreach (["{$shortName}[]", '\\' . self::LARAVEL_CONTRACTS_NAMESPACE . "{$shortName}[]"] as $shorthand) {
                 if ($this->bodyExactOrProseTail($trimmed, $shorthand)) {
                     return true;

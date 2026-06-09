@@ -10,7 +10,7 @@ namespace SanderMuller\FluentValidationRector\Tests\InlineResolvableParentRules\
  */
 abstract class BaseWithSelfConstKey
 {
-    public const string FIELD_ID = 'player_id';
+    public const string FIELD_ID = 'author_id';
 
     /**
      * @return array<string, string>

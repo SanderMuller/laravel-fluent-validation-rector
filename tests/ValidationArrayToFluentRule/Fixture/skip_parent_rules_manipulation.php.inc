@@ -5,7 +5,7 @@ namespace SanderMuller\FluentValidationRector\Tests\ValidationArrayToFluentRule\
 use Illuminate\Foundation\Http\FormRequest;
 
 // Parent class should NOT be converted because the child manipulates parent::rules()
-class VideoUploadRequest extends FormRequest
+class FileUploadRequest extends FormRequest
 {
     public function rules(): array
     {
@@ -16,12 +16,12 @@ class VideoUploadRequest extends FormRequest
     }
 }
 
-class SpecificVideoUploadRequest extends VideoUploadRequest
+class SpecificFileUploadRequest extends FileUploadRequest
 {
     public function rules(): array
     {
         $rules = parent::rules();
-        array_push($rules['title'], 'unique:videos,title');
+        array_push($rules['title'], 'unique:uploads,title');
 
         return $rules;
     }

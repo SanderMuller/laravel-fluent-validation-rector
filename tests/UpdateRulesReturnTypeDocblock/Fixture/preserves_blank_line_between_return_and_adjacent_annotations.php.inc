@@ -9,8 +9,8 @@ use SanderMuller\FluentValidation\FluentRule;
 // the blank `*` separator between `@return` and adjacent PHPDoc tags
 // (`@phpstan-ignore`, `@param`, etc.). The body rewrite replaced the
 // match with `@return <new-body>`, dropping the trailing separator.
-// Collectiq dogfood (2026-04-26) flagged it on AppealPage /
-// ReportContentButton. Fix: add `\s*$` to the continuation lookahead
+// A consumer dogfood run (2026-04-26) flagged it on two Livewire
+// components. Fix: add `\s*$` to the continuation lookahead
 // so blank `*` lines stop the body capture.
 class PreservesBlankLineBetweenReturnAndAdjacentAnnotations extends FormRequest
 {
@@ -41,8 +41,8 @@ use SanderMuller\FluentValidation\FluentRule;
 // the blank `*` separator between `@return` and adjacent PHPDoc tags
 // (`@phpstan-ignore`, `@param`, etc.). The body rewrite replaced the
 // match with `@return <new-body>`, dropping the trailing separator.
-// Collectiq dogfood (2026-04-26) flagged it on AppealPage /
-// ReportContentButton. Fix: add `\s*$` to the continuation lookahead
+// A consumer dogfood run (2026-04-26) flagged it on two Livewire
+// components. Fix: add `\s*$` to the continuation lookahead
 // so blank `*` lines stop the body capture.
 class PreservesBlankLineBetweenReturnAndAdjacentAnnotations extends FormRequest
 {

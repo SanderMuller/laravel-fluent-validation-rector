@@ -10,8 +10,8 @@ use SanderMuller\FluentValidation\RuleSet;
 // `Return_` statements (early-return / branched-return idiom).
 // Per OQ#1 resolution (specs/0.19.1-…), 0.19.1 takes the conservative
 // path — bail-with-log on multi-return; aggressive per-branch walk
-// reopens on consumer signal. Real consumers (hihaho 44 rules(),
-// mijntp 44 rules()) all single-Return_, so this case is a future-
+// reopens on consumer signal. Real consumers across dogfood runs
+// all single-Return_, so this case is a future-
 // proofing skip-log without affecting current users.
 class RuleSetFromMultiReturnRequest extends FormRequest
 {
