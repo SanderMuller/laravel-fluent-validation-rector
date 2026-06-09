@@ -2,6 +2,28 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 1.7.0 - 2026-06-09
+
+<!-- verified-sha: a49a2f6a01c852b57748f8c4ed8a488bd0378e6c -->
+### Added
+
+- **`GroupWildcardRulesToEachRector` now folds wildcard groups whose parent is a `field()` carrying a bare array rule.** A parent written as `FluentRule::field()->…->rule(Rule::array())` (or `->rule('array')`) previously blocked the fold — only `array()` exposes `each()`, and the parent resolved to `field()`. Because the array factory seeds the same implicit `array` rule, such a parent is equivalent to `array()`, so it's now re-rooted (dropping the redundant rule hop) before the wildcard children fold into `each()`:
+  
+  ```php
+  // before
+  'items' => FluentRule::field()->nullable()->rule(Rule::array()),
+  'items.*' => FluentRule::string()->nullable()->max(255),
+  // after
+  'items' => FluentRule::array()->nullable()->each(
+      FluentRule::string()->nullable()->max(255)
+  ),
+  
+  ```
+  The promotion is gated to chains where it is provably behavior-preserving: the `field()` root must have no label argument (`array()`'s first parameter is `$keys`, not `$label`), the only rule hop must be the bare array rule, and every other hop must be a presence/dependency modifier native to both `FieldRule` and `ArrayRule`. Labeled parents, `FieldRule`-only methods (`same()` / `different()` / `confirmed()`), conditionable closures, object-valued `->rule(...)` hops, a `message()` bound to the array rule, keyed `Rule::array([...])`, and macro-based size constraints (`min` / `max` / …) all keep the escape hatch and skip the fold.
+  
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/1.6.0...1.7.0
+
 ## 1.6.0 - 2026-06-09
 
 <!-- verified-sha: 549333afeae8ff51a60e7bf4f065ff9687aa9c4a -->
@@ -73,6 +95,7 @@ Performance release. The rule pipeline does substantially less work per file, an
   
   
   
+  
   ```
 - A literal-`null` condition is left untouched. `Rule::requiredIf(null)` is valid Laravel (the condition normalizes to `false`), but the native fluent method is typed `Closure|bool|string`, so rewriting to `->requiredIf(null)` would `TypeError` at runtime. The wrapper is preserved instead.
   
@@ -98,6 +121,7 @@ A multi-argument facade conditional (not valid Laravel usage) is also left as-is
   
   // after
   'role' => FluentRule::field()->nullable()->requiredIf(fn () => $this->isAdmin()),
+  
   
   
   
@@ -163,6 +187,7 @@ FluentRule::field('Agree to TOS')->required()->rule('accepted')
 // After
 FluentRule::accepted()->required()
 FluentRule::accepted('Agree to TOS')->required()
+
 
 
 
