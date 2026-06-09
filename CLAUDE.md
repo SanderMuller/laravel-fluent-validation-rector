@@ -9,6 +9,88 @@ testing:
   backend_framework: pest
 ```
 
+## Anonymize Fixtures, Docs, and Specs
+
+This is a **public, open-source repository**. Test fixtures, the rule
+`CodeSample` heredocs in `src/`, the snippets in `README.md`, and the spec files
+in `specs/` are all world-readable on GitHub — and `src/` plus the README also
+ship in the Composer dist archive. `tests/` and `specs/` (and the AI/config
+dirs) are `export-ignore`d in `.gitattributes`, so they stay out of the
+archive, but that only trims the dist; it hides nothing on GitHub. Doc examples
+and specs are the easy things to forget precisely because they are not
+"fixtures" — they leak just the same.
+
+Every example — fixture, `CodeSample`, doc snippet, or spec — must be
+**synthetic**. Never copy proprietary application code — from hihaho or any
+consumer/dogfooding codebase — into one. Reconstruct the smallest generic
+example that demonstrates the rule, then strip every domain detail not needed
+to make the point.
+
+This keeps internal domain models, naming, business terms, and logic out of a
+public artifact, and it makes for better examples: the transformation stands
+out instead of being buried in incidental domain noise.
+
+## Anonymize these
+
+- **Class and namespace names** — use framework-conventional placeholders
+  (`App\Http\Requests\StorePostRequest`, `App\Models\Article`). Don't reach for
+  the product's real domain entities.
+- **Variable, property, and method names** that carry domain meaning.
+- **String literals** — validation field names, route paths, table and column
+  names, config keys, labels, messages. Invent neutral values; never paste a
+  real schema column or form field key.
+- **Business terminology and comments** lifted from real code.
+- **Logic and control flow** that mirrors a real implementation.
+
+## Keep these — they are not leaks
+
+- **Framework and vendor public symbols** (`Illuminate\…`, `FluentRule`,
+  `HasFluentRules`, `FormRequest`, `Rule`, `Validator`). The rule usually has to
+  match these to fire, and they are public API.
+- **Generic example nouns** — `User`, `Post`, `Order`, `Article`, `Comment`.
+- **The convention the rule enforces** (string-rule → fluent conversions,
+  trait insertion, `each()` folding). That is the package's public contract,
+  not proprietary.
+
+## Specs leak provenance, not just code
+
+A spec in `specs/` rarely contains a real schema column — its leak vector is
+**provenance metadata** describing where the work came from. Scrub all of it:
+
+- **Internal PR / issue / ticket numbers** ("modelled on PR #1234",
+  "ABC-123"). Describe the *change* generically ("a manual validation cleanup")
+  instead of citing the source. (Don't reference a real PR number here either —
+  these examples are deliberately fake.)
+- **Employee names, handles, and authorship** of the originating work.
+- **Real domain method / class names** copied from the source change, even in
+  prose. Use the same neutral placeholders the spec's code examples use.
+- **Dogfooding / consumer-app references** ("from the hihaho app", file/line
+  counts of a private PR).
+
+State *what* the rule does and *why*, never *which internal change or person*
+it came from.
+
+## Rule of thumb
+
+An example should read like a generic framework tutorial snippet, not like a
+slice of one company's application. If a reader could tell which product it
+came from, anonymize further — prefer a neutral noun (`Article`, `Order`) over
+an actual product entity.
+
+## When adding or editing a fixture, doc example, or spec
+
+1. Keep only the framework symbols the rule matches against.
+2. Replace real names and strings with neutral equivalents.
+3. For a fixture, run the test to confirm the rule still fires
+   (`vendor/bin/pest path/to/RuleTest.php`); for a `CodeSample` or README
+   snippet, keep it consistent with the rule it documents; for a spec, strip
+   provenance (see "Specs leak provenance" above).
+4. Before committing, scan the diff for product names, real table/column
+   names, domain jargon, and internal PR/ticket/person references — across
+   `specs/` and `README.md` too, not only `tests/` and `src/`.
+
+---
+
 ## Performance benchmarks
 
 This package's rules run per-AST-node during Rector traversal, so the hot path is
@@ -100,13 +182,67 @@ asymmetric cost makes "internal until proven otherwise" the safe default.
 
 ---
 
-## Release Notes vs CHANGELOG
+## Authoring Rector Rules
 
-`CHANGELOG.md` is **auto-populated by CI** on release. Do not hand-edit it.
+Repo-specific conventions and gotchas for adding a rule under `src/Rector/`.
+For the general mechanics of building a rule, follow the vendor
+`rector-developer` skill — this guideline only covers what bites in *this*
+package.
 
-When you need to document a user-facing change for a release, write it to `RELEASE_NOTES_<version>.md` at the repo root (already gitignored via the `RELEASE_NOTES*.md` pattern). The CI release job picks it up and promotes it into `CHANGELOG.md` as part of the tag flow.
+## Gate cheaply, resolve names once
 
-If you find yourself editing `CHANGELOG.md` directly, stop — it will be overwritten.
+The per-node bottleneck is the name-resolver machinery, not your refactor
+logic. `refactor()` runs on every matching node in the consumer's codebase, so:
+
+- Bail at the **file** level first with the `ShortCircuitsIrrelevantFiles`
+  trait — a `str_contains()` needle check (`FluentRule`, `'required`,
+  `extends FormRequest`) that skips the vast majority of consumer files before
+  any per-node work, cached per file path.
+- Gate each node with a direct `instanceof` check on its `name` / `class`
+  (`$node->name instanceof Identifier`, `$node->class instanceof Name`). This
+  bails most surviving nodes before any name resolution.
+- Then resolve the name **once** (`$this->getName($node)`) and compare —
+  never loop `isName()` / `isNames()` across accepted spellings.
+- PHP function, class, **and method** names are all case-insensitive, so match
+  with `strtolower()` / `strcasecmp()` rather than an exact `toString()`
+  comparison — a `MethodCall` / `StaticCall` rule that compares the method name
+  exactly silently skips valid mixed-case calls (e.g. `FluentRule::String()`).
+
+`ShortCircuitsIrrelevantFiles` is the canonical file-gate shape; the hot path
+itself is the rule-string cache in
+`src/Rector/Concerns/ConvertsValidationRuleStrings.php`.
+
+## `provideMinPhpVersion()`: use `PhpVersion::PHP_*`, not a new `PhpVersionFeature::*`
+
+`PhpVersionFeature` feature aliases can be **newer than the `rector/rector`
+floor** in `composer.json` (`^2.4.1`). `PhpVersionFeature::NAMED_ARGUMENTS`, for
+instance, does not exist in the floor and throws `Undefined constant` on the CI
+`prefer-lowest` leg — green locally (latest Rector), red in CI.
+
+Return a stable `Rector\ValueObject\PhpVersion::PHP_8X` constant instead (e.g.
+`PhpVersion::PHP_80` for a PHP-8.0 feature), unless you have confirmed the
+feature alias exists in the floor. The `PhpVersion::PHP_*` values are
+long-stable.
+
+## Test-double `Source/` classes must be Rector-clean
+
+`rector.php` processes `tests/`, and the CI **Auto-fix** workflow
+(`.github/workflows/auto-fix.yml`) runs `vendor/bin/rector process` on **every
+push to any branch** (the `push:` trigger has no branch filter) and commits the
+result as `chore: auto-fix` directly on the branch — so a feature branch gets
+mangled on push just like `main`.
+
+So a reflection test double — a `tests/.../Source/*.php` class (e.g. under
+`tests/InlineResolvableParentRules/Source/`) whose method signatures exist only
+so a rule can resolve parameter names — gets mangled on push: the deadcode set
+strips "unused" parameters (`RemoveUnusedPublicMethodParameterRector`) and
+deletes empty-body methods (`RemoveEmptyClassMethodRector`), breaking the
+fixtures that depend on those signatures.
+
+Give every `Source` method a body that genuinely uses all its parameters, and
+avoid empty bodies. Confirm `vendor/bin/rector process --dry-run` reports
+**0 changes before pushing** — otherwise the auto-fix bot rewrites the double
+on push and reds the test legs.
 
 ---
 
