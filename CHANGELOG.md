@@ -2,6 +2,23 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 1.6.0 - 2026-06-09
+
+<!-- verified-sha: 549333afeae8ff51a60e7bf4f065ff9687aa9c4a -->
+### Added
+
+- **`SimplifyRuleWrappersRector` now lowers string-form and concatenated comma-separated conditional rules.** Previously only the array form (`->rule(['required_with', 'end'])`) was rewritten; the string form and dynamic concatenations stayed on the `->rule(...)` escape hatch. Now:
+  
+  - **String form** — `->rule('required_with:end')` becomes `->requiredWith('end')`, and `->rule('required_if:type,admin')` becomes `->requiredIf('type', 'admin')`. The rule tail is split on commas; the pure-field family (`required_with` / `required_without` / `prohibits` / `required_array_keys` / …) needs at least one field, the field-plus-values family (`required_if` / `exclude_unless` / …) needs a field plus at least one value.
+    
+  - **Concatenation** — `->rule('required_with:' . self::END_DATE)` becomes `->requiredWith(self::END_DATE)`, scoped to the pure-field family. The whole post-colon expression is passed as a single field argument, which is provably equivalent because the fluent method rebuilds `'required_with:' . implode(',', $fields)` — re-joining a one-element list reproduces the exact rule string for any tail. Operands are gated to statically-simple, string-oriented shapes (string literals, variables, class constants, `Enum::CASE->value`, and nested concatenations of those); a method call, arithmetic, or ternary operand keeps the escape hatch so it can't `TypeError` against the method's `string` parameter under `declare(strict_types=1)`.
+    
+  
+  Both forms re-serialize to a byte-identical rule string, so escaped or quoted commas in the original round-trip unchanged and validation behavior is preserved. `->rule(Rule::date()->format(...))` is deliberately left untouched: rewriting it would flip the chain's root factory from `string()` to `date()` and change the validated type.
+  
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/1.5.1...1.6.0
+
 ## 1.5.1 - 2026-06-08
 
 <!-- verified-sha: df42f00c490c1f07248f5c38939b3a84a9f31234 -->
@@ -55,6 +72,7 @@ Performance release. The rule pipeline does substantially less work per file, an
   
   
   
+  
   ```
 - A literal-`null` condition is left untouched. `Rule::requiredIf(null)` is valid Laravel (the condition normalizes to `false`), but the native fluent method is typed `Closure|bool|string`, so rewriting to `->requiredIf(null)` would `TypeError` at runtime. The wrapper is preserved instead.
   
@@ -80,6 +98,7 @@ A multi-argument facade conditional (not valid Laravel usage) is also left as-is
   
   // after
   'role' => FluentRule::field()->nullable()->requiredIf(fn () => $this->isAdmin()),
+  
   
   
   
@@ -144,6 +163,7 @@ FluentRule::field('Agree to TOS')->required()->rule('accepted')
 // After
 FluentRule::accepted()->required()
 FluentRule::accepted('Agree to TOS')->required()
+
 
 
 
