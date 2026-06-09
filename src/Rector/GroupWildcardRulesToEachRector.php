@@ -34,6 +34,7 @@ use SanderMuller\FluentValidationRector\Rector\Concerns\IdentifiesLivewireClasse
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesNamespaceImports;
 use SanderMuller\FluentValidationRector\Rector\Concerns\NormalizesRulesDocblock;
+use SanderMuller\FluentValidationRector\Rector\Concerns\PromotesArrayRuleParents;
 use SanderMuller\FluentValidationRector\Rector\Concerns\QualifiesForRulesProcessing;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ShortCircuitsIrrelevantFiles;
 use SanderMuller\FluentValidationRector\Tests\GroupWildcardRulesToEach\GroupWildcardRulesToEachRectorTest;
@@ -64,6 +65,7 @@ final class GroupWildcardRulesToEachRector extends AbstractRector implements Doc
     use LogsSkipReasons;
     use ManagesNamespaceImports;
     use NormalizesRulesDocblock;
+    use PromotesArrayRuleParents;
     use QualifiesForRulesProcessing;
     use ShortCircuitsIrrelevantFiles;
 
@@ -1232,7 +1234,7 @@ CODE_SAMPLE
         }
 
         if (! $this->parentFactoryAllowsChain($parentValue, $eachItems, $childrenItems, $eachScalar)) {
-            $factory = $parentValue instanceof Expr ? ($this->getFluentRuleFactory($parentValue) ?? 'unknown') : 'unknown';
+            $factory = $parentValue instanceof Expr ? ($this->fluentRuleRootFactory($parentValue) ?? 'unknown') : 'unknown';
             $needsEach = $eachItems !== [] || $eachScalar instanceof Expr;
 
             // Two distinct bail cases conflated under one message pre-0.20.0:
@@ -1260,6 +1262,10 @@ CODE_SAMPLE
             // `required` children still trigger when the parent is absent.
             $parentValue = $this->buildFluentRuleFactoryCall('array');
         }
+
+        // Normalize a `field()->…->rule(Rule::array())` parent to `array()->…`
+        // so the each()/children() hop appends onto an array-typed receiver.
+        $parentValue = $this->normalizeArrayRuleParent($parentValue);
 
         $parentValue = $this->appendChainToParent($parentValue, $eachItems, $childrenItems, $eachScalar);
 
@@ -1355,7 +1361,7 @@ CODE_SAMPLE
             return true;
         }
 
-        $factory = $this->getFluentRuleFactory($parentValue);
+        $factory = $this->arrayCompatibleParentFactory($parentValue);
 
         if (($eachItems !== [] || $eachScalar instanceof Expr) && $factory !== 'array') {
             return false;
@@ -1426,7 +1432,7 @@ CODE_SAMPLE
      */
     private function isFluentRuleChain(Expr $expr): bool
     {
-        return $this->getFluentRuleFactory($expr) !== null;
+        return $this->fluentRuleRootFactory($expr) !== null;
     }
 
     /**
@@ -1540,39 +1546,6 @@ CODE_SAMPLE
 
             return null;
         });
-    }
-
-    /**
-     * Get the factory method name at the root of a FluentRule chain.
-     * Returns 'array', 'field', 'string', etc. or null if not a FluentRule chain.
-     *
-     * Matches both the fully-qualified class name and the short `FluentRule`
-     * name. Sibling rectors (ValidationStringToFluentRuleRector,
-     * ValidationArrayToFluentRuleRector) emit the short form when running
-     * inside the same set-list pass because their `use` import is queued via
-     * the post-rector pipeline and isn't yet present in the tree when this
-     * check runs. The short form is authoritative by the time the post-rector
-     * pipeline finishes, so matching on either name is safe.
-     */
-    private function getFluentRuleFactory(Expr $expr): ?string
-    {
-        $current = $expr;
-
-        while ($current instanceof MethodCall) {
-            $current = $current->var;
-        }
-
-        if (! $current instanceof StaticCall) {
-            return null;
-        }
-
-        $className = $this->getName($current->class);
-
-        if ($className !== FluentRule::class && $className !== 'FluentRule') {
-            return null;
-        }
-
-        return $this->getName($current->name);
     }
 
     /**
