@@ -2,6 +2,20 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 1.7.1 - 2026-06-17
+
+<!-- verified-sha: e324b235b56845fc0121da9d9a70a6e79ddbea10 -->
+### Changed
+
+- **Leaner Composer dist archive.** The `specs/` directory is now `export-ignore`d from the published archive, so it no longer ships to downstream installs. No runtime impact — `specs/` is development-only.
+
+### Documentation
+
+- **Shipped rule examples are now fully synthetic.** The `CodeSample` heredocs and inline comments across the rule classes were reconstructed as generic, framework-conventional snippets (`App\Http\Requests\…`, `Article`, `Order`). The transformations are unchanged; the examples just read as neutral tutorial snippets instead of carrying incidental domain noise.
+- **Fixed the rule table in the shipped `fluent-validation-rector` boost skill.** The Rule Classes table listed only `SimplifyFluentRuleRector`, which made the configuration section's `SimplifyRuleWrappersRector` and `UpdateRulesReturnTypeDocblockRector` references read like typos. They are distinct rules (the `SIMPLIFY` and `POLISH` sets); each now has its own table row so the configuration names resolve.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/1.7.0...1.7.1
+
 ## 1.7.0 - 2026-06-09
 
 <!-- verified-sha: a49a2f6a01c852b57748f8c4ed8a488bd0378e6c -->
@@ -17,6 +31,7 @@ All notable changes to `sandermuller/laravel-fluent-validation-rector` will be d
   'items' => FluentRule::array()->nullable()->each(
       FluentRule::string()->nullable()->max(255)
   ),
+  
   
   ```
   The promotion is gated to chains where it is provably behavior-preserving: the `field()` root must have no label argument (`array()`'s first parameter is `$keys`, not `$label`), the only rule hop must be the bare array rule, and every other hop must be a presence/dependency modifier native to both `FieldRule` and `ArrayRule`. Labeled parents, `FieldRule`-only methods (`same()` / `different()` / `confirmed()`), conditionable closures, object-valued `->rule(...)` hops, a `message()` bound to the array rule, keyed `Rule::array([...])`, and macro-based size constraints (`min` / `max` / …) all keep the escape hatch and skip the fold.
@@ -96,6 +111,7 @@ Performance release. The rule pipeline does substantially less work per file, an
   
   
   
+  
   ```
 - A literal-`null` condition is left untouched. `Rule::requiredIf(null)` is valid Laravel (the condition normalizes to `false`), but the native fluent method is typed `Closure|bool|string`, so rewriting to `->requiredIf(null)` would `TypeError` at runtime. The wrapper is preserved instead.
   
@@ -121,6 +137,7 @@ A multi-argument facade conditional (not valid Laravel usage) is also left as-is
   
   // after
   'role' => FluentRule::field()->nullable()->requiredIf(fn () => $this->isAdmin()),
+  
   
   
   
@@ -187,6 +204,7 @@ FluentRule::field('Agree to TOS')->required()->rule('accepted')
 // After
 FluentRule::accepted()->required()
 FluentRule::accepted('Agree to TOS')->required()
+
 
 
 
