@@ -23,6 +23,8 @@ All rules extend `Rector\Rector\AbstractRector` and implement `DocumentedRuleInt
 | `AddHasFluentRulesTraitRector` | Adds `HasFluentRules` trait to FormRequests |
 | `AddHasFluentValidationTraitRector` | Adds `HasFluentValidation` trait to Livewire components |
 | `SimplifyFluentRuleRector` | Post-migration cleanup: factory shortcuts, min/max→between |
+| `SimplifyRuleWrappersRector` | Post-migration cleanup: lowers `->rule('max:61')` → native `->max(61)` on typed receivers |
+| `UpdateRulesReturnTypeDocblockRector` | Polish: narrows `@return` docblocks on `rules()` methods |
 
 ### Shared Traits
 
