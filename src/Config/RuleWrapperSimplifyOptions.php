@@ -20,6 +20,7 @@ use SanderMuller\FluentValidationRector\Rector\SimplifyRuleWrappersRector;
  *             )
  *             ->toArray(),
  *     );
+ * @see \SanderMuller\FluentValidationRector\Tests\Config\RuleWrapperSimplifyOptionsTest
  */
 final readonly class RuleWrapperSimplifyOptions
 {

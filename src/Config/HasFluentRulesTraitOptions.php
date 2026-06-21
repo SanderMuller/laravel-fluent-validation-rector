@@ -14,6 +14,7 @@ use SanderMuller\FluentValidationRector\Rector\AddHasFluentRulesTraitRector;
  *             ->withBaseClasses(BaseClassRegistry::of(['App\\Http\\Requests\\BaseRequest']))
  *             ->toArray(),
  *     );
+ * @see \SanderMuller\FluentValidationRector\Tests\Config\HasFluentRulesTraitOptionsTest
  */
 final readonly class HasFluentRulesTraitOptions
 {

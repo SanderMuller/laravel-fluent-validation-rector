@@ -126,6 +126,9 @@ CODE_SAMPLE
         return [MethodCall::class];
     }
 
+    /**
+     * @param MethodCall $node
+     */
     public function refactor(Node $node): ?Node
     {
         // Skip if already processed as part of a larger chain

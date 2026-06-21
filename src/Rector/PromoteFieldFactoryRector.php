@@ -246,12 +246,11 @@ CODE_SAMPLE
         return [MethodCall::class];
     }
 
+    /**
+     * @param MethodCall $node
+     */
     public function refactor(Node $node): ?Node
     {
-        if (! $node instanceof MethodCall) {
-            return null;
-        }
-
         // File-level relevance gate. Broad rule-bearing needle set
         // because upstream converters may synthesize FluentRule chains
         // mid-pass — see ShortCircuitsIrrelevantFiles for the rationale.

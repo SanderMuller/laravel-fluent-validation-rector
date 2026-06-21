@@ -6,6 +6,7 @@ namespace SanderMuller\FluentValidationRector\Config\Shared;
  * Typed list of FormRequest base-class FQNs consumed by
  * `AddHasFluentRulesTraitRector` (and any future rector that takes a
  * base-class allowlist).
+ * @see \SanderMuller\FluentValidationRector\Tests\Config\Shared\BaseClassRegistryTest
  */
 final readonly class BaseClassRegistry
 {

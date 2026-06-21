@@ -160,12 +160,11 @@ CODE_SAMPLE
      */
     private bool $needsValidationRuleImport = false;
 
+    /**
+     * @param Namespace_ $node
+     */
     public function refactor(Node $node): ?Node
     {
-        if (! $node instanceof Namespace_) {
-            return null;
-        }
-
         // File-level relevance gate. Wildcard grouping fires on rules
         // arrays containing dotted keys (`'roles.*'`); files with no
         // rule-bearing tokens cannot contain such an array. Cheap text
