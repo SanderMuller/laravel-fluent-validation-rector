@@ -37,7 +37,6 @@ use Rector\PhpParser\Node\FileNode;
 use RecursiveCallbackFilterIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
-use SanderMuller\FluentValidation\FluentRule;
 use SplFileInfo;
 use UnexpectedValueException;
 

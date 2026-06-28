@@ -101,12 +101,11 @@ CODE_SAMPLE
         return [Class_::class];
     }
 
+    /**
+     * @param Class_ $node
+     */
     public function refactor(Node $node): ?Node
     {
-        if (! $node instanceof Class_) {
-            return null;
-        }
-
         // File-level relevance gate. This rule only fires on classes
         // with `rules()` that spread `parent::rules()`. Both tokens are
         // cheap to grep before the AST walk.

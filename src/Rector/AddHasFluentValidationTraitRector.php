@@ -138,12 +138,11 @@ CODE_SAMPLE
         return [Namespace_::class];
     }
 
+    /**
+     * @param Namespace_ $node
+     */
     public function refactor(Node $node): ?Node
     {
-        if (! $node instanceof Namespace_) {
-            return null;
-        }
-
         // File-level relevance gate. Trait insertion only fires on
         // Livewire / Filament classes that use FluentRule somewhere
         // in their rules() method (or already carry one of the package

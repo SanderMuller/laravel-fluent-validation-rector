@@ -107,6 +107,9 @@ CODE_SAMPLE
         return [ClassLike::class, MethodCall::class, StaticCall::class, FuncCall::class];
     }
 
+    /**
+     * @param ClassLike|MethodCall|StaticCall|FuncCall $node
+     */
     public function refactor(Node $node): ?Node
     {
         // File-level relevance gate. See ValidationStringToFluentRuleRector

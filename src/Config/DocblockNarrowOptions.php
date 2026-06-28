@@ -10,6 +10,7 @@ use SanderMuller\FluentValidationRector\Rector\UpdateRulesReturnTypeDocblockRect
  * Consumes the shared `AllowlistedFactories` DTO; same wire keys as
  * `RuleWrapperSimplifyOptions` because the two rectors share the
  * fluent-compatibility allowlist concept.
+ * @see \SanderMuller\FluentValidationRector\Tests\Config\DocblockNarrowOptionsTest
  */
 final readonly class DocblockNarrowOptions
 {

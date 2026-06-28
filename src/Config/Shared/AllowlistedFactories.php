@@ -16,6 +16,7 @@ namespace SanderMuller\FluentValidationRector\Config\Shared;
  *
  * Pattern syntax (`*` single-segment, `**` recursive) is documented on the
  * underlying `AllowlistedRuleFactories` trait.
+ * @see \SanderMuller\FluentValidationRector\Tests\Config\Shared\AllowlistedFactoriesTest
  */
 final readonly class AllowlistedFactories
 {
