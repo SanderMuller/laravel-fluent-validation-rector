@@ -2,6 +2,44 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 1.8.0 - 2026-06-29
+
+<!-- verified-sha: c0e00120fffe1ae5ae2e832e56372b98b74db9f6 -->
+### Added
+
+- **Rule-generated fluent chains now render one method call per line.** Every
+  fluent call a rule creates is stamped with `NEWLINE_ON_FLUENT_CALL`, so a
+  converted chain reads as:
+  
+  ```php
+  'email' => FluentRule::email()
+      ->required()
+      ->max(255),
+  
+  ```
+  The line breaks are stamped only on the calls a rule creates, so calls
+  already present inline in your source stay inline. Consumers no longer need a
+  global `withFluentCallNewLine()` flag in `rector.php` to get readable
+  multi-line output — the formatting is targeted to the nodes each rule
+  produces. If you prefer single-line chains, run a formatter that collapses
+  method chains after Rector.
+  
+
+### Changed
+
+- **Minimum `rector/rector` raised to `^2.5.2`** (was `^2.4.1`). rector 2.5.2
+  changed how unused imports are removed, which the previous floor could not
+  satisfy consistently across versions. Make sure your project resolves
+  rector 2.5.2 or newer when upgrading.
+
+### Internal
+
+- Migrated the rules that queued `use` imports off the deprecated
+  `UseNodesToAddCollector` service onto the FileNode-owned pending-imports
+  queue introduced in rector 2.4.7. Behaviour is unchanged.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/1.7.1...1.8.0
+
 ## 1.7.1 - 2026-06-17
 
 <!-- verified-sha: e324b235b56845fc0121da9d9a70a6e79ddbea10 -->
@@ -31,6 +69,7 @@ All notable changes to `sandermuller/laravel-fluent-validation-rector` will be d
   'items' => FluentRule::array()->nullable()->each(
       FluentRule::string()->nullable()->max(255)
   ),
+  
   
   
   ```
@@ -112,6 +151,7 @@ Performance release. The rule pipeline does substantially less work per file, an
   
   
   
+  
   ```
 - A literal-`null` condition is left untouched. `Rule::requiredIf(null)` is valid Laravel (the condition normalizes to `false`), but the native fluent method is typed `Closure|bool|string`, so rewriting to `->requiredIf(null)` would `TypeError` at runtime. The wrapper is preserved instead.
   
@@ -137,6 +177,7 @@ A multi-argument facade conditional (not valid Laravel usage) is also left as-is
   
   // after
   'role' => FluentRule::field()->nullable()->requiredIf(fn () => $this->isAdmin()),
+  
   
   
   
@@ -204,6 +245,7 @@ FluentRule::field('Agree to TOS')->required()->rule('accepted')
 // After
 FluentRule::accepted()->required()
 FluentRule::accepted('Agree to TOS')->required()
+
 
 
 
