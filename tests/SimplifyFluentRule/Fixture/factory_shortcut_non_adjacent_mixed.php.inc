@@ -41,19 +41,30 @@ class Role
 
 $rules = [
     // Zero-arg shortcut, non-adjacent: string() and url() separated.
-    'homepage' => FluentRule::url()->nullable()->required(),
+    'homepage' => FluentRule::url()
+        ->nullable()
+        ->required(),
 
     // Arg-carrying shortcut, non-adjacent: field() and enum() separated.
-    'role' => FluentRule::enum(Role::class)->nullable()->bail()->required(),
+    'role' => FluentRule::enum(Role::class)
+        ->nullable()
+        ->bail()
+        ->required(),
 
     // Arg-carrying shortcut, non-adjacent: string() and regex() separated.
-    'slug' => FluentRule::regex('/^[a-z-]+$/')->nullable()->required(),
+    'slug' => FluentRule::regex('/^[a-z-]+$/')
+        ->nullable()
+        ->required(),
 
     // Non-adjacent numeric → integer.
-    'count' => FluentRule::integer()->nullable()->required(),
+    'count' => FluentRule::integer()
+        ->nullable()
+        ->required(),
 
     // Non-adjacent array → list.
-    'tags' => FluentRule::list()->nullable()->required(),
+    'tags' => FluentRule::list()
+        ->nullable()
+        ->required(),
 ];
 
 ?>

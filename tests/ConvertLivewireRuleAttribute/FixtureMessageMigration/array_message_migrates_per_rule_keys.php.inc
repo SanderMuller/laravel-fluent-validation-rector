@@ -36,7 +36,9 @@ class ArrayMessageMigratesPerRuleKeys extends Component
     protected function rules(): array
     {
         return [
-            'name' => FluentRule::string()->required()->min(3),
+            'name' => FluentRule::string()
+                ->required()
+                ->min(3),
         ];
     }
 

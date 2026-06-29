@@ -33,7 +33,8 @@ class FieldFactoryPromoteThenLower
             // PromoteFieldFactoryRector: field() → string() because the ->rule() payloads
             // intersect to {StringRule}. SimplifyRuleWrappersRector then lowers the
             // ->rule() escape-hatches to native methods on the promoted StringRule.
-            'slug' => FluentRule::regex('/^[a-z]+$/')->max(61),
+            'slug' => FluentRule::regex('/^[a-z]+$/')
+                ->max(61),
         ];
     }
 }

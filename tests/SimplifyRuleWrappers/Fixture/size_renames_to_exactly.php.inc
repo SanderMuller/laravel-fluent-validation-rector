@@ -38,10 +38,14 @@ class SizeRenamesToExactly
         // in the main package). Maintainers must NOT "fix" this back to
         // `->size(N)` — there is no `size()` method on any typed-rule class.
         return [
-            'pin' => FluentRule::string()->exactly(6),
-            'rgb' => FluentRule::array()->exactly(3),
-            'cents' => FluentRule::numeric()->exactly(100),
-            'thumb' => FluentRule::file()->exactly(1024),
+            'pin' => FluentRule::string()
+                ->exactly(6),
+            'rgb' => FluentRule::array()
+                ->exactly(3),
+            'cents' => FluentRule::numeric()
+                ->exactly(100),
+            'thumb' => FluentRule::file()
+                ->exactly(1024),
         ];
     }
 }

@@ -17,7 +17,8 @@ namespace SanderMuller\FluentValidationRector\Tests\SimplifyRuleWrappers\Fixture
 use SanderMuller\FluentValidation\FluentRule;
 
 $rules = [
-    'optIn' => FluentRule::boolean()->declined(),
+    'optIn' => FluentRule::boolean()
+        ->declined(),
 ];
 
 ?>

@@ -38,7 +38,8 @@ class RegisterPaymentRequest extends FormRequest
     {
         return [
             'description' => FluentRule::string()->bail()->required()->max(150),
-            'amount' => FluentRule::array()->bail()->required()->children([
+            'amount' => FluentRule::array()->bail()->required()
+                ->children([
                 'currency' => FluentRule::string()->bail()->required()->in([
                     'SOL',
                     'SOL_LAMPORTS', // For clarity, we can allow both SOL and lamports

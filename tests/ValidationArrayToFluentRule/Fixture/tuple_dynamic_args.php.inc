@@ -85,16 +85,30 @@ class DynamicArgTupleFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'a' => FluentRule::array()->max($this->isLandscape() ? 15 : 20),
-            'b' => FluentRule::array()->max($this->getLimit()),
-            'c' => FluentRule::array()->max(config('app.limit')),
-            'd' => FluentRule::array()->max($this->foo?->bar),
-            'e' => FluentRule::array()->max($this->limit),
-            'f' => FluentRule::array()->max(match ($this->mode()) { 'strict' => 5, default => 10 }),
-            'g' => FluentRule::array()->max(Config::get('limit')),
-            'h' => FluentRule::array()->max($this->limits['max']),
-            'i' => FluentRule::array()->max((int) $this->raw),
-            'chapters' => FluentRule::array()->requiredIf('type', InteractionType::CHAPTER->value)->max($this->isLandscape() ? 15 : 20),
+            'a' => FluentRule::array()
+                ->max($this->isLandscape() ? 15 : 20),
+            'b' => FluentRule::array()
+                ->max($this->getLimit()),
+            'c' => FluentRule::array()
+                ->max(config('app.limit')),
+            'd' => FluentRule::array()
+                ->max($this->foo?->bar),
+            'e' => FluentRule::array()
+                ->max($this->limit),
+            'f' => FluentRule::array()
+                ->max(match ($this->mode()) {
+                'strict' => 5,
+                default => 10,
+            }),
+            'g' => FluentRule::array()
+                ->max(Config::get('limit')),
+            'h' => FluentRule::array()
+                ->max($this->limits['max']),
+            'i' => FluentRule::array()
+                ->max((int) $this->raw),
+            'chapters' => FluentRule::array()
+                ->requiredIf('type', InteractionType::CHAPTER->value)
+                ->max($this->isLandscape() ? 15 : 20),
         ];
     }
 

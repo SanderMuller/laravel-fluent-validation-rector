@@ -34,9 +34,17 @@ class CustomRuleFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => FluentRule::string()->required()->rule(new NoSwearWords()),
-            'code' => FluentRule::field()->required()->rule(new ValidCode())->rule('max:50'),
-            'tags' => FluentRule::array()->required()->rule(new ValidTags())->rule(new MaxTags(10)),
+            'name' => FluentRule::string()
+                ->required()
+                ->rule(new NoSwearWords()),
+            'code' => FluentRule::field()
+                ->required()
+                ->rule(new ValidCode())
+                ->rule('max:50'),
+            'tags' => FluentRule::array()
+                ->required()
+                ->rule(new ValidTags())
+                ->rule(new MaxTags(10)),
         ];
     }
 }

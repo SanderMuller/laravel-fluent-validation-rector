@@ -57,7 +57,8 @@ final class WildcardPrefixMixedHostRequest extends FormRequest
 {
     public function rules(): array
     {
-        return ['*' => FluentRule::array()->children([
+        return ['*' => FluentRule::array()
+            ->children([
             MixedConstHostA::TITLE => FluentRule::string()->required(),
             MixedConstHostB::DESCRIPTION => FluentRule::string()->nullable(),
         ])];

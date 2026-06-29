@@ -52,7 +52,8 @@ final class MixedLiteralAndConstInsideRuleSetFromRequest extends FormRequest
     public function rules(): RuleSet
     {
         return RuleSet::from([
-            '*' => FluentRule::array()->children([
+            '*' => FluentRule::array()
+                ->children([
                 'foo' => FluentRule::string()->required(),
             ]),
             '*.' . self::BAR => FluentRule::integer()->min(0),

@@ -33,7 +33,8 @@ final class KeyedArraySingleEntry extends Component
     protected function rules(): array
     {
         return [
-            'todos' => FluentRule::string()->required(),
+            'todos' => FluentRule::string()
+                ->required(),
         ];
     }
 }

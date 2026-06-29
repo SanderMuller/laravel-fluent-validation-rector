@@ -41,8 +41,10 @@ class AutoDetectRuleObjectInHelper extends FormRequest
     private function shippingRules(): array
     {
         return [
-            'address' => FluentRule::string()->required(),
-            'role' => FluentRule::field()->in(['admin', 'editor']),
+            'address' => FluentRule::string()
+                ->required(),
+            'role' => FluentRule::field()
+                ->in(['admin', 'editor']),
         ];
     }
 }

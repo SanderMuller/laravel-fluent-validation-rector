@@ -42,8 +42,11 @@ class EnumTupleFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => FluentRule::string()->requiredIf(self::FIELD, InteractionType::PAUSE->value, InteractionType::FRAME->value),
-            'status' => FluentRule::string()->excludeUnless('type', Status::ACTIVE->value)->nullable(),
+            'name' => FluentRule::string()
+                ->requiredIf(self::FIELD, InteractionType::PAUSE->value, InteractionType::FRAME->value),
+            'status' => FluentRule::string()
+                ->excludeUnless('type', Status::ACTIVE->value)
+                ->nullable(),
         ];
     }
 }

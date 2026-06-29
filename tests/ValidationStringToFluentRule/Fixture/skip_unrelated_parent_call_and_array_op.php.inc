@@ -73,7 +73,8 @@ class UnrelatedCoexistenceParentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'title' => FluentRule::string()->required(),
+            'title' => FluentRule::string()
+                ->required(),
         ];
     }
 }

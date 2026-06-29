@@ -57,11 +57,16 @@ final class TypedPropertyComponent extends Component
     protected function rules(): array
     {
         return [
-            'category' => FluentRule::string()->required(),
-            'description' => FluentRule::string()->max(2000),
-            'count' => FluentRule::integer()->min(1),
-            'confirmed' => FluentRule::boolean()->required(),
-            'title' => FluentRule::string()->max(50),
+            'category' => FluentRule::string()
+                ->required(),
+            'description' => FluentRule::string()
+                ->max(2000),
+            'count' => FluentRule::integer()
+                ->min(1),
+            'confirmed' => FluentRule::boolean()
+                ->required(),
+            'title' => FluentRule::string()
+                ->max(50),
         ];
     }
 }

@@ -76,7 +76,8 @@ final class PeerSyntheticSourceOrderRequest extends FormRequest
      */
     public function rules(): array
     {
-        return ['*' => FluentRule::array()->children([
+        return ['*' => FluentRule::array()
+            ->children([
             SyntheticOrderingHost::SORT_ORDER => FluentRule::integer()->nullable()->min(0),
             SyntheticOrderingHost::NAME => FluentRule::string()->nullable()->max(255),
             SyntheticOrderingHost::COLOR => FluentRule::string()->nullable(),

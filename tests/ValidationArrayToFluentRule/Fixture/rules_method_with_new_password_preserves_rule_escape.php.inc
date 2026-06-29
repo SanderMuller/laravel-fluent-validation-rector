@@ -33,8 +33,12 @@ class NewRuleObjectsInRulesMethodRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'password' => FluentRule::field()->required()->rule(new Password(8)),
-            'email' => FluentRule::string()->required()->rule(new Unique('users', 'email')),
+            'password' => FluentRule::field()
+                ->required()
+                ->rule(new Password(8)),
+            'email' => FluentRule::string()
+                ->required()
+                ->rule(new Unique('users', 'email')),
         ];
     }
 }

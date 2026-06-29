@@ -21,7 +21,8 @@ use SanderMuller\FluentValidation\FluentRule;
 $rules = [
     // Arg-carrying shortcut: regex method's pattern arg promotes to
     // the new factory. No label() in chain → shortcut fires.
-    'code' => FluentRule::regex('/^\d+$/')->required(),
+    'code' => FluentRule::regex('/^\d+$/')
+        ->required(),
 ];
 
 ?>

@@ -33,8 +33,11 @@ class SubtitleImportValidator extends FluentValidator
     public function rulesWithoutPrefix(): array
     {
         return [
-            'title' => FluentRule::string()->required()->max(255),
-            'body' => FluentRule::string()->required(),
+            'title' => FluentRule::string()
+                ->required()
+                ->max(255),
+            'body' => FluentRule::string()
+                ->required(),
         ];
     }
 }

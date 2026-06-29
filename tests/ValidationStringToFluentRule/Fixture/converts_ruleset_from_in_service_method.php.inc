@@ -55,8 +55,11 @@ class ValidateInputService
     public function check(array $data): array
     {
         return RuleSet::from([
-            'name' => FluentRule::string()->required()->max(255),
-            'email' => FluentRule::email()->required(),
+            'name' => FluentRule::string()
+                ->required()
+                ->max(255),
+            'email' => FluentRule::email()
+                ->required(),
         ])->check($data)->safe();
     }
 }

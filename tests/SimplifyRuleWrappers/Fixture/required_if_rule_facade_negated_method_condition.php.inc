@@ -46,7 +46,8 @@ class RequiredIfFacadeNegatedMethodCondition
         // consumer's `Rule::requiredIf(! $this->container->isSubContainer())`
         // shape.
         return [
-            'enabled' => FluentRule::boolean()->bail()->requiredIf(! $this->isSubContainer())->nullable(),
+            'enabled' => FluentRule::boolean()->bail()
+                ->requiredIf(!$this->isSubContainer())->nullable(),
         ];
     }
 

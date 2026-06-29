@@ -33,6 +33,7 @@ use PhpParser\Node\Stmt\Return_;
 use PhpParser\Node\Stmt\Unset_;
 use PhpParser\NodeVisitor;
 use PHPStan\Type\ObjectType;
+use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\PhpParser\Node\FileNode;
 use RecursiveCallbackFilterIterator;
 use RecursiveDirectoryIterator;
@@ -1409,7 +1410,7 @@ trait ConvertsValidationRuleStrings
     private function buildModifierCall(Expr $expr, string $name, ?string $args): ?MethodCall
     {
         if (in_array($name, self::SIMPLE_MODIFIERS, true)) {
-            return new MethodCall($expr, new Identifier($name));
+            return $this->withFluentNewline(new MethodCall($expr, new Identifier($name)));
         }
 
         if ($args === null) {
@@ -1417,9 +1418,9 @@ trait ConvertsValidationRuleStrings
         }
 
         if (in_array($name, self::NUMERIC_ARG_RULES, true)) {
-            return new MethodCall($expr, new Identifier($name), [
+            return $this->withFluentNewline(new MethodCall($expr, new Identifier($name), [
                 new Arg($this->parseNumericArg($args)),
-            ]);
+            ]));
         }
 
         if (in_array($name, self::TWO_NUMERIC_ARG_RULES, true)) {
@@ -1430,9 +1431,9 @@ trait ConvertsValidationRuleStrings
             in_array($name, self::STRING_ARG_RULES, true)
             || in_array($name, self::SINGLE_STRING_ARG_RULES, true)
         ) {
-            return new MethodCall($expr, new Identifier($name), [
+            return $this->withFluentNewline(new MethodCall($expr, new Identifier($name), [
                 new Arg(new String_($args)),
-            ]);
+            ]));
         }
 
         if ($name === 'in' || $name === 'notIn') {
@@ -1444,10 +1445,10 @@ trait ConvertsValidationRuleStrings
         }
 
         if (in_array($name, self::COMMA_SEPARATED_ARGS_RULES, true)) {
-            return new MethodCall($expr, new Identifier($name), array_map(
+            return $this->withFluentNewline(new MethodCall($expr, new Identifier($name), array_map(
                 static fn (string $v): Arg => new Arg(new String_($v)),
                 explode(',', $args),
-            ));
+            )));
         }
 
         return null;
@@ -1461,10 +1462,10 @@ trait ConvertsValidationRuleStrings
             return null;
         }
 
-        return new MethodCall($expr, new Identifier($name), [
+        return $this->withFluentNewline(new MethodCall($expr, new Identifier($name), [
             new Arg($this->parseNumericArg($argParts[0])),
             new Arg($this->parseNumericArg($argParts[1])),
-        ]);
+        ]));
     }
 
     /**
@@ -1485,34 +1486,34 @@ trait ConvertsValidationRuleStrings
 
         if (in_array($name, self::SIMPLE_MODIFIERS, true)) {
             return $argCount === 0
-                ? new MethodCall($expr, new Identifier($name))
+                ? $this->withFluentNewline(new MethodCall($expr, new Identifier($name)))
                 : null;
         }
 
         if (in_array($name, self::NUMERIC_ARG_RULES, true)) {
             return $argCount === 1
-                ? new MethodCall($expr, new Identifier($name), [new Arg($argExprs[0])])
+                ? $this->withFluentNewline(new MethodCall($expr, new Identifier($name), [new Arg($argExprs[0])]))
                 : null;
         }
 
         if (in_array($name, self::TWO_NUMERIC_ARG_RULES, true)) {
             return $argCount === 2
-                ? new MethodCall($expr, new Identifier($name), [
+                ? $this->withFluentNewline(new MethodCall($expr, new Identifier($name), [
                     new Arg($argExprs[0]),
                     new Arg($argExprs[1]),
-                ])
+                ]))
                 : null;
         }
 
         if (in_array($name, self::STRING_ARG_RULES, true)) {
             return $argCount === 1
-                ? new MethodCall($expr, new Identifier($name), [new Arg($argExprs[0])])
+                ? $this->withFluentNewline(new MethodCall($expr, new Identifier($name), [new Arg($argExprs[0])]))
                 : null;
         }
 
         if (in_array($name, ['startsWith', 'endsWith', 'doesntStartWith', 'doesntEndWith', 'regex', 'notRegex', 'format'], true)) {
             return $argCount === 1
-                ? new MethodCall($expr, new Identifier($name), [new Arg($argExprs[0])])
+                ? $this->withFluentNewline(new MethodCall($expr, new Identifier($name), [new Arg($argExprs[0])]))
                 : null;
         }
 
@@ -1608,9 +1609,9 @@ trait ConvertsValidationRuleStrings
     {
         $ruleString = $args !== null ? $name . ':' . $args : $name;
 
-        return new MethodCall($expr, new Identifier('rule'), [
+        return $this->withFluentNewline(new MethodCall($expr, new Identifier('rule'), [
             new Arg(new String_($ruleString)),
-        ]);
+        ]));
     }
 
     /**
@@ -1623,9 +1624,9 @@ trait ConvertsValidationRuleStrings
             explode(',', $args),
         );
 
-        return new MethodCall($expr, new Identifier($method), [
+        return $this->withFluentNewline(new MethodCall($expr, new Identifier($method), [
             new Arg(new Array_($values)),
-        ]);
+        ]));
     }
 
     /**
@@ -1646,7 +1647,7 @@ trait ConvertsValidationRuleStrings
             $callArgs[] = new Arg(new String_($argParts[1]));
         }
 
-        return new MethodCall($expr, new Identifier($method), $callArgs);
+        return $this->withFluentNewline(new MethodCall($expr, new Identifier($method), $callArgs));
     }
 
     private function parseNumericArg(string $value): Int_|String_
@@ -1729,6 +1730,13 @@ trait ConvertsValidationRuleStrings
         // For field type, only presence modifiers and embedded rules are safe
         return in_array($modifierName, self::FIELD_SAFE_MODIFIERS, true)
             || in_array($modifierName, self::COMMA_SEPARATED_ARGS_RULES, true);
+    }
+
+    private function withFluentNewline(MethodCall $call): MethodCall
+    {
+        $call->setAttribute(AttributeKey::NEWLINE_ON_FLUENT_CALL, true);
+
+        return $call;
     }
 
     /**

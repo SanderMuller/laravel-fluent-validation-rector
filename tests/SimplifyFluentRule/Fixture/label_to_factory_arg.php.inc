@@ -19,9 +19,14 @@ namespace SanderMuller\FluentValidationRector\Tests\SimplifyFluentRule\Fixture;
 use SanderMuller\FluentValidation\FluentRule;
 
 $rules = [
-    'name' => FluentRule::string('Full Name')->required()->max(255),
-    'age' => FluentRule::integer('Age')->required()->min(0),
-    'site' => FluentRule::url('Website')->nullable(),
+    'name' => FluentRule::string('Full Name')
+        ->required()
+        ->max(255),
+    'age' => FluentRule::integer('Age')
+        ->required()
+        ->min(0),
+    'site' => FluentRule::url('Website')
+        ->nullable(),
 ];
 
 ?>

@@ -75,8 +75,12 @@ class WrappedAttachUserToCompanyRequest extends FormRequest
     public function rules(): RuleSet
     {
         return RuleSet::from([
-            'role' => FluentRule::field()->required()->enum(CompanyRoleEnum::class),
-            'userId' => FluentRule::integer()->bail()->required(),
+            'role' => FluentRule::field()
+                ->required()
+                ->enum(CompanyRoleEnum::class),
+            'userId' => FluentRule::integer()
+                ->bail()
+                ->required(),
         ]);
     }
 }

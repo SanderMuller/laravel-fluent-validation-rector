@@ -47,7 +47,9 @@ final class AttributeBeforeAsConflictComponent extends Component
     protected function rules(): array
     {
         return [
-            'name' => FluentRule::string()->required()->label('From attribute'),
+            'name' => FluentRule::string()
+                ->required()
+                ->label('From attribute'),
         ];
     }
 }

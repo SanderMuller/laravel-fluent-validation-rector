@@ -30,7 +30,8 @@ class LivewireComponent extends Component
     public function rules(): array
     {
         return [
-            'items' => FluentRule::array()->required()->each([
+            'items' => FluentRule::array()->required()
+                ->each([
                 'name' => FluentRule::string()->required(),
             ]),
         ];

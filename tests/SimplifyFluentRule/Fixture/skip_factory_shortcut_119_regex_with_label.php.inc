@@ -33,7 +33,8 @@ use SanderMuller\FluentValidation\FluentRule;
 // factory (string('Code')), producing a partial collapse.
 $rules = [
     'code' => FluentRule::string('Code')->regex('/^\d+$/')->required(),
-    'pinned' => FluentRule::string('PIN')->regex('/^\d+$/'),
+    'pinned' => FluentRule::string('PIN')
+        ->regex('/^\d+$/'),
 ];
 
 ?>

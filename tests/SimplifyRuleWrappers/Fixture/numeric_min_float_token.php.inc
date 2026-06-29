@@ -34,8 +34,10 @@ class NumericMinFloatToken
         // float-shaped tokens, not String_('1.5') (would type-error
         // at runtime).
         return [
-            'a' => FluentRule::numeric()->min(1.5),
-            'b' => FluentRule::numeric()->between(-0.5, 2.5),
+            'a' => FluentRule::numeric()
+                ->min(1.5),
+            'b' => FluentRule::numeric()
+                ->between(-0.5, 2.5),
         ];
     }
 }

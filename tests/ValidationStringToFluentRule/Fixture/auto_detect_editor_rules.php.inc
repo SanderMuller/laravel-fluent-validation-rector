@@ -39,8 +39,11 @@ class AutoDetectEditorRules extends FormRequest
     public function editorRules(): array
     {
         return [
-            'title' => FluentRule::string()->required()->max(255),
-            'body' => FluentRule::string()->required(),
+            'title' => FluentRule::string()
+                ->required()
+                ->max(255),
+            'body' => FluentRule::string()
+                ->required(),
         ];
     }
 }

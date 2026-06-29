@@ -27,7 +27,8 @@ class RegexArrayForm
     public function rules(): array
     {
         return [
-            'slug' => FluentRule::string()->regex('/^[a-z0-9-]+$/'),
+            'slug' => FluentRule::string()
+                ->regex('/^[a-z0-9-]+$/'),
         ];
     }
 }

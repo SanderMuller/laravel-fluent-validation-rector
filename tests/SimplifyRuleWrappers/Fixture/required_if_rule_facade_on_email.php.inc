@@ -38,13 +38,20 @@ class RequiredIfRuleFacadeOnEmail
     {
         return [
             'email' => FluentRule::email()
-                ->bail()->requiredIf($userEmailEnabled),
-            'alias' => FluentRule::string()->excludeIf($userEmailEnabled),
-            'token' => FluentRule::string()->prohibitedIf($userEmailEnabled),
-            'phone' => FluentRule::string()->requiredUnless($userEmailEnabled),
-            'fax' => FluentRule::string()->excludeUnless($userEmailEnabled),
-            'pager' => FluentRule::string()->prohibitedUnless($userEmailEnabled),
-            'note' => FluentRule::string()->requiredIf(fn () => $userEmailEnabled),
+                ->bail()
+                ->requiredIf($userEmailEnabled),
+            'alias' => FluentRule::string()
+                ->excludeIf($userEmailEnabled),
+            'token' => FluentRule::string()
+                ->prohibitedIf($userEmailEnabled),
+            'phone' => FluentRule::string()
+                ->requiredUnless($userEmailEnabled),
+            'fax' => FluentRule::string()
+                ->excludeUnless($userEmailEnabled),
+            'pager' => FluentRule::string()
+                ->prohibitedUnless($userEmailEnabled),
+            'note' => FluentRule::string()
+                ->requiredIf(fn() => $userEmailEnabled),
         ];
     }
 }

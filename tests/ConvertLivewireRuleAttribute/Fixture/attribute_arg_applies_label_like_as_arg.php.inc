@@ -45,7 +45,9 @@ final class AttributeSynonymComponent extends Component
     protected function rules(): array
     {
         return [
-            'name' => FluentRule::string()->required()->label('user name'),
+            'name' => FluentRule::string()
+                ->required()
+                ->label('user name'),
         ];
     }
 }

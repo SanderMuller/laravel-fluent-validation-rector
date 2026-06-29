@@ -35,7 +35,8 @@ class RuleObjectCollapseCustomClass
         // Custom user-defined rule class — basename `MyCustomRule` →
         // lcfirst → 'myCustomRule' per the HasFieldModifiers default case.
         return [
-            'field' => FluentRule::string()->rule(new MyCustomRule(), message: 'Custom failed.'),
+            'field' => FluentRule::string()
+                ->rule(new MyCustomRule(), message: 'Custom failed.'),
         ];
     }
 }

@@ -32,8 +32,10 @@ class FileMinStringShorthand
         // FileRule::min accepts int|string — '2mb' shorthand is valid.
         // The literal coercion preserves non-numeric tokens as strings.
         return [
-            'avatar' => FluentRule::file()->min(1),
-            'attachment' => FluentRule::file()->max('50mb'),
+            'avatar' => FluentRule::file()
+                ->min(1),
+            'attachment' => FluentRule::file()
+                ->max('50mb'),
         ];
     }
 }

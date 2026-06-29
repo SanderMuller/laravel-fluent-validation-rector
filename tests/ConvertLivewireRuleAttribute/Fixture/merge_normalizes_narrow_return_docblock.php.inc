@@ -44,7 +44,9 @@ final class MergeStaleDocblockComponent extends Component
     public function rules(): array
     {
         return [
-            'legacy' => FluentRule::string(), 'email' => FluentRule::string()->required()->max(255),
+            'legacy' => FluentRule::string(), 'email' => FluentRule::string()
+                ->required()
+                ->max(255),
         ];
     }
 }

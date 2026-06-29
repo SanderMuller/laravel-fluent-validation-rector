@@ -39,8 +39,10 @@ final class SaveSettingsButton extends Component
     protected function rules(): array
     {
         return [
-            'category' => FluentRule::string()->required(),
-            'description' => FluentRule::string()->max(2000),
+            'category' => FluentRule::string()
+                ->required(),
+            'description' => FluentRule::string()
+                ->max(2000),
         ];
     }
 }

@@ -33,7 +33,9 @@ class ValidatorHelperFunctionArray
         \validator(
             $input,
             [
-                'email' => FluentRule::email()->required()->unique('users', 'email'),
+                'email' => FluentRule::email()
+                    ->required()
+                    ->unique('users', 'email'),
             ],
         );
     }

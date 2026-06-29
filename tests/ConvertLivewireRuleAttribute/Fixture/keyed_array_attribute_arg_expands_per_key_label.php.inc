@@ -50,8 +50,11 @@ final class KeyedArrayAttributeLabelComponent extends Component
     protected function rules(): array
     {
         return [
-            'todos' => FluentRule::array()->required(),
-            'todos.*' => FluentRule::string()->min(3)->label('todo'),
+            'todos' => FluentRule::array()
+                ->required(),
+            'todos.*' => FluentRule::string()
+                ->min(3)
+                ->label('todo'),
         ];
     }
 }

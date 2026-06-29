@@ -38,7 +38,8 @@ class NarrowDocblockWildcardFormRequest extends FormRequest
      */
     public function rules(): array
     {
-        return ['items' => FluentRule::array()->each([
+        return ['items' => FluentRule::array()
+            ->each([
             'name' => FluentRule::string()->required(),
             'email' => FluentRule::email()->required(),
         ])];

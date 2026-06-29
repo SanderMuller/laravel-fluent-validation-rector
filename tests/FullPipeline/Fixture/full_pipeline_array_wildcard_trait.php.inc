@@ -32,7 +32,10 @@ class UpdatePostRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'tags' => FluentRule::array()->max(10)->each(FluentRule::string()->max(128)),
+            'tags' => FluentRule::array()
+                ->max(10)
+                ->each(FluentRule::string()
+                ->max(128)),
         ];
     }
 }

@@ -54,7 +54,8 @@ class AttributeOnlySiblingHelperValidator extends FluentValidator
     public function rulesWithoutPrefix(): array
     {
         return [
-            'title' => FluentRule::string()->required(),
+            'title' => FluentRule::string()
+                ->required(),
         ];
     }
 

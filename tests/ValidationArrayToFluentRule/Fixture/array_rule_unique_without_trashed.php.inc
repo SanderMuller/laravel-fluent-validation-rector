@@ -32,7 +32,9 @@ class UniqueWithoutTrashedRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email' => FluentRule::string()->required()->unique(User::class, null, fn($rule) => $rule->withoutTrashed()),
+            'email' => FluentRule::string()
+                ->required()
+                ->unique(User::class, null, fn($rule) => $rule->withoutTrashed()),
         ];
     }
 }

@@ -10,6 +10,7 @@ use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Scalar\String_;
+use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\Rector\AbstractRector;
 
 /**
@@ -98,11 +99,18 @@ trait ExtractsLivewireAttributeLabels
 
             return [
                 'name' => $entry['name'],
-                'expr' => new MethodCall($entry['expr'], new Identifier('label'), [
+                'expr' => $this->withFluentNewline(new MethodCall($entry['expr'], new Identifier('label'), [
                     new Arg(new String_($label)),
-                ]),
+                ])),
             ];
         }, $entries);
+    }
+
+    private function withFluentNewline(MethodCall $call): MethodCall
+    {
+        $call->setAttribute(AttributeKey::NEWLINE_ON_FLUENT_CALL, true);
+
+        return $call;
     }
 
     /**

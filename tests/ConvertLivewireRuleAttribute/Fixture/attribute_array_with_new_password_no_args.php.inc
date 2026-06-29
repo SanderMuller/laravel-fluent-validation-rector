@@ -35,7 +35,8 @@ final class AttributeArrayWithNewPasswordNoArgsComponent extends Component
     protected function rules(): array
     {
         return [
-            'password' => FluentRule::password()->required(),
+            'password' => FluentRule::password()
+                ->required(),
         ];
     }
 }

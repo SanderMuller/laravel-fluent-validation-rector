@@ -29,8 +29,12 @@ class PasswordStringFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'password' => FluentRule::password()->required()->min(8)->confirmed(),
-            'pin' => FluentRule::password()->required(),
+            'password' => FluentRule::password()
+                ->required()
+                ->min(8)
+                ->confirmed(),
+            'pin' => FluentRule::password()
+                ->required(),
         ];
     }
 }

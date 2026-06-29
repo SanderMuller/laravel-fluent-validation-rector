@@ -33,10 +33,19 @@ class PasswordFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'password' => FluentRule::password(8)->required()->letters()->numbers()->symbols(),
-            'pin' => FluentRule::password(4)->required(),
-            'secret' => FluentRule::password()->required(),
-            'admin_pass' => FluentRule::password(12)->required()->mixedCase()->uncompromised(),
+            'password' => FluentRule::password(8)
+                ->required()
+                ->letters()
+                ->numbers()
+                ->symbols(),
+            'pin' => FluentRule::password(4)
+                ->required(),
+            'secret' => FluentRule::password()
+                ->required(),
+            'admin_pass' => FluentRule::password(12)
+                ->required()
+                ->mixedCase()
+                ->uncompromised(),
         ];
     }
 }

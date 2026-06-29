@@ -29,8 +29,11 @@ class EditProfile extends Component
     public function rules(): array
     {
         return [
-            'name' => FluentRule::string()->required()->max(255),
-            'bio' => FluentRule::string()->nullable(),
+            'name' => FluentRule::string()
+                ->required()
+                ->max(255),
+            'bio' => FluentRule::string()
+                ->nullable(),
         ];
     }
 }

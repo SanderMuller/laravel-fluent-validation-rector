@@ -32,7 +32,9 @@ final class ValidateOnUpdateFalseComponent extends Component
     protected function rules(): array
     {
         return [
-            'name' => FluentRule::string()->required()->max(255),
+            'name' => FluentRule::string()
+                ->required()
+                ->max(255),
         ];
     }
 }

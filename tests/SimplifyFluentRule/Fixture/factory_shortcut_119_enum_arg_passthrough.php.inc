@@ -33,7 +33,8 @@ $rules = [
     // field()->enum(X::class) → enum(X::class). enum is on FieldRule
     // via HasEmbeddedRules, but the static factory on FluentRule
     // returns FieldRule directly so the collapse is type-equivalent.
-    'status' => FluentRule::enum(Status::class)->required(),
+    'status' => FluentRule::enum(Status::class)
+        ->required(),
 ];
 
 ?>

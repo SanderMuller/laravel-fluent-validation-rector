@@ -52,7 +52,8 @@ final class WildcardPrefixSourceOrderRequest extends FormRequest
 
     public function rules(): array
     {
-        return ['*' => FluentRule::array()->children([
+        return ['*' => FluentRule::array()
+            ->children([
             self::Z_LAST => FluentRule::string()->required(),
             self::A_FIRST => FluentRule::string()->required(),
             self::M_MIDDLE => FluentRule::string()->required(),

@@ -29,7 +29,8 @@ class InWithIntermediateChain
     {
         // Intermediate ->required()/->nullable() must not block resolution.
         return [
-            'role' => FluentRule::string()->required()->nullable()->label('Role')->in(['admin', 'user']),
+            'role' => FluentRule::string()->required()->nullable()->label('Role')
+                ->in(['admin', 'user']),
         ];
     }
 }

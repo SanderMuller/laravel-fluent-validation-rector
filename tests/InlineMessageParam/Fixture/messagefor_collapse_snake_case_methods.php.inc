@@ -30,10 +30,14 @@ class MessageForCollapseSnakeCaseMethods
     public function rules(): array
     {
         return [
-            'slug' => FluentRule::string()->alphaDash(message: 'Slug format.'),
-            'code' => FluentRule::string()->alphaNumeric(message: 'Code format.'),
-            'url' => FluentRule::string()->notRegex('/spam/', message: 'No spam.'),
-            'role' => FluentRule::string()->inArray('roles.*.name', message: 'Pick a role.'),
+            'slug' => FluentRule::string()
+                ->alphaDash(message: 'Slug format.'),
+            'code' => FluentRule::string()
+                ->alphaNumeric(message: 'Code format.'),
+            'url' => FluentRule::string()
+                ->notRegex('/spam/', message: 'No spam.'),
+            'role' => FluentRule::string()
+                ->inArray('roles.*.name', message: 'Pick a role.'),
         ];
     }
 }

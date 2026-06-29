@@ -77,8 +77,12 @@ class AttachUserToCompanyAction
     public function execute(array $data): array
     {
         $safeInput = RuleSet::from([
-            'role' => FluentRule::field()->required()->enum(CompanyRoleEnum::class),
-            'userId' => FluentRule::integer()->bail()->required(),
+            'role' => FluentRule::field()
+                ->required()
+                ->enum(CompanyRoleEnum::class),
+            'userId' => FluentRule::integer()
+                ->bail()
+                ->required(),
         ])->check($data)->safe();
 
         return $safeInput;

@@ -43,9 +43,14 @@ class SaveInteractionRequestShape extends FormRequest
 
     public function rules(): array
     {
-        return [self::INTERACTIONS => FluentRule::array()->each([
-            'continue_button_display_mode' => FluentRule::string()->excludeUnless(self::INTERACTIONS . '.*.type', \App\Enums\InteractionType::PAUSE->value)->sometimes(),
-            'duration' => FluentRule::numeric()->bail()->requiredUnless(self::INTERACTIONS . '.*.type', ...\App\Enums\InteractionType::getValuesWithoutDuration()),
+        return [self::INTERACTIONS => FluentRule::array()
+            ->each([
+            'continue_button_display_mode' => FluentRule::string()
+                ->excludeUnless(self::INTERACTIONS . '.*.type', \App\Enums\InteractionType::PAUSE->value)
+                ->sometimes(),
+            'duration' => FluentRule::numeric()
+                ->bail()
+                ->requiredUnless(self::INTERACTIONS . '.*.type', ...\App\Enums\InteractionType::getValuesWithoutDuration()),
         ])];
     }
 }

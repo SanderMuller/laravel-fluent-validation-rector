@@ -29,7 +29,8 @@ class RuleObjectCollapseIn
     public function rules(): array
     {
         return [
-            'role' => FluentRule::string()->rule(new In(['admin', 'user']), message: 'Pick a valid role.'),
+            'role' => FluentRule::string()
+                ->rule(new In(['admin', 'user']), message: 'Pick a valid role.'),
         ];
     }
 }

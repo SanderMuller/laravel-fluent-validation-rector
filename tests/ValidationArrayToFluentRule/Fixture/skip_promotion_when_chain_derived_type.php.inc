@@ -42,7 +42,9 @@ class SkipPromotionWhenChainDerivedType extends FormRequest
         // silently drop the chain ops (`alpha()` here).
         // Promotion only fires when typeKind === 'string_token'.
         return [
-            'addr' => FluentRule::string()->alpha()->ipv4(),
+            'addr' => FluentRule::string()
+                ->alpha()
+                ->ipv4(),
         ];
     }
 }

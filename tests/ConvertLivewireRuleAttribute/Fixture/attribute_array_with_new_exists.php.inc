@@ -35,7 +35,9 @@ final class AttributeArrayWithNewExistsComponent extends Component
     protected function rules(): array
     {
         return [
-            'role' => FluentRule::string()->required()->exists('roles', 'name'),
+            'role' => FluentRule::string()
+                ->required()
+                ->exists('roles', 'name'),
         ];
     }
 }

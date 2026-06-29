@@ -27,7 +27,8 @@ class InStringFormNumericFactory
     public function rules(): array
     {
         return [
-            'level' => FluentRule::numeric()->in(['1', '2', '3']),
+            'level' => FluentRule::numeric()
+                ->in(['1', '2', '3']),
         ];
     }
 }

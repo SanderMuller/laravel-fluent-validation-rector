@@ -29,7 +29,8 @@ class NotInRuleFacadeEmailFactory
     public function rules(): array
     {
         return [
-            'email' => FluentRule::email()->notIn(['banned@example.com']),
+            'email' => FluentRule::email()
+                ->notIn(['banned@example.com']),
         ];
     }
 }

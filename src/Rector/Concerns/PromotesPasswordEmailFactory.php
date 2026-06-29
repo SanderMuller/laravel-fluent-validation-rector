@@ -13,6 +13,7 @@ use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\Int_;
+use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\Rector\AbstractRector;
 use ReflectionClass;
 use ReflectionMethod;
@@ -240,7 +241,46 @@ trait PromotesPasswordEmailFactory
             $root->args = [new Arg($promotion['arg'])];
         }
 
+        $this->preserveFluentNewlinesInChain($replacement);
+
         return $replacement;
+    }
+
+    private function preserveFluentNewline(MethodCall $node): void
+    {
+        if (! $node->name instanceof Identifier) {
+            return;
+        }
+
+        $nameStartLine = $node->name->getAttribute('startLine');
+        $varEndLine = $node->var->getAttribute('endLine');
+
+        if (is_int($nameStartLine) && is_int($varEndLine) && $nameStartLine > $varEndLine) {
+            $node->setAttribute(AttributeKey::NEWLINE_ON_FLUENT_CALL, true);
+        }
+    }
+
+    /**
+     * Walk the entire chain and stamp every MethodCall with NEWLINE_ON_FLUENT_CALL
+     * where it was on its own line in the source.
+     *
+     * We walk the whole chain (not just the spliced node) because reassigning
+     * $hop->var restructures the chain — the format-preserving printer cannot
+     * reuse original-node text for any MethodCall above the splice point and
+     * reprints them all from scratch. Every node that was on its own line
+     * therefore needs the attribute, not only the directly-mutated one.
+     *
+     * Contrast with a single-node arg removal: there the printer handles the
+     * change surgically and only the modified node needs the attribute.
+     */
+    private function preserveFluentNewlinesInChain(Expr $node): void
+    {
+        $current = $node;
+
+        while ($current instanceof MethodCall) {
+            $this->preserveFluentNewline($current);
+            $current = $current->var;
+        }
     }
 
     /**

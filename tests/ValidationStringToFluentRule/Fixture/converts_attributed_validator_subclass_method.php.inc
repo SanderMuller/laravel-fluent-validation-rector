@@ -39,8 +39,11 @@ class JsonImportValidator extends FluentValidator
     protected function rulesWithoutPrefix(): array
     {
         return [
-            'title' => FluentRule::string()->required(),
-            'lang' => FluentRule::field()->required()->rule('in:en,nl,de'),
+            'title' => FluentRule::string()
+                ->required(),
+            'lang' => FluentRule::field()
+                ->required()
+                ->rule('in:en,nl,de'),
         ];
     }
 }

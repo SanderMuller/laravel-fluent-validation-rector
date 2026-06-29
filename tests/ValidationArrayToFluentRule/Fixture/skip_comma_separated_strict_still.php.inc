@@ -56,14 +56,18 @@ class StrictCommaSeparatedFormRequest extends FormRequest
         $cond = true;
 
         return [
-            'a' => FluentRule::string()->rule(['required_if', 'type', $this->complexMethod()]),
-            'b' => FluentRule::string()->rule(['required_if', 'type', $cond ? 'a' : 'b']),
+            'a' => FluentRule::string()
+                ->rule(['required_if', 'type', $this->complexMethod()]),
+            'b' => FluentRule::string()
+                ->rule(['required_if', 'type', $cond ? 'a' : 'b']),
             'c' => [
                 'string',
                 ['required_if', fn (): bool => true],
             ],
-            'd' => FluentRule::string()->rule(['required_if', 'ratio', 1.5]),
-            'e' => FluentRule::string()->rule(['required_if', 'state', null]),
+            'd' => FluentRule::string()
+                ->rule(['required_if', 'ratio', 1.5]),
+            'e' => FluentRule::string()
+                ->rule(['required_if', 'state', null]),
         ];
     }
 

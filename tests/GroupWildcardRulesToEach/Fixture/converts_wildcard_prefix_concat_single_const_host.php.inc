@@ -47,7 +47,8 @@ final class WildcardPrefixConcatRequest extends FormRequest
 
     public function rules(): array
     {
-        return ['*' => FluentRule::array()->children([
+        return ['*' => FluentRule::array()
+            ->children([
             self::TITLE => FluentRule::string()->required()->max(255),
             self::SORT_ORDER => FluentRule::integer()->required()->min(0),
         ])];

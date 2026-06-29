@@ -28,7 +28,9 @@ class InsertsFluentRuleImportRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => FluentRule::string()->required()->max(255),
+            'name' => FluentRule::string()
+                ->required()
+                ->max(255),
         ];
     }
 }

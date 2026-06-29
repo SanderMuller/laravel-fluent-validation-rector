@@ -35,11 +35,21 @@ class RuleObjectFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email' => FluentRule::email()->required()->unique('users', 'email'),
-            'role' => FluentRule::field()->required()->in(['admin', 'editor', 'viewer']),
-            'team_id' => FluentRule::integer()->required()->exists('teams', 'id'),
-            'category' => FluentRule::string()->nullable()->notIn(['banned', 'restricted']),
-            'status' => FluentRule::field()->required()->enum(Status::class),
+            'email' => FluentRule::email()
+                ->required()
+                ->unique('users', 'email'),
+            'role' => FluentRule::field()
+                ->required()
+                ->in(['admin', 'editor', 'viewer']),
+            'team_id' => FluentRule::integer()
+                ->required()
+                ->exists('teams', 'id'),
+            'category' => FluentRule::string()
+                ->nullable()
+                ->notIn(['banned', 'restricted']),
+            'status' => FluentRule::field()
+                ->required()
+                ->enum(Status::class),
         ];
     }
 }

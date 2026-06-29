@@ -45,7 +45,8 @@ final class WildcardPrefixSingleEntryRequest extends FormRequest
     public function rules(): array
     {
         return [
-            '*' => FluentRule::array()->children([
+            '*' => FluentRule::array()
+                ->children([
                 self::FIELD => FluentRule::string()->required(),
             ]),
         ];

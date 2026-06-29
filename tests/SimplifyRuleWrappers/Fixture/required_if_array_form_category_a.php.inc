@@ -55,15 +55,24 @@ class RequiredIfArrayFormCategoryA
         $suffix = 'tail';
 
         return [
-            'subtitle' => FluentRule::string()->requiredIf('subtitleSource', SubtitleSource::Paste->value),
-            'password' => FluentRule::string()->requiredIf('type', 'admin', 'editor'),
-            'note' => FluentRule::string()->excludeUnless('type', 'chapter'),
-            'source' => FluentRule::string()->requiredIf('type', SubtitleSource::Upload->value),
-            'generic' => FluentRule::field()->requiredIf('type', 'custom'),
-            'intValue' => FluentRule::string()->requiredIf('version', 1),
-            'boolValue' => FluentRule::string()->requiredIf('enabled', true),
-            'variable' => FluentRule::string()->requiredIf('type', $expected),
-            'concat' => FluentRule::string()->requiredIf('field', 'prefix-' . $suffix),
+            'subtitle' => FluentRule::string()
+                ->requiredIf('subtitleSource', SubtitleSource::Paste->value),
+            'password' => FluentRule::string()
+                ->requiredIf('type', 'admin', 'editor'),
+            'note' => FluentRule::string()
+                ->excludeUnless('type', 'chapter'),
+            'source' => FluentRule::string()
+                ->requiredIf('type', SubtitleSource::Upload->value),
+            'generic' => FluentRule::field()
+                ->requiredIf('type', 'custom'),
+            'intValue' => FluentRule::string()
+                ->requiredIf('version', 1),
+            'boolValue' => FluentRule::string()
+                ->requiredIf('enabled', true),
+            'variable' => FluentRule::string()
+                ->requiredIf('type', $expected),
+            'concat' => FluentRule::string()
+                ->requiredIf('field', 'prefix-' . $suffix),
         ];
     }
 }

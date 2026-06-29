@@ -23,9 +23,14 @@ use Illuminate\Http\Request;
 
 function handleRequest(Request $request) {
     $validated = $request->validate([
-        'title' => FluentRule::string()->required()->min(2)->max(100),
-        'body' => FluentRule::string()->required(),
-        'published' => FluentRule::boolean()->nullable(),
+        'title' => FluentRule::string()
+            ->required()
+            ->min(2)
+            ->max(100),
+        'body' => FluentRule::string()
+            ->required(),
+        'published' => FluentRule::boolean()
+            ->nullable(),
     ]);
 }
 

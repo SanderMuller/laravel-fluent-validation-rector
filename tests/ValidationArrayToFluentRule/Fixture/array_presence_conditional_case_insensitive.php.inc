@@ -37,8 +37,10 @@ class PresenceConditionalCaseInsensitiveFormRequest extends FormRequest
         // requiredunless match and convert to the canonical camelCase fluent
         // methods. Not nullable, so the required-family conversion is safe.
         return [
-            'role' => FluentRule::field()->requiredIf(fn () => $this->isAdmin()),
-            'guest' => FluentRule::field()->requiredUnless(fn () => $this->isGuest()),
+            'role' => FluentRule::field()
+                ->requiredIf(fn() => $this->isAdmin()),
+            'guest' => FluentRule::field()
+                ->requiredUnless(fn() => $this->isGuest()),
         ];
     }
 }

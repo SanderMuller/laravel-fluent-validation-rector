@@ -36,10 +36,14 @@ class ImageInheritsFileMethods
         // Reflection allowlist must pick them up via getMethod() walking the
         // inheritance chain so `image()->rule(...)` rewrites work too.
         return [
-            'avatar' => FluentRule::image()->min(1),
-            'cover' => FluentRule::image()->max('5mb'),
-            'thumb' => FluentRule::image()->exactly(1024),
-            'banner' => FluentRule::image()->between(100, 5000),
+            'avatar' => FluentRule::image()
+                ->min(1),
+            'cover' => FluentRule::image()
+                ->max('5mb'),
+            'thumb' => FluentRule::image()
+                ->exactly(1024),
+            'banner' => FluentRule::image()
+                ->between(100, 5000),
         ];
     }
 }

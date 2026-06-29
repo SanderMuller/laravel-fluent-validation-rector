@@ -31,7 +31,8 @@ class SimpleEachRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'items' => FluentRule::array()->required()->each([
+            'items' => FluentRule::array()->required()
+                ->each([
                 'name' => FluentRule::string()->required()->max(255),
                 'email' => FluentRule::email()->required(),
             ]),

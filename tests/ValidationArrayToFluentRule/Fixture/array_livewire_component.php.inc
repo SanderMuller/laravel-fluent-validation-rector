@@ -29,8 +29,10 @@ class InviteForm extends Component
     public function rules(): array
     {
         return [
-            'email' => FluentRule::email()->required(),
-            'accepted' => FluentRule::boolean()->required(),
+            'email' => FluentRule::email()
+                ->required(),
+            'accepted' => FluentRule::boolean()
+                ->required(),
         ];
     }
 }

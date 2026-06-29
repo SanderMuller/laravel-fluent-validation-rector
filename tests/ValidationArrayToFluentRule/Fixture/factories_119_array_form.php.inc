@@ -38,7 +38,8 @@ class Factories119ArrayForm extends FormRequest
             // promotion fires here too via the shared
             // ConvertsValidationRuleStrings concern (the array converter
             // routes each item through the string-conversion path).
-            'addr' => FluentRule::ipv4()->required(),
+            'addr' => FluentRule::ipv4()
+                ->required(),
             'tags' => FluentRule::list(),
             'declined' => FluentRule::declined(),
         ];

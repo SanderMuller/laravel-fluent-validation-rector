@@ -55,8 +55,12 @@ final class KeyedArrayAsAttributeConflictComponent extends Component
     protected function rules(): array
     {
         return [
-            'todos' => FluentRule::array()->required()->label('As todos'),
-            'todos.*' => FluentRule::string()->min(3)->label('Attribute item'),
+            'todos' => FluentRule::array()
+                ->required()
+                ->label('As todos'),
+            'todos.*' => FluentRule::string()
+                ->min(3)
+                ->label('Attribute item'),
         ];
     }
 }

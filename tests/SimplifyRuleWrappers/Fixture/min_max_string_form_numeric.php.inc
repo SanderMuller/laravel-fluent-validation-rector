@@ -28,8 +28,10 @@ class MinMaxStringFormNumeric
     public function rules(): array
     {
         return [
-            'age' => FluentRule::numeric()->min(0),
-            'count' => FluentRule::numeric()->max(100),
+            'age' => FluentRule::numeric()
+                ->min(0),
+            'count' => FluentRule::numeric()
+                ->max(100),
         ];
     }
 }

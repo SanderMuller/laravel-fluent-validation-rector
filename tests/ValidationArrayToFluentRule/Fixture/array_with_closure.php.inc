@@ -33,12 +33,16 @@ class ClosureRuleFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => FluentRule::string()->required()->rule(function ($attribute, $value, $fail) {
+            'name' => FluentRule::string()
+                ->required()
+                ->rule(function ($attribute, $value, $fail) {
                 if ($value === 'forbidden') {
                     $fail('This name is forbidden.');
                 }
             }),
-            'code' => FluentRule::string()->required()->rule(fn ($attribute, $value, $fail) => $value === '' ? $fail('Empty.') : null),
+            'code' => FluentRule::string()
+                ->required()
+                ->rule(fn($attribute, $value, $fail) => $value === '' ? $fail('Empty.') : null),
         ];
     }
 }

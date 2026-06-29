@@ -66,7 +66,8 @@ final class CompiledRulesPage extends Component
     protected function rules(): array
     {
         return [
-            'summary' => FluentRule::string()->nullable(),
+            'summary' => FluentRule::string()
+                ->nullable(),
         ];
     }
 }

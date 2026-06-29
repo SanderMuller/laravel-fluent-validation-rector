@@ -44,14 +44,20 @@ class SignHelpersOnNumeric
         // and field-name comparisons stay as escape hatch (covered by
         // the paired skip_sign_helpers_non_zero_or_field.php.inc).
         return [
-            'pos' => FluentRule::numeric()->positive(),
-            'nn' => FluentRule::numeric()->nonNegative(),
-            'neg' => FluentRule::numeric()->negative(),
-            'np' => FluentRule::numeric()->nonPositive(),
+            'pos' => FluentRule::numeric()
+                ->positive(),
+            'nn' => FluentRule::numeric()
+                ->nonNegative(),
+            'neg' => FluentRule::numeric()
+                ->negative(),
+            'np' => FluentRule::numeric()
+                ->nonPositive(),
             // Float spelling also accepted.
-            'pos_f' => FluentRule::numeric()->positive(),
+            'pos_f' => FluentRule::numeric()
+                ->positive(),
             // Array form.
-            'arr' => FluentRule::numeric()->nonNegative(),
+            'arr' => FluentRule::numeric()
+                ->nonNegative(),
         ];
     }
 }

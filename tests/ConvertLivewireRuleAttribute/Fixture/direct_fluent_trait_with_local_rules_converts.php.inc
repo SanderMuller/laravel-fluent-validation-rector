@@ -67,7 +67,9 @@ final class DirectTraitWithLocalRulesComponent
     public function rules(): array
     {
         return [
-            'otherField' => ['required', 'string'], 'phoneNumber' => FluentRule::string()->required()->min(10),
+            'otherField' => ['required', 'string'], 'phoneNumber' => FluentRule::string()
+                ->required()
+                ->min(10),
         ];
     }
 }

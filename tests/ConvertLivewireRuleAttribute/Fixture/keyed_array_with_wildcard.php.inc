@@ -36,8 +36,10 @@ final class KeyedArrayWithWildcard extends Component
     protected function rules(): array
     {
         return [
-            'todos' => FluentRule::array()->required(),
-            'todos.*' => FluentRule::string()->min(3),
+            'todos' => FluentRule::array()
+                ->required(),
+            'todos.*' => FluentRule::string()
+                ->min(3),
         ];
     }
 }

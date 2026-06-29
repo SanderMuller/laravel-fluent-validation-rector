@@ -28,8 +28,10 @@ class RequiredArrayKeysArrayForm
     public function rules(): array
     {
         return [
-            'meta' => FluentRule::array()->requiredArrayKeys('id', 'slug'),
-            'single' => FluentRule::array()->requiredArrayKeys('key'),
+            'meta' => FluentRule::array()
+                ->requiredArrayKeys('id', 'slug'),
+            'single' => FluentRule::array()
+                ->requiredArrayKeys('key'),
         ];
     }
 }

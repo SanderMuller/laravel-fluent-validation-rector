@@ -34,8 +34,10 @@ class RegexPatternWithColonAndComma
         // be split as if it were a `between` or shape with multiple args.
         // Splitter must use first `:` only and never split tail on `,`.
         return [
-            'time' => FluentRule::string()->regex('/^\d+:\d+$/'),
-            'list' => FluentRule::string()->regex('/^a,b,c$/'),
+            'time' => FluentRule::string()
+                ->regex('/^\d+:\d+$/'),
+            'list' => FluentRule::string()
+                ->regex('/^a,b,c$/'),
         ];
     }
 }

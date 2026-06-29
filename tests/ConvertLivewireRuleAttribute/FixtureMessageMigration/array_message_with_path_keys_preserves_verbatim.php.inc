@@ -37,8 +37,11 @@ class ArrayMessageWithPathKeysPreservesVerbatim extends Component
     protected function rules(): array
     {
         return [
-            'todos' => FluentRule::array()->required(),
-            'todos.*' => FluentRule::array()->required()->min(3),
+            'todos' => FluentRule::array()
+                ->required(),
+            'todos.*' => FluentRule::array()
+                ->required()
+                ->min(3),
         ];
     }
 

@@ -793,9 +793,9 @@ CODE_SAMPLE
         $label = $this->extractRootLabel($attr);
 
         if ($label !== null) {
-            $fluent = new MethodCall($fluent, new Identifier('label'), [
+            $fluent = $this->withFluentNewline(new MethodCall($fluent, new Identifier('label'), [
                 new Arg(new String_($label)),
-            ]);
+            ]));
         }
 
         $this->logUnsupportedAttributeArgs($attr, $property, $class);
@@ -1077,6 +1077,13 @@ CODE_SAMPLE
         }
 
         return $property->props[0]->name->toString();
+    }
+
+    private function withFluentNewline(MethodCall $call): MethodCall
+    {
+        $call->setAttribute(AttributeKey::NEWLINE_ON_FLUENT_CALL, true);
+
+        return $call;
     }
 
     /**

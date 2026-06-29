@@ -42,9 +42,15 @@ class TupleNumericArgRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'author_notes' => FluentRule::string()->nullable()->max(65535),
-            'tags' => FluentRule::array()->max(10),
-            'postal_code' => FluentRule::string()->required()->min(4)->max(255),
+            'author_notes' => FluentRule::string()
+                ->nullable()
+                ->max(65535),
+            'tags' => FluentRule::array()
+                ->max(10),
+            'postal_code' => FluentRule::string()
+                ->required()
+                ->min(4)
+                ->max(255),
         ];
     }
 }

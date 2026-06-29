@@ -31,7 +31,9 @@ class SpreadOperatorFormRequest extends FormRequest
     {
         return [
             'delay' => ['nullable', ...new SubtitleDelayRules()],
-            'name' => FluentRule::string()->required()->max(255),
+            'name' => FluentRule::string()
+                ->required()
+                ->max(255),
         ];
     }
 }

@@ -36,8 +36,12 @@ class ValidatorValidateArrayStaticCall
         Validator::validate(
             $input,
             [
-                'email' => FluentRule::email()->required()->unique('users', 'email'),
-                'role' => FluentRule::field()->required()->in(['admin', 'editor']),
+                'email' => FluentRule::email()
+                    ->required()
+                    ->unique('users', 'email'),
+                'role' => FluentRule::field()
+                    ->required()
+                    ->in(['admin', 'editor']),
             ],
         );
     }

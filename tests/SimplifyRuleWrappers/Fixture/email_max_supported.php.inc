@@ -31,7 +31,8 @@ class EmailMaxSupported
         // EmailRule has max() — asymmetric with min/between/exactly which
         // are absent. This case must rewrite.
         return [
-            'email' => FluentRule::email()->max(255),
+            'email' => FluentRule::email()
+                ->max(255),
         ];
     }
 }

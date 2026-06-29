@@ -30,7 +30,8 @@ use SanderMuller\FluentValidation\Rules\StringRule;
 
 $rules = [
     'field' => FluentRule::string()
-        ->when(true, fn (StringRule $r): StringRule => $r)->max(255),
+        ->when(true, fn (StringRule $r): StringRule => $r)
+        ->max(255),
 ];
 
 ?>

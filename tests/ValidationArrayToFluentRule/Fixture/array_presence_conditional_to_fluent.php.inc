@@ -45,14 +45,28 @@ class PresenceConditionalToFluentFormRequest extends FormRequest
         // fluent self-validation path no longer short-circuits the requirement,
         // so `nullable` + a required-family conditional is behaviour-preserving.
         return [
-            'req_closure' => FluentRule::field()->requiredIf(fn () => $this->isAdmin()),
-            'req_nullable' => FluentRule::field()->nullable()->requiredIf(fn () => $this->isAdmin()),
-            'req_unless_nullable' => FluentRule::string()->nullable()->requiredUnless(false),
-            'req_with_required' => FluentRule::field()->required()->requiredIf(true),
-            'exclude_closure' => FluentRule::field()->nullable()->excludeIf(fn () => $this->skip()),
-            'exclude_unless' => FluentRule::field()->nullable()->excludeUnless(false),
-            'prohibited_bool' => FluentRule::field()->nullable()->prohibitedIf(true),
-            'prohibited_unless' => FluentRule::field()->prohibitedUnless(fn () => $this->locked()),
+            'req_closure' => FluentRule::field()
+                ->requiredIf(fn() => $this->isAdmin()),
+            'req_nullable' => FluentRule::field()
+                ->nullable()
+                ->requiredIf(fn() => $this->isAdmin()),
+            'req_unless_nullable' => FluentRule::string()
+                ->nullable()
+                ->requiredUnless(false),
+            'req_with_required' => FluentRule::field()
+                ->required()
+                ->requiredIf(true),
+            'exclude_closure' => FluentRule::field()
+                ->nullable()
+                ->excludeIf(fn() => $this->skip()),
+            'exclude_unless' => FluentRule::field()
+                ->nullable()
+                ->excludeUnless(false),
+            'prohibited_bool' => FluentRule::field()
+                ->nullable()
+                ->prohibitedIf(true),
+            'prohibited_unless' => FluentRule::field()
+                ->prohibitedUnless(fn() => $this->locked()),
         ];
     }
 }

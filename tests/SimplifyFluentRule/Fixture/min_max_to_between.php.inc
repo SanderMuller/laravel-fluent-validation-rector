@@ -18,8 +18,12 @@ namespace SanderMuller\FluentValidationRector\Tests\SimplifyFluentRule\Fixture;
 use SanderMuller\FluentValidation\FluentRule;
 
 $rules = [
-    'name' => FluentRule::string()->required()->between(2, 255),
-    'age' => FluentRule::integer()->required()->between(0, 120),
+    'name' => FluentRule::string()
+        ->required()
+        ->between(2, 255),
+    'age' => FluentRule::integer()
+        ->required()
+        ->between(0, 120),
 ];
 
 ?>

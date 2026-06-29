@@ -99,7 +99,8 @@ final class PeerSyntheticRuleSetWrapperRequest extends FormRequest
 
     public function rules(): RuleSet
     {
-        return RuleSet::from(['*' => FluentRule::array()->children([
+        return RuleSet::from(['*' => FluentRule::array()
+            ->children([
             SyntheticTagRich::NAME => FluentRule::string()
                 ->nullable()
                 ->max(255),

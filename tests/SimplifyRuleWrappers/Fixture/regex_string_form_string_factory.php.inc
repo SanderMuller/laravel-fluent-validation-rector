@@ -27,7 +27,8 @@ class RegexStringFormStringFactory
     public function rules(): array
     {
         return [
-            'code' => FluentRule::string()->regex('/^\d+$/'),
+            'code' => FluentRule::string()
+                ->regex('/^\d+$/'),
         ];
     }
 }

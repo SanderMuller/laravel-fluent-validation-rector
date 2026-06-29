@@ -67,7 +67,8 @@ final class NamedRulesArgPage extends Component
     protected function rules(): array
     {
         return [
-            'slug' => FluentRule::string()->nullable(),
+            'slug' => FluentRule::string()
+                ->nullable(),
         ];
     }
 }

@@ -66,9 +66,14 @@ class CheckSafeChainService
     public function validate(array $data): array
     {
         return RuleSet::from([
-            'name' => FluentRule::string()->required()->max(255),
-            'email' => FluentRule::email()->required(),
-            'age' => FluentRule::integer()->nullable()->min(0),
+            'name' => FluentRule::string()
+                ->required()
+                ->max(255),
+            'email' => FluentRule::email()
+                ->required(),
+            'age' => FluentRule::integer()
+                ->nullable()
+                ->min(0),
         ])->check($data)->safe();
     }
 }

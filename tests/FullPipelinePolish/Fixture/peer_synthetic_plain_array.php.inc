@@ -77,7 +77,8 @@ final class PeerSyntheticPlainArrayRequest extends FormRequest
      */
     public function rules(): array
     {
-        return ['*' => FluentRule::array()->children([
+        return ['*' => FluentRule::array()
+            ->children([
             SyntheticTag::NAME => FluentRule::string()->nullable()->max(255),
             SyntheticTag::SORT_ORDER => FluentRule::integer()->nullable()->min(0),
         ])];

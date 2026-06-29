@@ -37,7 +37,8 @@ class EnumArrayFormOnField
     public function rules(): array
     {
         return [
-            'status' => FluentRule::field()->enum(Status::class),
+            'status' => FluentRule::field()
+                ->enum(Status::class),
         ];
     }
 }

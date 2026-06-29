@@ -42,15 +42,29 @@ class ConcatRuleStringFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email' => FluentRule::email()->bail()->requiredIfAccepted(self::PREFIX . '.enabled')->nullable()->rfcCompliant(strict: true)->validateMxRecord()->preventSpoofing(),
-            'slug' => FluentRule::string()->rule('starts_with:' . self::PREFIX),
-            'confirm' => FluentRule::string()->rule('same:' . self::PREFIX),
-            'prefixed' => FluentRule::string()->requiredIfAccepted('prefix_' . self::PREFIX),
-            'pattern' => FluentRule::string()->regex('/^' . self::PREFIX . '$/'),
-            'needs' => FluentRule::string()->rule('required_with:' . self::PREFIX),
-            'cond' => FluentRule::string()->rule('required_if:' . self::PREFIX . ',active'),
-            'count' => FluentRule::integer()->rule('min:' . self::THRESHOLD),
-            'opaque' => FluentRule::string()->rule(self::PREFIX . ':foo'),
+            'email' => FluentRule::email()
+                ->bail()
+                ->requiredIfAccepted(self::PREFIX . '.enabled')
+                ->nullable()
+                ->rfcCompliant(strict: true)
+                ->validateMxRecord()
+                ->preventSpoofing(),
+            'slug' => FluentRule::string()
+                ->rule('starts_with:' . self::PREFIX),
+            'confirm' => FluentRule::string()
+                ->rule('same:' . self::PREFIX),
+            'prefixed' => FluentRule::string()
+                ->requiredIfAccepted('prefix_' . self::PREFIX),
+            'pattern' => FluentRule::string()
+                ->regex('/^' . self::PREFIX . '$/'),
+            'needs' => FluentRule::string()
+                ->rule('required_with:' . self::PREFIX),
+            'cond' => FluentRule::string()
+                ->rule('required_if:' . self::PREFIX . ',active'),
+            'count' => FluentRule::integer()
+                ->rule('min:' . self::THRESHOLD),
+            'opaque' => FluentRule::string()
+                ->rule(self::PREFIX . ':foo'),
         ];
     }
 

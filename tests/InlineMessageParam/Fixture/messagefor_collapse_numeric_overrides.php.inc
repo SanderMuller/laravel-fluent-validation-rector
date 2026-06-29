@@ -32,10 +32,14 @@ class MessageForCollapseNumericOverrides
     {
         return [
             // NumericRule emitted-key overrides (see EMITTED_KEY_OVERRIDES table).
-            'min_refs' => FluentRule::numeric()->greaterThan('floor', message: 'Must exceed floor.'),
-            'max_refs' => FluentRule::numeric()->lessThan('ceiling', message: 'Must be below ceiling.'),
-            'pos' => FluentRule::numeric()->positive(message: 'Must be positive.'),
-            'non_neg' => FluentRule::numeric()->nonNegative(message: 'Must be zero or positive.'),
+            'min_refs' => FluentRule::numeric()
+                ->greaterThan('floor', message: 'Must exceed floor.'),
+            'max_refs' => FluentRule::numeric()
+                ->lessThan('ceiling', message: 'Must be below ceiling.'),
+            'pos' => FluentRule::numeric()
+                ->positive(message: 'Must be positive.'),
+            'non_neg' => FluentRule::numeric()
+                ->nonNegative(message: 'Must be zero or positive.'),
         ];
     }
 }

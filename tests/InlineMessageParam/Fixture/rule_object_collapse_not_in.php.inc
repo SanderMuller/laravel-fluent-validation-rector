@@ -29,7 +29,8 @@ class RuleObjectCollapseNotIn
     public function rules(): array
     {
         return [
-            'status' => FluentRule::string()->rule(new NotIn(['banned', 'deleted']), message: 'That status is reserved.'),
+            'status' => FluentRule::string()
+                ->rule(new NotIn(['banned', 'deleted']), message: 'That status is reserved.'),
         ];
     }
 }

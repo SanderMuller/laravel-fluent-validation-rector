@@ -27,7 +27,8 @@ class MessageForCollapseStringMin
     public function rules(): array
     {
         return [
-            'name' => FluentRule::string()->min(3, message: 'Too short.'),
+            'name' => FluentRule::string()
+                ->min(3, message: 'Too short.'),
         ];
     }
 }

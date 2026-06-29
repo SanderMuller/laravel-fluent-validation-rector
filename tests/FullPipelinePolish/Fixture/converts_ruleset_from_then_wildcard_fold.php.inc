@@ -80,9 +80,14 @@ class WildcardInsideRuleSetRequest extends FormRequest
 
     public function rules(): RuleSet
     {
-        return RuleSet::from(['*' => FluentRule::array()->children([
-            'title' => FluentRule::string()->required()->max(255),
-            'color' => FluentRule::field()->nullable()->in(['red', 'green', 'blue']),
+        return RuleSet::from(['*' => FluentRule::array()
+            ->children([
+            'title' => FluentRule::string()
+                ->required()
+                ->max(255),
+            'color' => FluentRule::field()
+                ->nullable()
+                ->in(['red', 'green', 'blue']),
         ])]);
     }
 }

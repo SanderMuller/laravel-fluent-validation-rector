@@ -29,7 +29,8 @@ class InRuleFacadeStringFactory
     public function rules(): array
     {
         return [
-            'role' => FluentRule::string()->in(['admin', 'user']),
+            'role' => FluentRule::string()
+                ->in(['admin', 'user']),
         ];
     }
 }

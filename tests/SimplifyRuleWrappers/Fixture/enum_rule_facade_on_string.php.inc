@@ -41,7 +41,8 @@ class EnumRuleFacadeOnString
     public function rules(): array
     {
         return [
-            'status' => FluentRule::string()->enum(Status::class),
+            'status' => FluentRule::string()
+                ->enum(Status::class),
         ];
     }
 }

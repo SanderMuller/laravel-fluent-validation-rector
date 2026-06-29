@@ -32,7 +32,9 @@ final class ArrayWithAsLabelAttributeComponent extends Component
     protected function rules(): array
     {
         return [
-            'displayName' => FluentRule::string()->required()->label('display name'),
+            'displayName' => FluentRule::string()
+                ->required()
+                ->label('display name'),
         ];
     }
 }

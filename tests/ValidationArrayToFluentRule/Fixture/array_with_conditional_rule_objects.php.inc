@@ -33,8 +33,12 @@ class ConditionalRuleObjectFormRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', Rule::when(true, 'min:3')],
-            'role' => FluentRule::field()->required()->requiredIf(fn () => $this->isAdmin()),
-            'notes' => FluentRule::string()->nullable()->excludeIf(fn () => ! $this->hasNotes()),
+            'role' => FluentRule::field()
+                ->required()
+                ->requiredIf(fn() => $this->isAdmin()),
+            'notes' => FluentRule::string()
+                ->nullable()
+                ->excludeIf(fn() => ! $this->hasNotes()),
         ];
     }
 }

@@ -24,14 +24,19 @@ namespace SanderMuller\FluentValidationRector\Tests\SimplifyFluentRule\Fixture;
 use SanderMuller\FluentValidation\FluentRule;
 
 $rules = [
-    'ipv4' => FluentRule::ipv4()->required(),
-    'ipv6' => FluentRule::ipv6()->nullable(),
+    'ipv4' => FluentRule::ipv4()
+        ->required(),
+    'ipv6' => FluentRule::ipv6()
+        ->nullable(),
     'mac' => FluentRule::macAddress(),
-    'json' => FluentRule::json()->required(),
+    'json' => FluentRule::json()
+        ->required(),
     'tz' => FluentRule::timezone(),
     'color' => FluentRule::hexColor(),
-    'site' => FluentRule::activeUrl()->required(),
-    'tags' => FluentRule::list()->required(),
+    'site' => FluentRule::activeUrl()
+        ->required(),
+    'tags' => FluentRule::list()
+        ->required(),
 ];
 
 ?>

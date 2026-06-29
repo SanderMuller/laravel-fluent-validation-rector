@@ -36,13 +36,30 @@ class RuleFactoryFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'count' => FluentRule::integer()->required()->min(1)->max(60),
-            'name' => FluentRule::string()->required()->alpha()->max(50),
-            'start' => FluentRule::date()->required()->afterToday(),
-            'contact' => FluentRule::email()->required()->rfcCompliant()->validateMxRecord(),
-            'doc' => FluentRule::file()->required()->max(1024),
-            'avatar' => FluentRule::image()->required()->allowSvg()->maxWidth(500),
-            'photo' => FluentRule::image()->nullable(),
+            'count' => FluentRule::integer()
+                ->required()
+                ->min(1)
+                ->max(60),
+            'name' => FluentRule::string()
+                ->required()
+                ->alpha()
+                ->max(50),
+            'start' => FluentRule::date()
+                ->required()
+                ->afterToday(),
+            'contact' => FluentRule::email()
+                ->required()
+                ->rfcCompliant()
+                ->validateMxRecord(),
+            'doc' => FluentRule::file()
+                ->required()
+                ->max(1024),
+            'avatar' => FluentRule::image()
+                ->required()
+                ->allowSvg()
+                ->maxWidth(500),
+            'photo' => FluentRule::image()
+                ->nullable(),
         ];
     }
 }

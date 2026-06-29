@@ -33,7 +33,10 @@ final class UserForm extends Form
     protected function rules(): array
     {
         return [
-            'name' => FluentRule::string()->required()->max(255)->label('user name'),
+            'name' => FluentRule::string()
+                ->required()
+                ->max(255)
+                ->label('user name'),
         ];
     }
 }

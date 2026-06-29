@@ -63,7 +63,8 @@ final class PostFoldDocblockNarrowRequest extends FormRequest
      */
     public function rules(): array
     {
-        return ['*' => FluentRule::array()->children([
+        return ['*' => FluentRule::array()
+            ->children([
             self::NAME => FluentRule::string()->required(),
             self::COLOR => FluentRule::string()->nullable(),
         ])];

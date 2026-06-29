@@ -32,7 +32,8 @@ class MissingParentRequest extends FormRequest
     {
         return [
             'name' => FluentRule::string()->required(),
-            'items' => FluentRule::array()->each([
+            'items' => FluentRule::array()
+                ->each([
                 'title' => FluentRule::string()->required(),
                 'qty' => FluentRule::numeric()->required(),
             ]),

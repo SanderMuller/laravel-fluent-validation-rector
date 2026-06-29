@@ -50,7 +50,9 @@ abstract class AbstractAttributedHelperOnly extends FluentValidator
     protected function rulesWithoutPrefix(): array
     {
         return [
-            'title' => FluentRule::string()->required()->max(120),
+            'title' => FluentRule::string()
+                ->required()
+                ->max(120),
         ];
     }
 }

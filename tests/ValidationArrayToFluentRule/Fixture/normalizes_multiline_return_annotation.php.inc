@@ -58,7 +58,8 @@ class MultilineReturnFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => FluentRule::string()->required(),
+            'name' => FluentRule::string()
+                ->required(),
         ];
     }
 }

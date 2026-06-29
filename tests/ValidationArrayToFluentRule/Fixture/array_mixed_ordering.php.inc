@@ -30,7 +30,12 @@ class MixedOrderingFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'field' => FluentRule::string()->bail()->required()->rule(new CustomRule())->rule(new AnotherRule())->max(255),
+            'field' => FluentRule::string()
+                ->bail()
+                ->required()
+                ->rule(new CustomRule())
+                ->rule(new AnotherRule())
+                ->max(255),
         ];
     }
 }

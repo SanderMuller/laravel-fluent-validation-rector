@@ -51,7 +51,8 @@ final class WildcardPrefixConstInsideRuleSetFromRequest extends FormRequest
 
     public function rules(): RuleSet
     {
-        return RuleSet::from(['*' => FluentRule::array()->children([
+        return RuleSet::from(['*' => FluentRule::array()
+            ->children([
             self::NAME => FluentRule::string()->required(),
             self::COLOR => FluentRule::string()->nullable(),
         ])]);

@@ -41,9 +41,11 @@ class ConcatRequiredWithVariants
         return [
             // Non-empty remainder after the colon — the leading literal's
             // post-colon text becomes the left-most operand of the field expr.
-            'a' => FluentRule::string()->requiredWith('end_' . self::SUFFIX),
+            'a' => FluentRule::string()
+                ->requiredWith('end_' . self::SUFFIX),
             // Variable operand.
-            'b' => FluentRule::string()->requiredWithout($field),
+            'b' => FluentRule::string()
+                ->requiredWithout($field),
         ];
     }
 }

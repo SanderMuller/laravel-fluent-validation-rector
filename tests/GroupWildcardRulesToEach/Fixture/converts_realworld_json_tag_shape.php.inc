@@ -89,7 +89,8 @@ final class RealworldJsonTagRequest extends FormRequest
 {
     public function rules(): array
     {
-        return ['*' => FluentRule::array()->children([
+        return ['*' => FluentRule::array()
+            ->children([
             JsonTagShape::NAME => FluentRule::string()->nullable()->max(255),
             JsonTagShape::COLOR => FluentRule::string()->nullable()->rule('regex:/^#[0-9A-Fa-f]{6}$/'),
             JsonTagShape::SORT_ORDER => FluentRule::integer()->nullable()->min(0),

@@ -29,8 +29,11 @@ class NoTypeFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'agree' => FluentRule::field()->required()->rule('accepted'),
-            'token' => FluentRule::field()->required(),
+            'agree' => FluentRule::field()
+                ->required()
+                ->rule('accepted'),
+            'token' => FluentRule::field()
+                ->required(),
         ];
     }
 }

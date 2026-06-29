@@ -27,7 +27,8 @@ class InArrayFormFieldFactory
     public function rules(): array
     {
         return [
-            'status' => FluentRule::field()->in(['active', 'inactive']),
+            'status' => FluentRule::field()
+                ->in(['active', 'inactive']),
         ];
     }
 }

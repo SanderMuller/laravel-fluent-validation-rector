@@ -45,9 +45,13 @@ class EnumValueArgTupleFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'a' => FluentRule::string()->excludeUnless(self::FIELD, InteractionType::PAUSE->value)->sometimes(),
-            'b' => FluentRule::string()->requiredIf(self::FIELD, InteractionType::FRAME->value),
-            'c' => FluentRule::string()->requiredIf(self::FIELD, InteractionType::PAUSE->value, InteractionType::FRAME->value),
+            'a' => FluentRule::string()
+                ->excludeUnless(self::FIELD, InteractionType::PAUSE->value)
+                ->sometimes(),
+            'b' => FluentRule::string()
+                ->requiredIf(self::FIELD, InteractionType::FRAME->value),
+            'c' => FluentRule::string()
+                ->requiredIf(self::FIELD, InteractionType::PAUSE->value, InteractionType::FRAME->value),
         ];
     }
 }

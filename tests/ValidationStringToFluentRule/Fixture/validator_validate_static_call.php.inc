@@ -34,8 +34,11 @@ class ValidatorValidateStaticCall
         Validator::validate(
             $input,
             [
-                'email' => FluentRule::email()->required()->max(255),
-                'name' => FluentRule::string()->required(),
+                'email' => FluentRule::email()
+                    ->required()
+                    ->max(255),
+                'name' => FluentRule::string()
+                    ->required(),
             ],
         );
     }

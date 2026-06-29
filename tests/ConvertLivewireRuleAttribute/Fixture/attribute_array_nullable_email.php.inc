@@ -33,7 +33,8 @@ final class ArrayNullableEmailAttributeComponent extends Component
     protected function rules(): array
     {
         return [
-            'email' => FluentRule::email()->nullable(),
+            'email' => FluentRule::email()
+                ->nullable(),
         ];
     }
 }

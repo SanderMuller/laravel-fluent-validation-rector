@@ -11,6 +11,7 @@ use PhpParser\Node\Identifier;
 use PhpParser\Node\Name\FullyQualified;
 use PhpParser\Node\Scalar\String_;
 use PHPStan\Type\ObjectType;
+use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\Rector\AbstractRector;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidationRector\Internal\RunSummary;
@@ -520,9 +521,16 @@ CODE_SAMPLE
         );
 
         foreach ($chain['methods'] as $method) {
-            $expr = new MethodCall($expr, new Identifier($method['name']), $method['args']);
+            $expr = $this->withFluentNewline(new MethodCall($expr, new Identifier($method['name']), $method['args']));
         }
 
         return $expr;
+    }
+
+    private function withFluentNewline(MethodCall $call): MethodCall
+    {
+        $call->setAttribute(AttributeKey::NEWLINE_ON_FLUENT_CALL, true);
+
+        return $call;
     }
 }

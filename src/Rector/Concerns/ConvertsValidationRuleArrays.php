@@ -39,6 +39,7 @@ use PhpParser\Node\Name;
 use PhpParser\Node\Param;
 use PhpParser\Node\Scalar\Int_;
 use PhpParser\Node\Scalar\String_;
+use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\Rector\AbstractRector;
 
 /**
@@ -441,7 +442,7 @@ trait ConvertsValidationRuleArrays
             // At the type element's position, apply its chain ops (from Password/Rule factory)
             if ($index === $typeIndex) {
                 foreach ($typeChainOps as $op) {
-                    $expr = new MethodCall($expr, new Identifier($op['name']), $op['args']);
+                    $expr = $this->withFluentNewline(new MethodCall($expr, new Identifier($op['name']), $op['args']));
                 }
 
                 continue;
@@ -560,7 +561,7 @@ trait ConvertsValidationRuleArrays
                 $argExpr = $this->rebuildConcatArg($parsed['args'], array_slice($operands, 1));
 
                 if ($argExpr instanceof Expr) {
-                    return new MethodCall($expr, new Identifier($normalized), [new Arg($argExpr)]);
+                    return $this->withFluentNewline(new MethodCall($expr, new Identifier($normalized), [new Arg($argExpr)]));
                 }
             }
         }
@@ -738,7 +739,7 @@ trait ConvertsValidationRuleArrays
             return null;
         }
 
-        return new MethodCall($expr, new Identifier($fluentMethod), [new Arg($condition)]);
+        return $this->withFluentNewline(new MethodCall($expr, new Identifier($fluentMethod), [new Arg($condition)]));
     }
 
     /**
@@ -790,7 +791,7 @@ trait ConvertsValidationRuleArrays
                 $args[] = new Arg($value, byRef: false, unpack: $item->unpack);
             }
 
-            return new MethodCall($expr, new Identifier($ruleName), $args);
+            return $this->withFluentNewline(new MethodCall($expr, new Identifier($ruleName), $args));
         }
 
         // Defense-in-depth: spread only survives the COMMA_SEPARATED emit
@@ -1166,11 +1167,11 @@ trait ConvertsValidationRuleArrays
         $callbackBody = $ruleVar;
 
         foreach ($calls as $call) {
-            $callbackBody = new MethodCall(
+            $callbackBody = $this->withFluentNewline(new MethodCall(
                 $callbackBody,
                 new Identifier($call['name']),
                 $call['args'],
-            );
+            ));
         }
 
         // Build: fn ($rule) => $rule->method1(...)->method2(...)
@@ -1181,7 +1182,7 @@ trait ConvertsValidationRuleArrays
 
         $fluentArgs[] = new Arg($arrowFunction);
 
-        return new MethodCall($chain, new Identifier($rootMethod), $fluentArgs);
+        return $this->withFluentNewline(new MethodCall($chain, new Identifier($rootMethod), $fluentArgs));
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────
@@ -1258,12 +1259,12 @@ trait ConvertsValidationRuleArrays
         /** @var list<Arg> $args */
         $args = $staticCall->args;
 
-        return new MethodCall($expr, new Identifier($methodName), $args);
+        return $this->withFluentNewline(new MethodCall($expr, new Identifier($methodName), $args));
     }
 
     private function wrapInRuleCall(Expr $chain, Expr $ruleExpr): MethodCall
     {
-        return new MethodCall($chain, new Identifier('rule'), [new Arg($ruleExpr)]);
+        return $this->withFluentNewline(new MethodCall($chain, new Identifier('rule'), [new Arg($ruleExpr)]));
     }
 
     /**
@@ -1338,7 +1339,7 @@ trait ConvertsValidationRuleArrays
         /** @var list<Arg> $args */
         $args = $new->args;
 
-        return new MethodCall($chain, new Identifier($methodName), $args);
+        return $this->withFluentNewline(new MethodCall($chain, new Identifier($methodName), $args));
     }
 
     /**
@@ -1588,6 +1589,13 @@ trait ConvertsValidationRuleArrays
     private function isTrueValue(Expr $expr): bool
     {
         return $expr instanceof ConstFetch && $this->isName($expr, 'true');
+    }
+
+    private function withFluentNewline(MethodCall $call): MethodCall
+    {
+        $call->setAttribute(AttributeKey::NEWLINE_ON_FLUENT_CALL, true);
+
+        return $call;
     }
 
     /**

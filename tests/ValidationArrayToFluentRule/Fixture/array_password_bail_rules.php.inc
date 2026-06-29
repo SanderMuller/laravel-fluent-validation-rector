@@ -30,7 +30,9 @@ class PasswordBailFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'password' => FluentRule::field()->required()->rule(Password::min(8)->rules('custom_rule')),
+            'password' => FluentRule::field()
+                ->required()
+                ->rule(Password::min(8)->rules('custom_rule')),
         ];
     }
 }

@@ -31,10 +31,15 @@ class ConditionalArrayFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => FluentRule::string()->requiredIf('role', 'admin')->max(255),
-            'backup_email' => FluentRule::email()->requiredWith('email'),
-            'reason' => FluentRule::string()->requiredUnless('status', 'active'),
-            'phone' => FluentRule::string()->requiredWithout('email'),
+            'name' => FluentRule::string()
+                ->requiredIf('role', 'admin')
+                ->max(255),
+            'backup_email' => FluentRule::email()
+                ->requiredWith('email'),
+            'reason' => FluentRule::string()
+                ->requiredUnless('status', 'active'),
+            'phone' => FluentRule::string()
+                ->requiredWithout('email'),
         ];
     }
 }

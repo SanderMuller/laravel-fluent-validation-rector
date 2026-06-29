@@ -49,11 +49,20 @@ class ConditionalTupleFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => FluentRule::string()->requiredIf('role', 'admin')->max(255),
-            'notes' => FluentRule::string()->excludeUnless('status', 'active')->nullable(),
-            'phone' => FluentRule::string()->requiredWith('email'),
-            'dynamic_max' => FluentRule::field()->required()->rule(['max', $this->getMaxValue()]),
-            'safe_tuple' => FluentRule::field()->required()->rule(['max', '50']),
+            'name' => FluentRule::string()
+                ->requiredIf('role', 'admin')
+                ->max(255),
+            'notes' => FluentRule::string()
+                ->excludeUnless('status', 'active')
+                ->nullable(),
+            'phone' => FluentRule::string()
+                ->requiredWith('email'),
+            'dynamic_max' => FluentRule::field()
+                ->required()
+                ->rule(['max', $this->getMaxValue()]),
+            'safe_tuple' => FluentRule::field()
+                ->required()
+                ->rule(['max', '50']),
         ];
     }
 }

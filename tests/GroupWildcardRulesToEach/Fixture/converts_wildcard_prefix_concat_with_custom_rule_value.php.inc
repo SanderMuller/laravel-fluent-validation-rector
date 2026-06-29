@@ -65,7 +65,8 @@ final class WildcardPrefixCustomRuleRequest extends FormRequest
 
     public function rules(): array
     {
-        return ['*' => FluentRule::array()->children([
+        return ['*' => FluentRule::array()
+            ->children([
             self::COLOR => FluentRule::string()->required()->rule(new InlineCustomRule()),
             self::PRIORITY => FluentRule::integer()->min(0),
         ])];

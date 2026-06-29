@@ -30,10 +30,14 @@ class RequiredWithArrayFormCategoryB
     public function rules(): array
     {
         return [
-            'a' => FluentRule::string()->requiredWith('other'),
-            'b' => FluentRule::string()->requiredWithAll('first', 'second', 'third'),
-            'c' => FluentRule::string()->requiredWithout('dependency'),
-            'd' => FluentRule::string()->prohibits('conflicting'),
+            'a' => FluentRule::string()
+                ->requiredWith('other'),
+            'b' => FluentRule::string()
+                ->requiredWithAll('first', 'second', 'third'),
+            'c' => FluentRule::string()
+                ->requiredWithout('dependency'),
+            'd' => FluentRule::string()
+                ->prohibits('conflicting'),
         ];
     }
 }

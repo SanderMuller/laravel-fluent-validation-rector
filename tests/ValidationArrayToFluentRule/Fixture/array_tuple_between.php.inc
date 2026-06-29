@@ -32,7 +32,9 @@ class TupleBetweenRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'display_name' => FluentRule::string()->required()->between(3, 100),
+            'display_name' => FluentRule::string()
+                ->required()
+                ->between(3, 100),
         ];
     }
 }

@@ -32,7 +32,8 @@ class StorePushSubscriptionRequest extends FormRequest
     {
         return [
             'endpoint' => FluentRule::string()->required()->url()->max(500),
-            'keys' => FluentRule::array()->children([
+            'keys' => FluentRule::array()
+                ->children([
                 'p256dh' => FluentRule::string()->required(),
                 'auth' => FluentRule::string()->required(),
             ]),

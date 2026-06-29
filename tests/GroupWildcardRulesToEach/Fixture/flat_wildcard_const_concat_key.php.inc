@@ -34,7 +34,8 @@ class DuplicateItemsRequest extends FormRequest
     public function rules(): array
     {
         return [
-            self::ITEM_IDS => FluentRule::array()->required()->each(FluentRule::numeric()->required()),
+            self::ITEM_IDS => FluentRule::array()->required()
+                ->each(FluentRule::numeric()->required()),
         ];
     }
 }

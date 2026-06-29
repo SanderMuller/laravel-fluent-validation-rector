@@ -66,7 +66,8 @@ final class MixedWildcardKeysRequest extends FormRequest
     public function rules(): array
     {
         return [
-            '*' => FluentRule::array()->children([
+            '*' => FluentRule::array()
+                ->children([
                 'foo' => FluentRule::string()->required(),
             ]),
             '*.' . self::BAR => FluentRule::integer()->min(0),

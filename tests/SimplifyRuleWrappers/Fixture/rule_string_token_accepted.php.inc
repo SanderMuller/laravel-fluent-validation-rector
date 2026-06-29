@@ -17,7 +17,8 @@ namespace SanderMuller\FluentValidationRector\Tests\SimplifyRuleWrappers\Fixture
 use SanderMuller\FluentValidation\FluentRule;
 
 $rules = [
-    'tos' => FluentRule::boolean()->accepted(),
+    'tos' => FluentRule::boolean()
+        ->accepted(),
 ];
 
 ?>

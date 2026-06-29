@@ -45,8 +45,10 @@ final class NoExplicitValidatePage extends Component
     protected function rules(): array
     {
         return [
-            'name' => FluentRule::string()->required(),
-            'email' => FluentRule::email()->nullable(),
+            'name' => FluentRule::string()
+                ->required(),
+            'email' => FluentRule::email()
+                ->nullable(),
         ];
     }
 }

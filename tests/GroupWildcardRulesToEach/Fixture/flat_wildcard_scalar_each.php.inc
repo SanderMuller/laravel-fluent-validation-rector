@@ -34,8 +34,10 @@ class CopyInteractionsRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'interactions' => FluentRule::array()->each(FluentRule::field()->filled()),
-            'questions' => FluentRule::array()->each(FluentRule::field()->filled()),
+            'interactions' => FluentRule::array()
+                ->each(FluentRule::field()->filled()),
+            'questions' => FluentRule::array()
+                ->each(FluentRule::field()->filled()),
             'timeShift' => FluentRule::numeric()->nullable(),
             'translate_content' => FluentRule::boolean()->nullable(),
         ];

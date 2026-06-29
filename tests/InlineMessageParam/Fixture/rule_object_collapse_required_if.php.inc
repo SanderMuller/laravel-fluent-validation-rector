@@ -33,7 +33,8 @@ class RuleObjectCollapseRequiredIf
         // RequiredIf/RequiredUnless both emit key 'required' per the
         // HasFieldModifiers::addRule match statement.
         return [
-            'password' => FluentRule::string()->rule(new RequiredIf(true), message: 'Password needed.'),
+            'password' => FluentRule::string()
+                ->rule(new RequiredIf(true), message: 'Password needed.'),
         ];
     }
 }

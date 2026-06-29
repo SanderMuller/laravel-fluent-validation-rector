@@ -101,7 +101,8 @@ final class Livewire4EmptyValidateMarkerContract extends Component
     protected function rules(): array
     {
         return [
-            'title' => FluentRule::string()->required(),
+            'title' => FluentRule::string()
+                ->required(),
         ];
     }
 }

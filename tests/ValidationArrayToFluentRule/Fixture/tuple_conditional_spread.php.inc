@@ -59,11 +59,17 @@ class ConditionalSpreadFormRequest extends FormRequest
         $fields = ['a', 'b'];
 
         return [
-            'a' => FluentRule::numeric()->requiredUnless(self::FIELD, ...InteractionType::list()),
-            'b' => FluentRule::string()->requiredIf(self::FIELD, ...$dynamicValues),
-            'c' => FluentRule::string()->excludeUnless(self::FIELD, 'literal', ...InteractionType::list())->nullable(),
-            'd' => FluentRule::string()->requiredWith(...$fields),
-            'e' => FluentRule::string()->requiredUnless(self::FIELD, ...InteractionType::VALUES),
+            'a' => FluentRule::numeric()
+                ->requiredUnless(self::FIELD, ...InteractionType::list()),
+            'b' => FluentRule::string()
+                ->requiredIf(self::FIELD, ...$dynamicValues),
+            'c' => FluentRule::string()
+                ->excludeUnless(self::FIELD, 'literal', ...InteractionType::list())
+                ->nullable(),
+            'd' => FluentRule::string()
+                ->requiredWith(...$fields),
+            'e' => FluentRule::string()
+                ->requiredUnless(self::FIELD, ...InteractionType::VALUES),
         ];
     }
 }

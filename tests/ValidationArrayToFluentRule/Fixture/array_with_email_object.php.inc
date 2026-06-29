@@ -32,9 +32,14 @@ class EmailObjectFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'primary' => FluentRule::email()->required(),
-            'secondary' => FluentRule::email()->nullable(),
-            'strict' => FluentRule::email()->required()->rfcCompliant()->validateMxRecord(),
+            'primary' => FluentRule::email()
+                ->required(),
+            'secondary' => FluentRule::email()
+                ->nullable(),
+            'strict' => FluentRule::email()
+                ->required()
+                ->rfcCompliant()
+                ->validateMxRecord(),
         ];
     }
 }

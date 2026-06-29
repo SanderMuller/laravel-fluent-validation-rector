@@ -40,9 +40,10 @@ class FieldArrayRuleParentPromotesToEach extends FormRequest
     public function rules(): array
     {
         return [
-            self::ITEMS => FluentRule::array()->nullable()->each(FluentRule::string()
+            self::ITEMS => FluentRule::array()
                 ->nullable()
-                ->max(255)),
+                ->each(FluentRule::string()
+                ->nullable()->max(255)),
         ];
     }
 }

@@ -37,7 +37,9 @@ class MessageForCollapseMultiRule
         // ->messageFor('min', ...)) leaves the chain untouched because
         // the receiver method doesn't match the key.
         return [
-            'name' => FluentRule::string()->required(message: 'Required.')->min(2, message: 'Too short.')->max(255),
+            'name' => FluentRule::string()
+                ->required(message: 'Required.')
+                ->min(2, message: 'Too short.')->max(255),
         ];
     }
 }

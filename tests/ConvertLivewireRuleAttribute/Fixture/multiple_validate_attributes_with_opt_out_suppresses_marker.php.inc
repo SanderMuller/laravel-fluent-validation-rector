@@ -57,7 +57,8 @@ final class MultipleValidateWithOptOutComponent extends Component
     protected function rules(): array
     {
         return [
-            'name' => FluentRule::string()->required(),
+            'name' => FluentRule::string()
+                ->required(),
         ];
     }
 }

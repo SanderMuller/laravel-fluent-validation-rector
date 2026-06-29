@@ -40,7 +40,9 @@ final class MergedRulesComponent extends Component
     protected function rules(): array
     {
         return [
-            'email' => FluentRule::email()->required(), 'name' => FluentRule::string()->required()->label('name'),
+            'email' => FluentRule::email()->required(), 'name' => FluentRule::string()
+                ->required()
+                ->label('name'),
         ];
     }
 }

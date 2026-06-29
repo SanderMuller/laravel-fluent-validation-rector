@@ -40,7 +40,11 @@ class TupleMixedWithClosureRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => FluentRule::string()->required()->min(5)->max(50)->rule(function (string $attribute, string $value, Closure $fail): void {
+            'name' => FluentRule::string()
+                ->required()
+                ->min(5)
+                ->max(50)
+                ->rule(function (string $attribute, string $value, Closure $fail): void {
                 if (strlen($value) === 0) {
                     $fail('empty');
                 }

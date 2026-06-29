@@ -29,7 +29,8 @@ class FlatWildcardWithoutParentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'tags' => FluentRule::array()->each(FluentRule::string()->required()->max(50)),
+            'tags' => FluentRule::array()
+                ->each(FluentRule::string()->required()->max(50)),
         ];
     }
 }

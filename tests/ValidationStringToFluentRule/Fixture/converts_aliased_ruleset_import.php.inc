@@ -45,8 +45,11 @@ class AliasedRuleSetRequest extends FormRequest
     public function rules(): ValidationRules
     {
         return ValidationRules::from([
-            'name' => FluentRule::string()->required()->max(255),
-            'email' => FluentRule::email()->required(),
+            'name' => FluentRule::string()
+                ->required()
+                ->max(255),
+            'email' => FluentRule::email()
+                ->required(),
         ]);
     }
 }

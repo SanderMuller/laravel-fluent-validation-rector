@@ -31,8 +31,12 @@ class RuleFactoryBailFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'count' => FluentRule::field()->required()->rule(Rule::numeric()->integer(true)),
-            'data' => FluentRule::field()->required()->rule(Rule::string()->unknownMethod()),
+            'count' => FluentRule::field()
+                ->required()
+                ->rule(Rule::numeric()->integer(true)),
+            'data' => FluentRule::field()
+                ->required()
+                ->rule(Rule::string()->unknownMethod()),
         ];
     }
 }

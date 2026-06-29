@@ -37,7 +37,8 @@ final class KeyedArrayWithRuleObjectValue extends Component
     protected function rules(): array
     {
         return [
-            'password' => FluentRule::password(8)->required(),
+            'password' => FluentRule::password(8)
+                ->required(),
         ];
     }
 }

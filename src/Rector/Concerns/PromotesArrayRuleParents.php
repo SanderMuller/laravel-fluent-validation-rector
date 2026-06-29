@@ -11,6 +11,7 @@ use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\String_;
 use PHPStan\Type\ObjectType;
+use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\Rector\AbstractRector;
 use ReflectionClass;
 use ReflectionMethod;
@@ -154,7 +155,7 @@ trait PromotesArrayRuleParents
                 continue;
             }
 
-            $rebuilt = new MethodCall($rebuilt, $hop->name, $hop->args);
+            $rebuilt = $this->withFluentNewline(new MethodCall($rebuilt, $hop->name, $hop->args));
         }
 
         return $rebuilt;
@@ -242,6 +243,13 @@ trait PromotesArrayRuleParents
         }
 
         return $this->isArrayRulePayload($hop->args[0]->value);
+    }
+
+    private function withFluentNewline(MethodCall $call): MethodCall
+    {
+        $call->setAttribute(AttributeKey::NEWLINE_ON_FLUENT_CALL, true);
+
+        return $call;
     }
 
     /**

@@ -66,11 +66,13 @@ class ConcatRequiredWithToMethodDateFormatStays
         return [
             self::START_DATE => FluentRule::string()
                 ->bail()
-                ->nullable()->requiredWith(self::END_DATE)
+                ->nullable()
+                ->requiredWith(self::END_DATE)
                 ->rule(Rule::date()->format('Y-m-d H:i:s')),
             self::END_DATE => FluentRule::string()
                 ->bail()
-                ->nullable()->requiredWith(self::START_DATE)
+                ->nullable()
+                ->requiredWith(self::START_DATE)
                 ->rule(Rule::date()->format('Y-m-d H:i:s')),
         ];
     }

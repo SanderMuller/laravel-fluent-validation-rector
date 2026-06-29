@@ -31,7 +31,9 @@ class DisplayLocation
 $rules = [
     // field() and enum() separated by intermediate calls — hoist enum
     // as the factory, preserve the order of intermediate modifiers.
-    'displayLocation' => FluentRule::enum(DisplayLocation::class)->excludeUnless('type', 'chapter')->nullable(),
+    'displayLocation' => FluentRule::enum(DisplayLocation::class)
+        ->excludeUnless('type', 'chapter')
+        ->nullable(),
 ];
 
 ?>

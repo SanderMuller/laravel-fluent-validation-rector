@@ -353,6 +353,8 @@ CODE_SAMPLE
 
         $root->name = new Identifier($factoryName);
 
+        $this->preserveFluentNewlinesInChain($node);
+
         return $node;
     }
 
@@ -535,6 +537,8 @@ CODE_SAMPLE
         }
 
         $root->name = new Identifier($factoryName);
+
+        $this->preserveFluentNewlinesInChain($replacement);
 
         return $replacement;
     }

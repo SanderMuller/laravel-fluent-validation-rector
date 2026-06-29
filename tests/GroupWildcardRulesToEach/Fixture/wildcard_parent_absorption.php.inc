@@ -32,7 +32,8 @@ class WildcardAbsorptionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'tags' => FluentRule::array()->required()->each([
+            'tags' => FluentRule::array()->required()
+                ->each([
                 'label' => FluentRule::string()->required(),
                 'color' => FluentRule::string()->nullable(),
             ]),

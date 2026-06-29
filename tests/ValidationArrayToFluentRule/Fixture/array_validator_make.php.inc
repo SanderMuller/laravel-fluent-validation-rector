@@ -23,10 +23,17 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
 $validator = Validator::make($data, [
-    'name' => FluentRule::string()->required()->max(255),
-    'email' => FluentRule::email()->required()->unique('users'),
-    'role' => FluentRule::string()->required()->in(['admin', 'editor', 'viewer']),
-    'website' => FluentRule::url()->nullable(),
+    'name' => FluentRule::string()
+        ->required()
+        ->max(255),
+    'email' => FluentRule::email()
+        ->required()
+        ->unique('users'),
+    'role' => FluentRule::string()
+        ->required()
+        ->in(['admin', 'editor', 'viewer']),
+    'website' => FluentRule::url()
+        ->nullable(),
 ]);
 
 ?>

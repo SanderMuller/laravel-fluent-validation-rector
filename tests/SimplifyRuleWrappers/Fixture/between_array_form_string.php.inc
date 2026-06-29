@@ -27,7 +27,8 @@ class BetweenArrayFormString
     public function rules(): array
     {
         return [
-            'name' => FluentRule::string()->between(2, 255),
+            'name' => FluentRule::string()
+                ->between(2, 255),
         ];
     }
 }

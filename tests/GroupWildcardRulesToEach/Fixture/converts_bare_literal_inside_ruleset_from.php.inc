@@ -43,7 +43,8 @@ final class BareLiteralInsideRuleSetFromRequest extends FormRequest
 {
     public function rules(): RuleSet
     {
-        return RuleSet::from(['*' => FluentRule::array()->children([
+        return RuleSet::from(['*' => FluentRule::array()
+            ->children([
             'foo' => FluentRule::string()->required(),
             'bar' => FluentRule::integer()->min(0),
         ])]);

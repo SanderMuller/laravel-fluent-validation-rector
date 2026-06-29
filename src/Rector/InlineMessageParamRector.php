@@ -458,7 +458,7 @@ CODE_SAMPLE
 
         $newArgs[] = new Arg($message, name: new Identifier('message'));
 
-        return new MethodCall($receiver->var, $receiver->name, $newArgs);
+        return $this->withFluentNewline(new MethodCall($receiver->var, $receiver->name, $newArgs));
     }
 
     /**
@@ -537,6 +537,13 @@ CODE_SAMPLE
         }
 
         return false;
+    }
+
+    private function withFluentNewline(MethodCall $call): MethodCall
+    {
+        $call->setAttribute(AttributeKey::NEWLINE_ON_FLUENT_CALL, true);
+
+        return $call;
     }
 
     private function noMessageReason(string $factoryName): string

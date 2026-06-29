@@ -866,9 +866,9 @@ CODE_SAMPLE
             $eachItems = $this->buildNestedItems($partitioned['subWildcard'], $entries, $directKey . '.*', $consumed, $depth + 1);
 
             if ($eachItems !== []) {
-                $childValue = new MethodCall($childValue, new Identifier('each'), [
+                $childValue = $this->withFluentNewline(new MethodCall($childValue, new Identifier('each'), [
                     new Arg($this->multilineArray($eachItems)),
-                ]);
+                ]));
             }
         }
 
@@ -876,9 +876,9 @@ CODE_SAMPLE
             $childrenItems = $this->buildNestedItems($partitioned['subFixed'], $entries, $directKey, $consumed, $depth + 1);
 
             if ($childrenItems !== []) {
-                $childValue = new MethodCall($childValue, new Identifier('children'), [
+                $childValue = $this->withFluentNewline(new MethodCall($childValue, new Identifier('children'), [
                     new Arg($this->multilineArray($childrenItems)),
-                ]);
+                ]));
             }
         }
 
@@ -1016,11 +1016,11 @@ CODE_SAMPLE
             $childItems[] = new ArrayItem($entry['value'], $entry['constExpr']);
         }
 
-        $foldExpr = new MethodCall(
+        $foldExpr = $this->withFluentNewline(new MethodCall(
             $this->buildFluentRuleFactoryCall('array'),
             new Identifier('children'),
             [new Arg($this->multilineArray($childItems))],
-        );
+        ));
 
         $foldItem = new ArrayItem($foldExpr, new String_('*'));
 
@@ -1377,25 +1377,25 @@ CODE_SAMPLE
     private function appendChainToParent(Expr $parentValue, array $eachItems, array $childrenItems, ?Expr $eachScalar): Expr
     {
         if ($eachItems !== []) {
-            $parentValue = new MethodCall(
+            $parentValue = $this->withFluentNewline(new MethodCall(
                 $parentValue,
                 new Identifier('each'),
                 [new Arg($this->multilineArray($eachItems))],
-            );
+            ));
         } elseif ($eachScalar instanceof Expr) {
-            $parentValue = new MethodCall(
+            $parentValue = $this->withFluentNewline(new MethodCall(
                 $parentValue,
                 new Identifier('each'),
                 [new Arg($eachScalar)],
-            );
+            ));
         }
 
         if ($childrenItems !== []) {
-            return new MethodCall(
+            return $this->withFluentNewline(new MethodCall(
                 $parentValue,
                 new Identifier('children'),
                 [new Arg($this->multilineArray($childrenItems))],
-            );
+            ));
         }
 
         return $parentValue;
@@ -1623,6 +1623,13 @@ CODE_SAMPLE
             new Name('FluentRule'),
             new Identifier($factory),
         );
+    }
+
+    private function withFluentNewline(MethodCall $call): MethodCall
+    {
+        $call->setAttribute(AttributeKey::NEWLINE_ON_FLUENT_CALL, true);
+
+        return $call;
     }
 
     /**

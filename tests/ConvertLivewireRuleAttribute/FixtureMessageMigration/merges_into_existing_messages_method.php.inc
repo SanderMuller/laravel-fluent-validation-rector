@@ -48,7 +48,8 @@ class MergesIntoExistingMessagesMethod extends Component
     protected function rules(): array
     {
         return [
-            'email' => FluentRule::email()->required(),
+            'email' => FluentRule::email()
+                ->required(),
         ];
     }
 }

@@ -21,11 +21,16 @@ namespace SanderMuller\FluentValidationRector\Tests\SimplifyFluentRule\Fixture;
 use SanderMuller\FluentValidation\FluentRule;
 
 $rules = [
-    'url' => FluentRule::url()->required(),
-    'uuid' => FluentRule::uuid()->nullable(),
+    'url' => FluentRule::url()
+        ->required(),
+    'uuid' => FluentRule::uuid()
+        ->nullable(),
     'ulid' => FluentRule::ulid(),
-    'ip' => FluentRule::ip()->required(),
-    'count' => FluentRule::integer()->required()->min(0),
+    'ip' => FluentRule::ip()
+        ->required(),
+    'count' => FluentRule::integer()
+        ->required()
+        ->min(0),
 ];
 
 ?>

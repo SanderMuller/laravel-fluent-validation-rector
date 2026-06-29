@@ -495,7 +495,7 @@ CODE_SAMPLE
 
         $this->processedCalls[$node] = true;
 
-        return new MethodCall($node->var, new Identifier($targetMethod), $ruleArgs);
+        return $this->withFluentNewline(new MethodCall($node->var, new Identifier($targetMethod), $ruleArgs));
     }
 
     /** @param  list<Arg>  $args */
@@ -645,6 +645,13 @@ CODE_SAMPLE
         }
 
         return sprintf('%s %s', $shortClass, $rendered);
+    }
+
+    private function withFluentNewline(MethodCall $call): MethodCall
+    {
+        $call->setAttribute(AttributeKey::NEWLINE_ON_FLUENT_CALL, true);
+
+        return $call;
     }
 
     private function logSkipForCall(MethodCall $node, string $reason, bool $verboseOnly = false, bool $actionable = true): void

@@ -34,7 +34,8 @@ $rules = [
     'field' => FluentRule::string()
         ->when(true, function (StringRule $r): void {
             $r->nullable();
-        })->max(255),
+        })
+        ->max(255),
 ];
 
 ?>

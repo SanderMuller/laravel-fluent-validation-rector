@@ -31,7 +31,9 @@ class PreImportedFluentRuleRequest extends FormRequest
     {
         return [
             'manual' => FluentRule::string()->required(),
-            'auto' => FluentRule::string()->required()->max(100),
+            'auto' => FluentRule::string()
+                ->required()
+                ->max(100),
         ];
     }
 }
