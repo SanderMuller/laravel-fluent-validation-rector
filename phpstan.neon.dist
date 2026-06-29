@@ -47,3 +47,12 @@ parameters:
         -
             identifier: ternary.condNotBoolean
             reportUnmatched: false
+        -
+            # Rector's typeDeclarationDocblocks set stamps `@param <NodeType> $node`
+            # on each rule's refactor() override. The override only ever receives
+            # the types its getNodeTypes() declares, so the narrowed docblock is
+            # correct by Rector's design contract — but PHPStan reads it as a
+            # contravariance violation against RectorInterface::refactor(Node).
+            identifier: method.childParameterType
+            path: src/Rector/*Rector.php
+            reportUnmatched: false
