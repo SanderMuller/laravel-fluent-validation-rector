@@ -547,7 +547,15 @@ All three are in Pint's default Laravel preset, so most Laravel consumers have t
 > ```
 
 > [!NOTE]
-> The rector doesn't insert line breaks between method calls. `FluentRule::string()->required()->max(255)` is valid PHP on a single line and keeps diffs minimal. If you prefer multi-line chains, the [`method_chaining_indentation`](https://mlocati.github.io/php-cs-fixer-configurator/#version:3.0|fixer:method_chaining_indentation) fixer (Pint / PHP-CS-Fixer) reflows them after Rector runs.
+> The rector places each method call it generates on its own line, so a converted chain reads as:
+>
+> ```php
+> FluentRule::string()
+>     ->required()
+>     ->max(255);
+> ```
+>
+> The line breaks are stamped only on the calls the rule creates, so calls already present inline in your source stay inline. If you prefer single-line chains, run a formatter that collapses method chains after Rector.
 
 ## Diagnostics
 
