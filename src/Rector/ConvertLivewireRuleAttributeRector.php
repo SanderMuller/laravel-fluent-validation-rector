@@ -234,12 +234,11 @@ CODE_SAMPLE
         return [Class_::class];
     }
 
+    /**
+     * @param Class_ $node
+     */
     public function refactor(Node $node): ?Node
     {
-        if (! $node instanceof Class_) {
-            return null;
-        }
-
         // File-level relevance gate. Livewire conversion only fires on
         // files containing `#[Rule(` / `#[Validate(` attributes or one
         // of the rule-bearing tokens; cheap text scan before the

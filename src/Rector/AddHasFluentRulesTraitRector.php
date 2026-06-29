@@ -116,12 +116,11 @@ CODE_SAMPLE
         return [Namespace_::class];
     }
 
+    /**
+     * @param Namespace_ $node
+     */
     public function refactor(Node $node): ?Node
     {
-        if (! $node instanceof Namespace_) {
-            return null;
-        }
-
         // File-level relevance gate. Broad rule-bearing needle set so
         // pre-conversion files (`'required|string'` literals that
         // upstream converters will rewrite into FluentRule chains in the

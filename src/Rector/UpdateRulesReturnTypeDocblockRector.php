@@ -168,12 +168,11 @@ CODE_SAMPLE
         return [Class_::class];
     }
 
+    /**
+     * @param Class_ $node
+     */
     public function refactor(Node $node): ?Node
     {
-        if (! $node instanceof Class_) {
-            return null;
-        }
-
         // File-level relevance gate. Polish only narrows the docblock
         // when the body is a FluentRule chain, so files without any
         // rule-bearing tokens cannot trigger this rule.

@@ -20,6 +20,7 @@ use SanderMuller\FluentValidationRector\Rector\ConvertLivewireRuleAttributeRecto
  *             ->withOverlapBehavior(OverlapBehavior::Partial)
  *             ->toArray(),
  *     );
+ * @see \SanderMuller\FluentValidationRector\Tests\Config\LivewireConvertOptionsTest
  */
 final readonly class LivewireConvertOptions
 {

@@ -339,12 +339,11 @@ CODE_SAMPLE
         return [MethodCall::class];
     }
 
+    /**
+     * @param MethodCall $node
+     */
     public function refactor(Node $node): ?Node
     {
-        if (! $node instanceof MethodCall) {
-            return null;
-        }
-
         if (! $node->name instanceof Identifier || $node->name->toString() !== 'rule') {
             return null;
         }
