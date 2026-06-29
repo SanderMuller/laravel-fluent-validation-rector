@@ -14,7 +14,7 @@ use PhpParser\Node\UseItem;
  * at the alphabetically-sorted position, skipping when the class is already
  * imported.
  *
- * Replaces Rector's UseNodesToAddCollector path for this package because
+ * Replaces Rector's default pending-imports path for this package because
  * UseAddingPostRector prepends new imports to the top of the use block
  * regardless of existing alphabetical order. See ROADMAP.md and the Finding A
  * entry in the 0.2.0 release notes for context.

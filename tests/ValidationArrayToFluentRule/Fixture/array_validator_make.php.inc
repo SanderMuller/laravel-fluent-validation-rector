@@ -20,7 +20,6 @@ namespace SanderMuller\FluentValidationRector\Tests\ValidationArrayToFluentRule\
 
 use SanderMuller\FluentValidation\FluentRule;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\Rule;
 
 $validator = Validator::make($data, [
     'name' => FluentRule::string()

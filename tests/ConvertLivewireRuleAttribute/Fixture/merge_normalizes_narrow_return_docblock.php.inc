@@ -30,9 +30,7 @@ namespace SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute
 
 use Illuminate\Contracts\Validation\ValidationRule;
 use SanderMuller\FluentValidation\FluentRule;
-use Livewire\Attributes\Rule;
 use Livewire\Component;
-use SanderMuller\FluentValidation\StringRule;
 
 final class MergeStaleDocblockComponent extends Component
 {

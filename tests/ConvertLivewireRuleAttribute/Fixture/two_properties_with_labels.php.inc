@@ -22,7 +22,6 @@ namespace SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute
 
 use SanderMuller\FluentValidation\FluentRule;
 use Illuminate\Contracts\Validation\ValidationRule;
-use Livewire\Attributes\Rule;
 use Livewire\Component;
 
 final class Settings extends Component

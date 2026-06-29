@@ -22,7 +22,6 @@ use PhpParser\Node\Stmt\Property;
 use PhpParser\Node\Stmt\Return_;
 use Rector\Contract\Rector\ConfigurableRectorInterface;
 use Rector\NodeTypeResolver\Node\AttributeKey;
-use Rector\PostRector\Collector\UseNodesToAddCollector;
 use Rector\Rector\AbstractRector;
 use Rector\StaticTypeMapper\ValueObject\Type\FullyQualifiedObjectType;
 use SanderMuller\FluentValidation\FluentRule;
@@ -162,7 +161,7 @@ final class ConvertLivewireRuleAttributeRector extends AbstractRector implements
     use ResolvesRealtimeValidationMarker;
     use ShortCircuitsIrrelevantFiles;
 
-    public function __construct(private readonly UseNodesToAddCollector $useNodesToAddCollector)
+    public function __construct()
     {
         RunSummary::registerShutdownHandler();
     }
@@ -1100,7 +1099,7 @@ CODE_SAMPLE
             return;
         }
 
-        $this->useNodesToAddCollector->addUseImport(new FullyQualifiedObjectType(FluentRule::class));
+        $this->getFile()->getFileNode()?->getPendingImports()->addUseImport(new FullyQualifiedObjectType(FluentRule::class));
         $this->needsFluentRuleImport = false;
     }
 
@@ -1110,7 +1109,7 @@ CODE_SAMPLE
      */
     protected function queueValidationRuleUseImport(): void
     {
-        $this->useNodesToAddCollector->addUseImport(new FullyQualifiedObjectType(self::VALIDATION_RULE_CONTRACT_FQN));
+        $this->getFile()->getFileNode()?->getPendingImports()->addUseImport(new FullyQualifiedObjectType(self::VALIDATION_RULE_CONTRACT_FQN));
     }
 
     /**

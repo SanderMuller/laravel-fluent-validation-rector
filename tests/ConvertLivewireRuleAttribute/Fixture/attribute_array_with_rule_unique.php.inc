@@ -21,7 +21,6 @@ namespace SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute
 use SanderMuller\FluentValidation\FluentRule;
 use Illuminate\Validation\Rule\Unique;
 use Illuminate\Contracts\Validation\ValidationRule;
-use Illuminate\Validation\Rule;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
 

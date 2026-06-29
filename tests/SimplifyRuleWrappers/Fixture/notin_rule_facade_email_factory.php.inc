@@ -21,7 +21,6 @@ class NotInRuleFacadeEmailFactory
 
 namespace SanderMuller\FluentValidationRector\Tests\SimplifyRuleWrappers\Fixture;
 
-use Illuminate\Validation\Rule;
 use SanderMuller\FluentValidation\FluentRule;
 
 class NotInRuleFacadeEmailFactory

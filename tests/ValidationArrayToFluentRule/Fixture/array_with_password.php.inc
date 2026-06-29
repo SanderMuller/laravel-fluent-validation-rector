@@ -26,7 +26,6 @@ namespace SanderMuller\FluentValidationRector\Tests\ValidationArrayToFluentRule\
 
 use SanderMuller\FluentValidation\FluentRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rules\Password;
 
 class PasswordFormRequest extends FormRequest
 {

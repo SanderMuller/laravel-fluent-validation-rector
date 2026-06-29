@@ -27,7 +27,6 @@ final class MergedRulesComponent extends Component
 
 namespace SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute\Fixture;
 
-use Livewire\Attributes\Rule;
 use Livewire\Component;
 use SanderMuller\FluentValidation\FluentRule;
 

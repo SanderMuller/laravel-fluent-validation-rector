@@ -29,7 +29,6 @@ class RequiredIfRuleFacadeOnEmail
 
 namespace SanderMuller\FluentValidationRector\Tests\SimplifyRuleWrappers\Fixture;
 
-use Illuminate\Validation\Rule;
 use SanderMuller\FluentValidation\FluentRule;
 
 class RequiredIfRuleFacadeOnEmail

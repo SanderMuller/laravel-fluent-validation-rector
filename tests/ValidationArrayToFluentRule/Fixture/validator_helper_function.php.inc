@@ -24,7 +24,6 @@ class ValidatorHelperFunctionArray
 namespace SanderMuller\FluentValidationRector\Tests\ValidationArrayToFluentRule\Fixture;
 
 use SanderMuller\FluentValidation\FluentRule;
-use Illuminate\Validation\Rule;
 
 class ValidatorHelperFunctionArray
 {

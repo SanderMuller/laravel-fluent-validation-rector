@@ -35,7 +35,6 @@ namespace SanderMuller\FluentValidationRector\Tests\ValidationArrayToFluentRule\
 
 use SanderMuller\FluentValidation\FluentRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class ConcatRuleStringFormRequest extends FormRequest
 {

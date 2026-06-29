@@ -50,7 +50,6 @@ namespace SanderMuller\FluentValidationRector\Tests\ValidationArrayToFluentRule\
 use SanderMuller\FluentValidation\FluentRule;
 use App\Enums\CompanyRoleEnum;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 use SanderMuller\FluentValidation\RuleSet;
 
 // 1.1.0 fixture (TDD pre-implementation): array-form conversion

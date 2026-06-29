@@ -39,7 +39,6 @@ namespace SanderMuller\FluentValidationRector\Tests\ValidationArrayToFluentRule\
 use Illuminate\Contracts\Validation\ValidationRule;
 use SanderMuller\FluentValidation\FluentRule;
 use Illuminate\Foundation\Http\FormRequest;
-use SanderMuller\FluentValidation\StringRule;
 
 /**
  * Regression pin for a NormalizesRulesDocblock multi-line handling bug: a

@@ -41,7 +41,6 @@ final class DirectTraitWithLocalRulesComponent
 namespace SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute\Fixture;
 
 use SanderMuller\FluentValidation\FluentRule;
-use Livewire\Attributes\Rule;
 use SanderMuller\FluentValidation\HasFluentValidation;
 
 // 1.2.0 coverage pin: the direct-trait shape must STILL convert, not

@@ -20,7 +20,6 @@ $rules = [
 
 namespace SanderMuller\FluentValidationRector\Tests\PromoteFieldFactory\Fixture;
 
-use Illuminate\Validation\Rules\Password;
 use SanderMuller\FluentValidation\FluentRule;
 
 $rules = [

@@ -141,8 +141,8 @@ trait NormalizesRulesDocblock
      * Without this, consumer files would have unresolved short-name
      * references unless they happened to import the contract already.
      *
-     * Each rector implements via either `UseNodesToAddCollector`
-     * (Rector container service) or `ManagesNamespaceImports::ensureUseImportInNamespace`,
+     * Each rector implements via either the FileNode pending-imports
+     * queue or `ManagesNamespaceImports::ensureUseImportInNamespace`,
      * depending on which infrastructure the rector already uses for
      * import management.
      */

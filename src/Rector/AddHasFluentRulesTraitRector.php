@@ -149,9 +149,9 @@ CODE_SAMPLE
 
         // Insert the `use SanderMuller\FluentValidation\HasFluentRules;` import
         // into the namespace at the alphabetically-sorted position. We do this
-        // here (rather than via UseNodesToAddCollector) because Rector's default
-        // UseAddingPostRector prepends new imports to the top of the use block
-        // regardless of alphabetical order.
+        // here (rather than via the FileNode pending-imports queue) because
+        // Rector's default UseAddingPostRector prepends new imports to the top
+        // of the use block regardless of alphabetical order.
         $this->ensureUseImportInNamespace($node, HasFluentRules::class);
 
         return $node;

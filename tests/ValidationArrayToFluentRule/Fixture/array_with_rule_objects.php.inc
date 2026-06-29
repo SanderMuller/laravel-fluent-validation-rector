@@ -28,7 +28,6 @@ namespace SanderMuller\FluentValidationRector\Tests\ValidationArrayToFluentRule\
 use SanderMuller\FluentValidation\FluentRule;
 use App\Enums\Status;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class RuleObjectFormRequest extends FormRequest
 {

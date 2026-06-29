@@ -19,7 +19,6 @@ namespace SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute
 
 use SanderMuller\FluentValidation\FluentRule;
 use Illuminate\Contracts\Validation\ValidationRule;
-use Livewire\Attributes\Rule;
 use SanderMuller\FluentValidationRector\Tests\ConvertLivewireRuleAttribute\FixtureSupport\BaseWithPublicRules;
 
 final class ChildWithPublicParentRules extends BaseWithPublicRules

@@ -15,7 +15,6 @@ $rules = [
 
 namespace SanderMuller\FluentValidationRector\Tests\PromoteFieldFactory\Fixture;
 
-use Illuminate\Validation\Rules\Email;
 use SanderMuller\FluentValidation\FluentRule;
 
 $rules = [

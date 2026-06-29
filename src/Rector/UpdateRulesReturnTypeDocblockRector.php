@@ -20,7 +20,6 @@ use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Stmt\Return_;
 use PhpParser\NodeVisitor;
 use Rector\Contract\Rector\ConfigurableRectorInterface;
-use Rector\PostRector\Collector\UseNodesToAddCollector;
 use Rector\Rector\AbstractRector;
 use Rector\StaticTypeMapper\ValueObject\Type\FullyQualifiedObjectType;
 use ReflectionClass;
@@ -92,8 +91,8 @@ final class UpdateRulesReturnTypeDocblockRector extends AbstractRector implement
      * Final emitted `@return` annotation body. Uses the short
      * `FluentRuleContract` name; the rector queues a `use` import for
      * `\SanderMuller\FluentValidation\Contracts\FluentRuleContract` via
-     * `UseNodesToAddCollector` whenever the annotation is rewritten,
-     * so static analyzers resolve the short name correctly. Pre-0.14.1
+     * the FileNode pending-imports queue whenever the annotation is
+     * rewritten, so static analyzers resolve the short name correctly. Pre-0.14.1
      * the body emitted the FQN inline, which Pint's
      * `fully_qualified_strict_types` cleaned up afterwards — every
      * rector run forced a follow-up Pint pass. Surfaced by a consumer
@@ -102,15 +101,15 @@ final class UpdateRulesReturnTypeDocblockRector extends AbstractRector implement
     private const string CONTRACT_ANNOTATION_BODY = 'array<string, FluentRuleContract>';
 
     /**
-     * FQN queued via `UseNodesToAddCollector` whenever the annotation
-     * is rewritten. String-referenced (not `::class`) so the rector
+     * FQN queued via the FileNode pending-imports queue whenever the
+     * annotation is rewritten. String-referenced (not `::class`) so the rector
      * doesn't load the contract class at static-analysis time — the
      * package's `^1.0` constraint includes versions that may not ship
      * the contract under this exact namespace.
      */
     private const string CONTRACT_FQN = FluentRuleContract::class;
 
-    public function __construct(private readonly UseNodesToAddCollector $useNodesToAddCollector)
+    public function __construct()
     {
         RunSummary::registerShutdownHandler();
     }
@@ -696,7 +695,7 @@ CODE_SAMPLE
      */
     private function queueContractUseImport(): void
     {
-        $this->useNodesToAddCollector->addUseImport(new FullyQualifiedObjectType(self::CONTRACT_FQN));
+        $this->getFile()->getFileNode()?->getPendingImports()->addUseImport(new FullyQualifiedObjectType(self::CONTRACT_FQN));
     }
 
     /**
@@ -707,7 +706,7 @@ CODE_SAMPLE
      */
     protected function queueValidationRuleUseImport(): void
     {
-        $this->useNodesToAddCollector->addUseImport(new FullyQualifiedObjectType(self::VALIDATION_RULE_CONTRACT_FQN));
+        $this->getFile()->getFileNode()?->getPendingImports()->addUseImport(new FullyQualifiedObjectType(self::VALIDATION_RULE_CONTRACT_FQN));
     }
 
     /**

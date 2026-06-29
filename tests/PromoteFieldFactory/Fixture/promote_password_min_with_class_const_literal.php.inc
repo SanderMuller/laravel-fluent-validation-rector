@@ -23,7 +23,6 @@ class PromotePasswordMinWithClassConstLiteral
 
 namespace SanderMuller\FluentValidationRector\Tests\PromoteFieldFactory\Fixture;
 
-use Illuminate\Validation\Rules\Password;
 use SanderMuller\FluentValidation\FluentRule;
 
 class PromotePasswordMinWithClassConstLiteral

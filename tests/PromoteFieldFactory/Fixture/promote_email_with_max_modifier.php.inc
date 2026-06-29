@@ -19,7 +19,6 @@ $rules = [
 
 namespace SanderMuller\FluentValidationRector\Tests\PromoteFieldFactory\Fixture;
 
-use Illuminate\Validation\Rules\Email;
 use SanderMuller\FluentValidation\FluentRule;
 
 // `EmailRule::max(int, ?string)` matches `StringRule::max` in both signature

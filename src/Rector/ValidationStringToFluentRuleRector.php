@@ -17,7 +17,6 @@ use PhpParser\Node\Stmt\ClassLike;
 use PHPStan\Analyser\Scope;
 use PHPStan\Reflection\ClassReflection;
 use Rector\NodeTypeResolver\Node\AttributeKey;
-use Rector\PostRector\Collector\UseNodesToAddCollector;
 use Rector\Rector\AbstractRector;
 use Rector\StaticTypeMapper\ValueObject\Type\FullyQualifiedObjectType;
 use SanderMuller\FluentValidation\FluentRule;
@@ -52,7 +51,7 @@ final class ValidationStringToFluentRuleRector extends AbstractRector implements
     use QualifiesForRulesProcessing;
     use ShortCircuitsIrrelevantFiles;
 
-    public function __construct(private readonly UseNodesToAddCollector $useNodesToAddCollector)
+    public function __construct()
     {
         RunSummary::registerShutdownHandler();
     }
@@ -282,7 +281,7 @@ CODE_SAMPLE
             return;
         }
 
-        $this->useNodesToAddCollector->addUseImport(new FullyQualifiedObjectType(FluentRule::class));
+        $this->getFile()->getFileNode()?->getPendingImports()->addUseImport(new FullyQualifiedObjectType(FluentRule::class));
         $this->needsFluentRuleImport = false;
     }
 
@@ -292,7 +291,7 @@ CODE_SAMPLE
      */
     protected function queueValidationRuleUseImport(): void
     {
-        $this->useNodesToAddCollector->addUseImport(new FullyQualifiedObjectType(self::VALIDATION_RULE_CONTRACT_FQN));
+        $this->getFile()->getFileNode()?->getPendingImports()->addUseImport(new FullyQualifiedObjectType(self::VALIDATION_RULE_CONTRACT_FQN));
     }
 
     private function processValidationRules(Array_ $array): bool

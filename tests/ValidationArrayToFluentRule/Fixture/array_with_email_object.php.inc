@@ -25,7 +25,6 @@ namespace SanderMuller\FluentValidationRector\Tests\ValidationArrayToFluentRule\
 
 use SanderMuller\FluentValidation\FluentRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rules\Email;
 
 class EmailObjectFormRequest extends FormRequest
 {

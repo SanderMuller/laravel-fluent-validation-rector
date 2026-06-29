@@ -27,7 +27,6 @@ namespace SanderMuller\FluentValidationRector\Tests\ValidationArrayToFluentRule\
 use Illuminate\Contracts\Validation\ValidationRule;
 use SanderMuller\FluentValidation\FluentRule;
 use Illuminate\Foundation\Http\FormRequest;
-use SanderMuller\FluentValidation\StringRule;
 
 class NarrowDocblockFormRequest extends FormRequest
 {
