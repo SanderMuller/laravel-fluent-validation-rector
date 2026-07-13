@@ -14,6 +14,7 @@ use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\ArrayDimFetch;
 use PhpParser\Node\Expr\ArrowFunction;
 use PhpParser\Node\Expr\Assign;
+use PhpParser\Node\Expr\BinaryOp\Plus;
 use PhpParser\Node\Expr\Closure;
 use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\MethodCall;
@@ -767,6 +768,7 @@ trait ConvertsValidationRuleStrings
             $op instanceof FuncCall, $op instanceof StaticCall => $this->collectArgValues($op->args),
             $op instanceof Unset_ => $this->collectArrayDimReceivers($op->vars),
             $op instanceof Assign && $op->var instanceof ArrayDimFetch => [$op->var->var],
+            $op instanceof Plus => [$op->left, $op->right],
             default => [],
         };
 
@@ -935,6 +937,17 @@ trait ConvertsValidationRuleStrings
             return 'array-dim assignment';
         }
 
+        // `parent::rules() + ['extra' => …]` array-union. `+` on arrays keeps
+        // the left operand's keys — the same "treat parent::rules() as a plain
+        // array" hazard as array_merge: a fluentized parent yields a mixed
+        // FluentRule/string array (or a RuleSet-plus-array type error). The
+        // label is only recorded once `opOperatesOnParentCall()` confirms an
+        // operand traces to a `parent::*()` call, so plain numeric `$a + $b`
+        // never reaches the unsafe set.
+        if ($node instanceof Plus) {
+            return 'array-union (+)';
+        }
+
         return null;
     }
 
@@ -1081,9 +1094,17 @@ trait ConvertsValidationRuleStrings
                 continue;
             }
 
-            // Check for array manipulation or bracket assignment
+            // Check for array manipulation, bracket assignment, or a `+`
+            // array-union directly on a parent call (`parent::rules() + [...]`
+            // or `[...] + parent::rules()`). The union operator isn't in
+            // ARRAY_MANIPULATION_PATTERN but is the same plain-array hazard;
+            // this coarse cross-file regex mirrors the precise AST match in
+            // matchArrayManipulationOp()/opOperatesOnParentCall(). Aliased
+            // unions (`$x = parent::rules(); $x + [...]`) are left to the AST
+            // path's depth-1 trace — reopen on consumer signal.
             if (preg_match(self::ARRAY_MANIPULATION_PATTERN, $content) !== 1
-                && preg_match('/\$\w+\s*\[.*\]\s*=/', $content) !== 1) {
+                && preg_match('/\$\w+\s*\[.*\]\s*=/', $content) !== 1
+                && preg_match('/\bparent::\w+\s*\([^;{}]*\)\s*\+|\+\s*parent::\w+\s*\(/', $content) !== 1) {
                 continue;
             }
 

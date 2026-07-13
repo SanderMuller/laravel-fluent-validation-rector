@@ -14,21 +14,18 @@ use PhpParser\Node\Name;
 use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Stmt\Expression;
-use PhpParser\Node\Stmt\Namespace_;
 use PhpParser\Node\Stmt\Return_;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitor;
 use PhpParser\NodeVisitor\CloningVisitor;
 use PhpParser\NodeVisitorAbstract;
-use PhpParser\ParserFactory;
 use Rector\Rector\AbstractRector;
-use ReflectionClass;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ParsesParentRulesMethod;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ResolvesVariableSpread;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ShortCircuitsIrrelevantFiles;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
 use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
-use Throwable;
 
 /**
  * Inline the parent's `rules()` array when a child `rules()` method spreads
@@ -47,18 +44,9 @@ use Throwable;
  */
 final class InlineResolvableParentRulesRector extends AbstractRector implements DocumentedRuleInterface
 {
+    use ParsesParentRulesMethod;
     use ResolvesVariableSpread;
     use ShortCircuitsIrrelevantFiles;
-
-    /**
-     * Cache parsed parent files across rector invocations within one process
-     * so repeated child classes sharing the same parent don't re-parse the
-     * same source. Keyed by absolute file path + mtime; mtime invalidates
-     * naturally when the parent file changes between runs.
-     *
-     * @var array<string, ClassMethod|false>
-     */
-    private static array $parentRulesCache = [];
 
     public function getRuleDefinition(): RuleDefinition
     {
@@ -279,40 +267,7 @@ CODE_SAMPLE
      */
     private function resolveParentRulesItems(Class_ $class): ?array
     {
-        if (! $class->extends instanceof Name) {
-            return null;
-        }
-
-        $parentFqcn = $this->getName($class->extends);
-
-        if ($parentFqcn === null) {
-            return null;
-        }
-
-        // Walk the parent chain manually via native reflection. PHPStan's
-        // scope-based reflection returns null for fixture `.inc` classes
-        // (not PSR-4 autoloadable) which breaks the resolver for consumer
-        // codebases where the child lives in a file outside the composer
-        // autoloader's scanned roots. Native reflection only needs the
-        // parent to be loadable — which, for `rules()` on a FormRequest
-        // base, it always is.
-        try {
-            $declaringClass = $this->findDeclaringClassForRules($parentFqcn);
-        } catch (Throwable) {
-            return null;
-        }
-
-        if (! $declaringClass instanceof ReflectionClass) {
-            return null;
-        }
-
-        $fileName = $declaringClass->getFileName();
-
-        if ($fileName === false || $fileName === null) {
-            return null;
-        }
-
-        $parsedMethod = $this->loadParentRulesMethod($fileName, $declaringClass->getName());
+        $parsedMethod = $this->resolveParentRulesMethod($class);
 
         if (! $parsedMethod instanceof ClassMethod) {
             return null;
@@ -358,46 +313,6 @@ CODE_SAMPLE
     }
 
     /**
-     * Walk the parent chain from `$parentFqcn` upward and return the first
-     * class that declares (not inherits) a `rules()` method. Returns null
-     * when no class in the chain declares it.
-     *
-     * Uses native `ReflectionClass` rather than PHPStan scope because the
-     * consumer's child class may live in a file that PHPStan hasn't
-     * scoped (especially in rector dry-run against a not-yet-autoloaded
-     * path), and for fixture `.inc` tests PHPStan's `getClassReflection`
-     * on the Class_ node returns null.
-     *
-     * @return ReflectionClass<object>|null
-     */
-    private function findDeclaringClassForRules(string $parentFqcn): ?ReflectionClass
-    {
-        if (! class_exists($parentFqcn) && ! interface_exists($parentFqcn)) {
-            return null;
-        }
-
-        $current = new ReflectionClass($parentFqcn);
-
-        while ($current !== false) {
-            if (! $current->hasMethod('rules')) {
-                $current = $current->getParentClass();
-
-                continue;
-            }
-
-            $method = $current->getMethod('rules');
-
-            if ($method->getDeclaringClass()->getName() === $current->getName()) {
-                return $current;
-            }
-
-            return $method->getDeclaringClass();
-        }
-
-        return null;
-    }
-
-    /**
      * Scan an ArrayItem subtree for `self::` / `static::` / `parent::`
      * references. Any of these would rebind to the child's class after
      * inlining and change semantics.
@@ -430,130 +345,6 @@ CODE_SAMPLE
         $traverser->traverse([$item]);
 
         return $visitor->found;
-    }
-
-    /**
-     * Walk top-level statements, tracking the active namespace, and
-     * return the `Class_` whose fully-qualified name (namespace +
-     * short name) matches `$fqcn`. Files can legally declare multiple
-     * `namespace Foo { ... }` blocks with same-short-name classes; the
-     * old short-name-only search would return the first one and silently
-     * inline the wrong `rules()` body.
-     *
-     * @param  array<Node\Stmt>  $stmts
-     */
-    private function findClassByFqcn(array $stmts, string $fqcn): ?Class_
-    {
-        return $this->matchClassInStmts($stmts, null, $fqcn);
-    }
-
-    /**
-     * @param  array<Node\Stmt>  $stmts
-     */
-    private function matchClassInStmts(array $stmts, ?string $currentNamespace, string $fqcn): ?Class_
-    {
-        foreach ($stmts as $stmt) {
-            if ($stmt instanceof Namespace_) {
-                $nsName = $stmt->name instanceof Name ? $stmt->name->toString() : null;
-                $found = $this->matchClassInStmts($stmt->stmts, $nsName, $fqcn);
-
-                if ($found instanceof Class_) {
-                    return $found;
-                }
-
-                continue;
-            }
-
-            if (! $stmt instanceof Class_) {
-                continue;
-            }
-
-            if (! $stmt->name instanceof Identifier) {
-                continue;
-            }
-
-            $short = $stmt->name->toString();
-            $candidate = $currentNamespace === null
-                ? $short
-                : $currentNamespace . '\\' . $short;
-
-            if ($candidate === $fqcn) {
-                return $stmt;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Parse `$fileName`, locate the class whose FQCN matches `$fqcn`, and
-     * return its `rules()` ClassMethod. Matching by FQCN rather than short
-     * name guards against single-file multi-namespace layouts where two
-     * classes with the same short name declare differing `rules()` bodies
-     * — Codex review (2026-04-24) caught that a short-name match could
-     * silently pick the wrong class and inline unrelated rules. Caches by
-     * (path, mtime, fqcn) so repeated children with the same parent pay
-     * the parse cost once.
-     */
-    private function loadParentRulesMethod(string $fileName, string $fqcn): ?ClassMethod
-    {
-        $mtime = @filemtime($fileName);
-
-        if ($mtime === false) {
-            return null;
-        }
-
-        $cacheKey = $fileName . ':' . $mtime . ':' . $fqcn;
-
-        if (array_key_exists($cacheKey, self::$parentRulesCache)) {
-            $cached = self::$parentRulesCache[$cacheKey];
-
-            return $cached === false ? null : $cached;
-        }
-
-        $source = @file_get_contents($fileName);
-
-        if ($source === false) {
-            self::$parentRulesCache[$cacheKey] = false;
-
-            return null;
-        }
-
-        $parser = (new ParserFactory())->createForNewestSupportedVersion();
-
-        try {
-            $stmts = $parser->parse($source);
-        } catch (Throwable) {
-            self::$parentRulesCache[$cacheKey] = false;
-
-            return null;
-        }
-
-        if ($stmts === null) {
-            self::$parentRulesCache[$cacheKey] = false;
-
-            return null;
-        }
-
-        $class = $this->findClassByFqcn($stmts, $fqcn);
-
-        if (! $class instanceof Class_) {
-            self::$parentRulesCache[$cacheKey] = false;
-
-            return null;
-        }
-
-        $method = $class->getMethod('rules');
-
-        if (! $method instanceof ClassMethod) {
-            self::$parentRulesCache[$cacheKey] = false;
-
-            return null;
-        }
-
-        self::$parentRulesCache[$cacheKey] = $method;
-
-        return $method;
     }
 
     /**
