@@ -36,6 +36,7 @@ use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesNamespaceImports;
 use SanderMuller\FluentValidationRector\Rector\Concerns\NormalizesRulesDocblock;
 use SanderMuller\FluentValidationRector\Rector\Concerns\PromotesArrayRuleParents;
 use SanderMuller\FluentValidationRector\Rector\Concerns\QualifiesForRulesProcessing;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ResolvesFluentFactoryRoot;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ShortCircuitsIrrelevantFiles;
 use SanderMuller\FluentValidationRector\Tests\GroupWildcardRulesToEach\GroupWildcardRulesToEachRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
@@ -67,6 +68,7 @@ final class GroupWildcardRulesToEachRector extends AbstractRector implements Doc
     use NormalizesRulesDocblock;
     use PromotesArrayRuleParents;
     use QualifiesForRulesProcessing;
+    use ResolvesFluentFactoryRoot;
     use ShortCircuitsIrrelevantFiles;
 
     private const int MAX_NESTING_DEPTH = 4;
@@ -284,8 +286,9 @@ CODE_SAMPLE
                 }
 
                 if (! $this->isName($method, 'rules')
+                    && ! $this->isFluentSchemaMethod($method)
                     && ! $this->hasFluentRulesAttribute($method)
-                    && ! ($allowsAutoDetect && $this->isRulesShapedMethod($method))) {
+                    && (! $allowsAutoDetect || ! $this->isRulesShapedMethod($method))) {
                     continue;
                 }
 
@@ -854,7 +857,13 @@ CODE_SAMPLE
         $partitioned = $this->partitionSubChildren($keys, $directKey);
 
         if ($childValue === null) {
-            $childValue = $this->buildFluentRuleFactoryCall('field');
+            // Synthesize the intermediate factory in the spelling of the
+            // sub-children it will carry: `$rules->field()` for a schema
+            // sub-tree, `FluentRule::field()` otherwise.
+            $childValue = $this->buildFluentRuleFactoryCall(
+                'field',
+                $this->schemaReceiverForKeys($this->partitionChildKeys($partitioned), $entries),
+            );
         }
 
         if ($partitioned['subWildcardParent'] !== null && isset($entries[$partitioned['subWildcardParent']])) {
@@ -917,6 +926,29 @@ CODE_SAMPLE
             'subFixed' => $subFixed,
             'subWildcardParent' => $subWildcardParent,
         ];
+    }
+
+    /**
+     * Flatten a partition into the full-key list of its sub-children (wildcard,
+     * fixed, and lone wildcard parent) — the entry keys whose chains determine
+     * whether a synthesized intermediate factory should be schema- or
+     * FluentRule-spelled.
+     *
+     * @param  array{subWildcard: array<string, string>, subFixed: array<string, string>, subWildcardParent: ?string}  $partitioned
+     * @return list<string>
+     */
+    private function partitionChildKeys(array $partitioned): array
+    {
+        $keys = [
+            ...array_keys($partitioned['subWildcard']),
+            ...array_keys($partitioned['subFixed']),
+        ];
+
+        if ($partitioned['subWildcardParent'] !== null) {
+            $keys[] = $partitioned['subWildcardParent'];
+        }
+
+        return $keys;
     }
 
     // ─── Wildcard-prefix concat fold (0.19.0) ────────────────────────────
@@ -1016,7 +1048,7 @@ CODE_SAMPLE
         }
 
         $foldExpr = $this->withFluentNewline(new MethodCall(
-            $this->buildFluentRuleFactoryCall('array'),
+            $this->buildFluentRuleFactoryCall('array', $this->schemaReceiverForChildren(array_column($entries, 'value'))),
             new Identifier('children'),
             [new Arg($this->multilineArray($childItems))],
         ));
@@ -1253,13 +1285,18 @@ CODE_SAMPLE
         }
 
         if ($parentValue === null) {
-            // Synthesize a bare FluentRule::array() parent without a presence
-            // modifier. Adding ->nullable() here short-circuits Laravel's
-            // validation when the parent key is missing, so nested ->required()
-            // children would silently never fire. Leaving the synthesized parent
-            // bare preserves the original dot-notation semantics: nested
-            // `required` children still trigger when the parent is absent.
-            $parentValue = $this->buildFluentRuleFactoryCall('array');
+            // Synthesize a bare array() parent without a presence modifier.
+            // Adding ->nullable() here short-circuits Laravel's validation when
+            // the parent key is missing, so nested ->required() children would
+            // silently never fire. Leaving the synthesized parent bare preserves
+            // the original dot-notation semantics: nested `required` children
+            // still trigger when the parent is absent.
+            //
+            // Spell the parent to match its children: `$rules->array()` for an
+            // all-schema group, `FluentRule::array()` otherwise. A mismatched
+            // spelling (static parent over instance children) would be an
+            // incoherent chain.
+            $parentValue = $this->buildFluentRuleFactoryCall('array', $this->schemaReceiverForGroup($group, $entries));
         }
 
         // Normalize a `field()->…->rule(Rule::array())` parent to `array()->…`
@@ -1366,7 +1403,7 @@ CODE_SAMPLE
             return false;
         }
 
-        return ! ($childrenItems !== [] && ! in_array($factory, ['array', 'field'], true));
+        return $childrenItems === [] || in_array($factory, ['array', 'field'], true);
     }
 
     /**
@@ -1426,12 +1463,47 @@ CODE_SAMPLE
     }
 
     /**
-     * Check if an expression is a FluentRule chain (StaticCall on FluentRule or MethodCall on such).
-     * Raw PHP arrays, variables, and other expressions return false.
+     * Check if an expression is a fluent-validation chain in either spelling:
+     * the static `FluentRule::string()->…` form, or the instance-based
+     * `$rules->string()->…` FluentSchema form (1.31+). Raw PHP arrays,
+     * variables, and other expressions return false.
+     *
+     * The static check runs first (cheap, no receiver type-resolution) so the
+     * FluentRule path is byte-identical to the pre-schema behavior; only a
+     * non-FluentRule chain pays the schema-seed walk.
      */
     private function isFluentRuleChain(Expr $expr): bool
     {
-        return $this->fluentRuleRootFactory($expr) !== null;
+        if ($this->fluentRuleRootFactory($expr) !== null) {
+            return true;
+        }
+
+        return $this->schemaSeedOfChain($expr) instanceof MethodCall;
+    }
+
+    /**
+     * Walk a chain tail inward to its FluentSchema seed (`$rules->string()`),
+     * returning that seed MethodCall or null when the chain isn't schema-rooted.
+     *
+     * The walk stops AT the seed rather than past it: a FluentSchema seed is a
+     * `MethodCall` whose receiver is the builder variable, so a naive
+     * `while ($n instanceof MethodCall) $n = $n->var` loop would consume the
+     * seed and land on the bare `$rules` Variable. `isFluentSchemaFactoryCall`
+     * marks the seed (its receiver is the builder, not a rule object).
+     */
+    private function schemaSeedOfChain(Expr $expr): ?MethodCall
+    {
+        $current = $expr;
+
+        while ($current instanceof MethodCall) {
+            if ($this->isFluentSchemaFactoryCall($current)) {
+                return $current;
+            }
+
+            $current = $current->var;
+        }
+
+        return null;
     }
 
     /**
@@ -1609,19 +1681,114 @@ CODE_SAMPLE
     }
 
     /**
-     * Build a `FluentRule::<factory>()` static call using the short `FluentRule`
-     * name. Marks the enclosing namespace as needing a `use SanderMuller\
-     * FluentValidation\FluentRule;` import so the short reference resolves
-     * correctly when the namespace doesn't already import it.
+     * Build the synthesized `<factory>()` parent seed in the spelling that
+     * matches the children being folded.
+     *
+     * When `$schemaReceiver` is supplied (the `$rules` FluentSchema builder
+     * variable), emit the instance form `$rules-><factory>()` so the parent
+     * matches schema-rooted children — no `FluentRule` import needed, the
+     * existing builder variable is reused.
+     *
+     * Otherwise emit the static `FluentRule::<factory>()` form and mark the
+     * enclosing namespace as needing a `use SanderMuller\FluentValidation\
+     * FluentRule;` import so the short reference resolves. This static branch
+     * is byte-identical to the pre-schema behavior.
      */
-    private function buildFluentRuleFactoryCall(string $factory): StaticCall
+    private function buildFluentRuleFactoryCall(string $factory, ?Expr $schemaReceiver = null): StaticCall|MethodCall
     {
+        if ($schemaReceiver instanceof Expr) {
+            return new MethodCall($schemaReceiver, new Identifier($factory));
+        }
+
         $this->needsFluentRuleImport = true;
 
         return new StaticCall(
             new Name('FluentRule'),
             new Identifier($factory),
         );
+    }
+
+    /**
+     * When every value in `$childValues` is a FluentSchema-rooted chain
+     * (`$rules->string()->…`) sharing the SAME builder receiver, return that
+     * receiver (the `$rules` Variable) so a synthesized parent factory can be
+     * emitted in matching instance form. Returns null when any child is
+     * FluentRule-static-rooted or non-fluent — keeping the static
+     * `FluentRule::array()` emission for mixed or all-static groups.
+     *
+     * Requiring EVERY child to be schema-rooted (and rejecting on the first
+     * non-schema child) guarantees the parent spelling never mixes with the
+     * children: an all-schema group yields `$rules->array()`, anything else
+     * stays on the static path.
+     *
+     * @param  list<Expr>  $childValues
+     */
+    private function schemaReceiverForChildren(array $childValues): ?Expr
+    {
+        if ($childValues === []) {
+            return null;
+        }
+
+        $receiver = null;
+
+        foreach ($childValues as $childValue) {
+            $seed = $this->schemaSeedOfChain($childValue);
+
+            if (! $seed instanceof MethodCall) {
+                return null;
+            }
+
+            if (! $receiver instanceof Expr) {
+                $receiver = $seed->var;
+            }
+        }
+
+        return $receiver;
+    }
+
+    /**
+     * The shared FluentSchema builder receiver for the entries at `$keys`, or
+     * null when any is absent, FluentRule-static-rooted, or non-fluent. Gathers
+     * each present entry's chain value and delegates to `schemaReceiverForChildren`.
+     *
+     * @param  list<string>  $keys
+     * @param  array<string, array{index: int, value: Expr}>  $entries
+     */
+    private function schemaReceiverForKeys(array $keys, array $entries): ?Expr
+    {
+        $values = [];
+
+        foreach ($keys as $key) {
+            if (isset($entries[$key])) {
+                $values[] = $entries[$key]['value'];
+            }
+        }
+
+        return $this->schemaReceiverForChildren($values);
+    }
+
+    /**
+     * The shared FluentSchema builder receiver for a group's folded children
+     * (wildcard, fixed, and lone wildcard parent), or null when the group isn't
+     * uniformly schema-rooted — driving whether the synthesized `array()`
+     * parent is emitted in instance (`$rules->array()`) or static
+     * (`FluentRule::array()`) form.
+     *
+     * @param  array{parent: string, wildcardKeys: array<string, string>, fixedKeys: array<string, string>, wildcardParentKey: ?string}  $group
+     * @param  array<string, array{index: int, value: Expr}>  $entries
+     */
+    private function schemaReceiverForGroup(array $group, array $entries): ?Expr
+    {
+        $keys = [
+            ...array_keys($group['wildcardKeys']),
+            ...array_keys($group['fixedKeys']),
+        ];
+
+        if ($group['wildcardParentKey'] !== null) {
+            $keys[] = $group['wildcardParentKey'];
+        }
+
+        return $this->schemaReceiverForKeys($keys, $entries);
     }
 
     private function withFluentNewline(MethodCall $call): MethodCall

@@ -14,12 +14,11 @@ use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\String_;
 use PHPStan\Analyser\Scope;
 use PHPStan\Reflection\ClassReflection;
-use PHPStan\Type\ObjectType;
 use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\Rector\AbstractRector;
-use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidationRector\Internal\RunSummary;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ResolvesFluentFactoryRoot;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ShortCircuitsIrrelevantFiles;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
@@ -43,6 +42,7 @@ use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
 final class InlineMessageParamRector extends AbstractRector implements DocumentedRuleInterface
 {
     use LogsSkipReasons;
+    use ResolvesFluentFactoryRoot;
     use ShortCircuitsIrrelevantFiles;
 
     /**
@@ -157,25 +157,28 @@ CODE_SAMPLE
     }
 
     /**
-     * Phase 2 predicate: `->message()` must be directly on a
-     * `FluentRule::$factory()` StaticCall — no intervening MethodCall
-     * (rule method or Conditionable hop) allowed. Any intermediate
-     * MethodCall breaks the direct-receiver relationship and naturally
-     * rejects both cases with one structural check.
+     * Phase 2 predicate: `->message()` must be directly on a factory seed —
+     * a `FluentRule::$factory()` StaticCall or a `$rules->$factory()`
+     * FluentSchema seed — with no intervening MethodCall (rule method or
+     * Conditionable hop) allowed. Any intermediate hop breaks the
+     * direct-receiver relationship: a schema seed's receiver is a bare
+     * `FluentSchema` variable, so a rule-method chain (whose receiver is
+     * another MethodCall) is naturally rejected by the factory-root check.
      */
     private function refactorMessage(MethodCall $node): ?Node
     {
-        if (! $node->var instanceof StaticCall) {
+        $factory = $node->var;
+
+        // The instanceof gate narrows $factory for rebuildFactoryWithMessage();
+        // fluentFactoryName() alone answers "is this a factory root" (null when
+        // not), so it's the sole resolution — no separate isFluentFactoryRoot().
+        if (! $factory instanceof StaticCall && ! $factory instanceof MethodCall) {
             return null;
         }
 
-        $staticCall = $node->var;
+        $factoryName = $this->fluentFactoryName($factory);
 
-        if (! $staticCall->name instanceof Identifier) {
-            return null;
-        }
-
-        if (! $this->isObjectType($staticCall->class, new ObjectType(FluentRule::class))) {
+        if ($factoryName === null) {
             return null;
         }
 
@@ -193,7 +196,6 @@ CODE_SAMPLE
             return null;
         }
 
-        $factoryName = $staticCall->name->toString();
         $allowlist = InlineMessageSurface::load();
         $entry = $allowlist['FluentRule::' . $factoryName] ?? null;
 
@@ -215,7 +217,7 @@ CODE_SAMPLE
             return null;
         }
 
-        return $this->rebuildFactoryWithMessage($staticCall, $messageArg->value);
+        return $this->rebuildFactoryWithMessage($factory, $messageArg->value);
     }
 
     /**
@@ -250,15 +252,26 @@ CODE_SAMPLE
             return null;
         }
 
-        if ($node->var instanceof StaticCall) {
-            return $this->rewriteMessageForOnFactory($node, $node->var, $messageForKey, $messageArg->value);
+        $receiver = $node->var;
+
+        // Factory-direct: `FluentRule::email()->messageFor('email', ...)` or
+        // the FluentSchema seed `$rules->email()->messageFor('email', ...)`.
+        // A rule-method chain (`$rules->string()->min(3)`) is a MethodCall
+        // whose receiver is another MethodCall, so it is not a factory root
+        // and correctly falls through to the rule-method branch below.
+        if ($receiver instanceof StaticCall || $receiver instanceof MethodCall) {
+            $factoryName = $this->fluentFactoryName($receiver);
+
+            if ($factoryName !== null) {
+                return $this->rewriteMessageForOnFactory($node, $receiver, $factoryName, $messageForKey, $messageArg->value);
+            }
         }
 
-        if (! $node->var instanceof MethodCall) {
+        if (! $receiver instanceof MethodCall) {
             return null;
         }
 
-        $receiverCall = $node->var;
+        $receiverCall = $receiver;
 
         if (! $receiverCall->name instanceof Identifier) {
             return null;
@@ -286,21 +299,12 @@ CODE_SAMPLE
     }
 
     /**
-     * `FluentRule::email()->messageFor('email', 'msg')` shape — collapse to
+     * `FluentRule::email()->messageFor('email', 'msg')` (or the FluentSchema
+     * seed `$rules->email()->messageFor('email', 'msg')`) shape — collapse to
      * factory-level inline `message:` when the key matches the factory name.
      */
-    private function rewriteMessageForOnFactory(MethodCall $messageForCall, StaticCall $factory, string $key, Expr $message): ?Node
+    private function rewriteMessageForOnFactory(MethodCall $messageForCall, StaticCall|MethodCall $factory, string $factoryName, string $key, Expr $message): ?Node
     {
-        if (! $factory->name instanceof Identifier) {
-            return null;
-        }
-
-        if (! $this->isObjectType($factory->class, new ObjectType(FluentRule::class))) {
-            return null;
-        }
-
-        $factoryName = $factory->name->toString();
-
         if ($factoryName !== $key) {
             return null;
         }
@@ -476,28 +480,32 @@ CODE_SAMPLE
     private function resolveReceiverClass(MethodCall $call): ?string
     {
         $current = $call->var;
+        $factoryName = null;
 
         while ($current instanceof MethodCall) {
             if (! $current->name instanceof Identifier) {
                 return null;
             }
 
+            // Stop before the loop consumes a FluentSchema seed
+            // (`$rules->string()`) — it's a MethodCall, so the naive walk
+            // would otherwise swallow it as a chain hop and lose the factory.
+            // Capture the name here so the terminal doesn't re-resolve the type.
+            $factoryName = $this->fluentSchemaFactoryName($current);
+            if ($factoryName !== null) {
+                break;
+            }
+
             $current = $current->var;
         }
 
-        if (! $current instanceof StaticCall) {
+        // Otherwise a FluentRule::string() static terminal. Both map the same
+        // factory-method name to the same typed rule class.
+        $factoryName ??= $this->fluentRuleStaticFactoryName($current);
+
+        if ($factoryName === null) {
             return null;
         }
-
-        if (! $current->name instanceof Identifier) {
-            return null;
-        }
-
-        if (! $this->isObjectType($current->class, new ObjectType(FluentRule::class))) {
-            return null;
-        }
-
-        $factoryName = $current->name->toString();
 
         return InlineMessageSurface::factoryToClass()[$factoryName] ?? null;
     }
@@ -511,9 +519,13 @@ CODE_SAMPLE
     }
 
     /**
-     * Rebuild the factory StaticCall with an appended `message:` named arg.
+     * Rebuild the factory call with an appended `message:` named arg,
+     * preserving its spelling: a `FluentRule::$factory()` StaticCall stays a
+     * StaticCall (reusing its class + name), and a `$rules->$factory()`
+     * FluentSchema seed stays a MethodCall (reusing its receiver + name), so
+     * the schema receiver is never rewritten to the static form.
      */
-    private function rebuildFactoryWithMessage(StaticCall $factory, Expr $message): StaticCall
+    private function rebuildFactoryWithMessage(StaticCall|MethodCall $factory, Expr $message): StaticCall|MethodCall
     {
         $newArgs = [];
 
@@ -525,7 +537,11 @@ CODE_SAMPLE
 
         $newArgs[] = new Arg($message, name: new Identifier('message'));
 
-        return new StaticCall($factory->class, $factory->name, $newArgs);
+        if ($factory instanceof StaticCall) {
+            return new StaticCall($factory->class, $factory->name, $newArgs);
+        }
+
+        return new MethodCall($factory->var, $factory->name, $newArgs);
     }
 
     private function isLiteralStringExpression(Expr $expr): bool

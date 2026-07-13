@@ -71,14 +71,14 @@ trait PromotesPasswordEmailFactory
      * would e.g. splice one of two stacked `->rule(Password::*)` payloads
      * and miss the second — the double-rule bail would be defeated.
      *
-     * @var WeakMap<StaticCall, true>|null
+     * @var WeakMap<StaticCall|MethodCall, true>|null
      */
     private ?WeakMap $passwordEmailTriggerVisited = null;
 
     /**
      * @param  list<string>  $conditionableHops
      */
-    private function applyPasswordEmailTrigger(StaticCall $root, MethodCall $node, array $conditionableHops): ?Node
+    private function applyPasswordEmailTrigger(StaticCall|MethodCall $root, MethodCall $node, array $conditionableHops): ?Node
     {
         if (! $this->passwordEmailTriggerVisited instanceof WeakMap) {
             $this->passwordEmailTriggerVisited = new WeakMap();
@@ -217,7 +217,7 @@ trait PromotesPasswordEmailFactory
      * @param  list<MethodCall>  $hops
      * @param  array{factory: string, arg: ?Node\Expr, target_class: class-string}  $promotion
      */
-    private function spliceAndPromote(StaticCall $root, MethodCall $node, array $hops, int $matchedIndex, array $promotion): Node
+    private function spliceAndPromote(StaticCall|MethodCall $root, MethodCall $node, array $hops, int $matchedIndex, array $promotion): Node
     {
         $matchedHop = $hops[$matchedIndex];
 
@@ -325,12 +325,19 @@ trait PromotesPasswordEmailFactory
     /**
      * @return list<MethodCall>
      */
-    private function collectPasswordEmailHopsFromRoot(StaticCall $root, MethodCall $currentCall): array
+    private function collectPasswordEmailHopsFromRoot(StaticCall|MethodCall $root, MethodCall $currentCall): array
     {
         $hops = [];
         $current = $currentCall;
 
         while ($current instanceof MethodCall) {
+            // Stop at a FluentSchema seed root (`$rules->string()`). It is a
+            // `MethodCall`, so the naive walk would otherwise swallow it as a
+            // hop and land on the `$rules` variable — never matching `$root`.
+            if ($current === $root) {
+                break;
+            }
+
             $hops[] = $current;
             $current = $current->var;
         }

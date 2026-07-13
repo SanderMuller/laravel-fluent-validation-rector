@@ -147,6 +147,13 @@ trait PromotesArrayRuleParents
     {
         [$root, $hops] = $this->splitFluentChain($parentValue);
 
+        // Only reached for a `FluentRule::field()` StaticCall root —
+        // isPromotableFieldArrayParent() rejects every other root shape,
+        // including a FluentSchema `$rules->field()` MethodCall (its
+        // `fluentRuleRootFactory()` gate is FluentRule-only). An explicit
+        // schema field()->rule('array') parent therefore stays flat rather
+        // than folding; synthesized array parents (the common case) are built
+        // receiver-aware in GroupWildcardRulesToEachRector instead.
         $class = $root instanceof StaticCall ? $root->class : new Name('FluentRule');
         $rebuilt = new StaticCall($class, new Identifier('array'));
 

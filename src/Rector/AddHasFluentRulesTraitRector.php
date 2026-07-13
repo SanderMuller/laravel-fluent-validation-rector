@@ -13,12 +13,14 @@ use PhpParser\NodeVisitor;
 use Rector\Contract\Rector\ConfigurableRectorInterface;
 use Rector\Rector\AbstractRector;
 use SanderMuller\FluentValidation\FluentRule;
+use SanderMuller\FluentValidation\FluentRules;
 use SanderMuller\FluentValidation\HasFluentRules;
 use SanderMuller\FluentValidationRector\Internal\RunSummary;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
 use SanderMuller\FluentValidationRector\Rector\Concerns\IdentifiesLivewireClasses;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesTraitInsertion;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ResolvesFluentFactoryRoot;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ShortCircuitsIrrelevantFiles;
 use SanderMuller\FluentValidationRector\Tests\AddHasFluentRulesTrait\AddHasFluentRulesTraitRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
@@ -37,6 +39,7 @@ final class AddHasFluentRulesTraitRector extends AbstractRector implements Confi
     use IdentifiesLivewireClasses;
     use LogsSkipReasons;
     use ManagesTraitInsertion;
+    use ResolvesFluentFactoryRoot;
     use ShortCircuitsIrrelevantFiles;
 
     public const string BASE_CLASSES = 'base_classes';
@@ -216,23 +219,96 @@ CODE_SAMPLE
             return false;
         }
 
-        // Skip abstract classes that declare rules() — subclasses may transform
-        // that method via mergeRecursive, and the trait on the base would not
-        // be correct for every subclass. Gate on hasMethod('rules') so we don't
-        // log skips for every unrelated abstract in the codebase (Events,
-        // Exceptions, DataObjects, Commands with no validation surface).
-        if ($class->isAbstract() && $class->getMethod('rules') instanceof ClassMethod) {
-            $this->logSkip($class, 'abstract class with rules() (subclasses may transform via mergeRecursive — add to base_classes config to opt in)');
+        // Skip abstract classes that declare a literal rules() method —
+        // subclasses may manipulate parent::rules() as a plain array
+        // (collect()->mergeRecursive(), array_merge, …), which breaks when the
+        // base returns FluentRule objects, so the base-level trait would be
+        // wrong. Gate on a literal rules() so we don't log skips for every
+        // unrelated abstract in the codebase (Events, Exceptions, DataObjects).
+        //
+        // `#[FluentRules]` on the literal rules() method lifts the guard: it is
+        // the user's per-method audit assertion that subclasses are safe (they
+        // don't array-manipulate parent::rules() or drop a base key), the same
+        // opt-in ConvertsValidationRuleStrings and ConvertToFluentSchemaRector
+        // honor. With that assertion the trait can be added to the base so the
+        // full pipeline (trait → schema conversion) reaches an abstract base
+        // that has none yet; the ^1.32 schema()/rules() merge makes a subclass
+        // override safe. Scoped to rules() itself — a sibling-method attribute
+        // must not lift the guard for an unattributed rules().
+        //
+        // A schema()-only abstract base (no rules()) is deliberately NOT caught:
+        // it has no parent::rules() for a subclass to manipulate, and WITHOUT
+        // the trait its schema() builder is never dispatched (validation
+        // silently disabled). It falls through to the schema-builder trait-add
+        // below — the same treatment a concrete schema()-only FormRequest gets.
+        if ($class->isAbstract()
+            && $class->getMethod('rules') instanceof ClassMethod
+            && ! $this->rulesMethodCarriesFluentRulesAttribute($class)
+        ) {
+            $this->logSkip($class, 'abstract class with rules() — subclasses may manipulate parent::rules() as a plain array. Add #[FluentRules] to the rules() method to assert subclass-safety and opt in, or add the class to base_classes config.');
 
             return false;
         }
 
+        // A `schema(FluentSchema $rules)` builder method also requires the
+        // trait: HasFluentRules::createDefaultValidator() is the only runtime
+        // that dispatches it. Its chains use `$rules->…` (MethodCalls), not
+        // `FluentRule::…` static calls, so usesFluentRule() misses them — a
+        // hand-written schema() FormRequest without the trait would silently
+        // never validate.
+        //
         // No FluentRule in rules() means there's nothing to optimize; the
         // trait would be a no-op. Silent skip — on codebases where `rules()`
         // is a common naming convention for non-validation helpers (Actions,
         // Console\Kernel, Collections), logging this bail inflates the skip
         // log with entries users can't act on.
-        return $this->usesFluentRule($class);
+        if ($this->usesFluentRule($class)) {
+            return true;
+        }
+
+        return $this->hasSchemaBuilderMethod($class);
+    }
+
+    private function hasSchemaBuilderMethod(Class_ $class): bool
+    {
+        foreach ($class->getMethods() as $method) {
+            if ($this->isFluentSchemaMethod($method)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Strict per-method opt-in: does the literal `rules()` method carry
+     * `#[FluentRules]`? Returns false when no `rules()` method exists or it
+     * exists without the attribute. This is the user's audit assertion that
+     * subclasses are safe under the base trait — matched (by resolved FQN, so
+     * an aliased import counts) against the same convention the string-rule and
+     * schema converters use. Deliberately NOT generalized to any-method
+     * attribution: a sibling-method attribute must not lift the abstract guard
+     * for an unattributed rules().
+     */
+    private function rulesMethodCarriesFluentRulesAttribute(Class_ $class): bool
+    {
+        foreach ($class->getMethods() as $method) {
+            if (! $this->isName($method, 'rules')) {
+                continue;
+            }
+
+            foreach ($method->attrGroups as $attrGroup) {
+                foreach ($attrGroup->attrs as $attr) {
+                    if ($this->getName($attr->name) === FluentRules::class) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        return false;
     }
 
     private function alreadyHasTrait(Class_ $class): bool

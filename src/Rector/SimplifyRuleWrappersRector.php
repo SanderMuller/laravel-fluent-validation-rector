@@ -6,13 +6,11 @@ use PhpParser\Node;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\MethodCall;
-use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Scalar\Float_;
 use PhpParser\PrettyPrinter\Standard;
 use PHPStan\Analyser\Scope;
 use PHPStan\Reflection\ClassReflection;
-use PHPStan\Type\ObjectType;
 use Rector\Contract\Rector\ConfigurableRectorInterface;
 use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\Rector\AbstractRector;
@@ -37,6 +35,7 @@ use SanderMuller\FluentValidationRector\Internal\RunSummary;
 use SanderMuller\FluentValidationRector\Rector\Concerns\AllowlistedRuleFactories;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ParsesRulePayloads;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ResolvesFluentFactoryRoot;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ShortCircuitsIrrelevantFiles;
 use SanderMuller\FluentValidationRector\Rector\Concerns\WalksConditionableProxies;
 use SanderMuller\FluentValidationRector\Tests\SimplifyRuleWrappers\SimplifyRuleWrappersRectorTest;
@@ -60,6 +59,7 @@ final class SimplifyRuleWrappersRector extends AbstractRector implements Configu
     use AllowlistedRuleFactories;
     use LogsSkipReasons;
     use ParsesRulePayloads;
+    use ResolvesFluentFactoryRoot;
     use ShortCircuitsIrrelevantFiles;
     use WalksConditionableProxies;
 
@@ -557,10 +557,20 @@ CODE_SAMPLE
     private function resolveReceiverType(MethodCall $ruleCall): array|string|null
     {
         $current = $ruleCall->var;
+        $factoryName = null;
 
         while ($current instanceof MethodCall) {
             if (! $current->name instanceof Identifier) {
                 return null;
+            }
+
+            // Stop before the loop consumes a FluentSchema seed
+            // (`$rules->string()`) — it's a MethodCall, so the naive walk
+            // would otherwise swallow it as a chain hop and lose the factory.
+            // Capture the name here so the terminal doesn't re-resolve the type.
+            $factoryName = $this->fluentSchemaFactoryName($current);
+            if ($factoryName !== null) {
+                break;
             }
 
             // Step through the hop only when every provided callback
@@ -579,19 +589,15 @@ CODE_SAMPLE
             $current = $current->var;
         }
 
-        if (! $current instanceof StaticCall) {
+        // A FluentRule::string() static terminal (the loop exits without a
+        // schema seed). Both spellings resolve to the same typed-rule class
+        // via the shared factory→class table.
+        $factoryName ??= $this->fluentRuleStaticFactoryName($current);
+
+        if ($factoryName === null) {
             return null;
         }
 
-        if (! $current->name instanceof Identifier) {
-            return null;
-        }
-
-        if (! $this->isObjectType($current->class, new ObjectType(FluentRule::class))) {
-            return null;
-        }
-
-        $factoryName = $current->name->toString();
         $resolved = self::$factoryToClass[$factoryName] ?? null;
 
         if ($resolved === null) {

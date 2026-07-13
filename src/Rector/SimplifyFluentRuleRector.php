@@ -10,11 +10,11 @@ use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name\FullyQualified;
 use PhpParser\Node\Scalar\String_;
-use PHPStan\Type\ObjectType;
 use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\Rector\AbstractRector;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidationRector\Internal\RunSummary;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ResolvesFluentFactoryRoot;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ShortCircuitsIrrelevantFiles;
 use SanderMuller\FluentValidationRector\Tests\SimplifyFluentRule\SimplifyFluentRuleRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
@@ -30,6 +30,7 @@ use WeakMap;
  */
 final class SimplifyFluentRuleRector extends AbstractRector implements DocumentedRuleInterface
 {
+    use ResolvesFluentFactoryRoot;
     use ShortCircuitsIrrelevantFiles;
 
     private const array FACTORY_SHORTCUTS = [
@@ -168,21 +169,32 @@ CODE_SAMPLE
             return null;
         }
 
-        return $this->rebuildChain($simplified);
+        return $this->rebuildChain($simplified, $chain['root']);
     }
 
     /**
-     * @return array{factory: array{name: string, args: list<Arg>}, methods: list<array{name: string, args: list<Arg>}>}|null
+     * @return array{factory: array{name: string, args: list<Arg>}, methods: list<array{name: string, args: list<Arg>}>, root: StaticCall|MethodCall}|null
      */
     private function flattenChain(Node $node): ?array
     {
-        // Walk inward to find the StaticCall at the root
+        // Walk inward to find the factory root — either a `FluentRule::string()`
+        // StaticCall or a `$rules->string()` FluentSchema seed (a MethodCall).
         $methods = [];
         $current = $node;
+        $factoryName = null;
 
         while ($current instanceof MethodCall) {
             if (! $current->name instanceof Identifier) {
                 return null;
+            }
+
+            // Stop before the loop consumes a FluentSchema seed
+            // (`$rules->string()`) — it's a MethodCall, so the naive walk would
+            // otherwise swallow it as a chain hop and lose the factory. Capture
+            // the name here so the terminal doesn't re-resolve the type.
+            $factoryName = $this->fluentSchemaFactoryName($current);
+            if ($factoryName !== null) {
+                break;
             }
 
             /** @var list<Arg> $args */
@@ -198,9 +210,10 @@ CODE_SAMPLE
             $current = $current->var;
         }
 
-        if (! $current instanceof StaticCall
-            || ! $current->name instanceof Identifier
-            || ! $this->isObjectType($current->class, new ObjectType(FluentRule::class))) {
+        // Otherwise a FluentRule::string() static terminal.
+        $factoryName ??= $this->fluentRuleStaticFactoryName($current);
+
+        if ($factoryName === null || (! $current instanceof StaticCall && ! $current instanceof MethodCall)) {
             return null;
         }
 
@@ -214,13 +227,14 @@ CODE_SAMPLE
         }
 
         return [
-            'factory' => ['name' => $current->name->toString(), 'args' => $factoryArgs],
+            'factory' => ['name' => $factoryName, 'args' => $factoryArgs],
             'methods' => $methods,
+            'root' => $current,
         ];
     }
 
     /**
-     * @param  array{factory: array{name: string, args: list<Arg>}, methods: list<array{name: string, args: list<Arg>}>}  $chain
+     * @param  array{factory: array{name: string, args: list<Arg>}, methods: list<array{name: string, args: list<Arg>}>, root: StaticCall|MethodCall}  $chain
      * @return array{factory: array{name: string, args: list<Arg>}, methods: list<array{name: string, args: list<Arg>}>}|null
      */
     private function simplifyChain(array $chain): ?array
@@ -515,19 +529,37 @@ CODE_SAMPLE
     /**
      * @param  array{factory: array{name: string, args: list<Arg>}, methods: list<array{name: string, args: list<Arg>}>}  $chain
      */
-    private function rebuildChain(array $chain): Expr
+    private function rebuildChain(array $chain, StaticCall|MethodCall $root): Expr
     {
-        $expr = new StaticCall(
-            new FullyQualified(FluentRule::class),
-            new Identifier($chain['factory']['name']),
-            $chain['factory']['args'],
-        );
+        $expr = $this->rebuildFactoryRoot($chain['factory'], $root);
 
         foreach ($chain['methods'] as $method) {
             $expr = $this->withFluentNewline(new MethodCall($expr, new Identifier($method['name']), $method['args']));
         }
 
         return $expr;
+    }
+
+    /**
+     * Rebuild the factory seed for the (possibly renamed/re-argued) chain,
+     * preserving the original spelling. A FluentSchema seed (`$rules->string()`)
+     * is a MethodCall: keep its instance receiver and change only the factory
+     * name/args — rebuilding it as a StaticCall would corrupt the schema chain
+     * into `FluentRule::` static form. A static seed rebuilds as before.
+     *
+     * @param  array{name: string, args: list<Arg>}  $factory
+     */
+    private function rebuildFactoryRoot(array $factory, StaticCall|MethodCall $root): Expr
+    {
+        if ($root instanceof MethodCall) {
+            return new MethodCall($root->var, new Identifier($factory['name']), $factory['args']);
+        }
+
+        return new StaticCall(
+            new FullyQualified(FluentRule::class),
+            new Identifier($factory['name']),
+            $factory['args'],
+        );
     }
 
     private function withFluentNewline(MethodCall $call): MethodCall

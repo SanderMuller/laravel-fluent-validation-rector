@@ -389,7 +389,7 @@ trait ConvertsValidationRuleStrings
 
             if (! $this->isName($classMethod, 'rules')
                 && ! $this->hasFluentRulesAttribute($classMethod)
-                && ! ($allowsAutoDetect && $this->isRulesShapedMethod($classMethod))) {
+                && (! $allowsAutoDetect || ! $this->isRulesShapedMethod($classMethod))) {
                 continue;
             }
 

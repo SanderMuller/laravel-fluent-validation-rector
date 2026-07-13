@@ -3,6 +3,7 @@
 namespace SanderMuller\FluentValidationRector\Rector\Concerns;
 
 use PhpParser\Node;
+use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Stmt\Declare_;
 use PhpParser\Node\Stmt\Namespace_;
@@ -74,6 +75,37 @@ trait ManagesNamespaceImports
         }
 
         $namespace->stmts = array_values($namespace->stmts);
+    }
+
+    /**
+     * The local name a FQCN is imported under in the namespace — its alias when
+     * aliased (`use Foo\Bar as Baz;` → `Baz`), otherwise its short name — or
+     * null when it isn't imported. A caller emitting a short type reference must
+     * use this: `hasUseImport()` treats an aliased import as present, so a bare
+     * short name would otherwise resolve to the current namespace instead of the
+     * vendor class.
+     */
+    private function importedLocalName(Namespace_ $namespace, string $fqcn): ?string
+    {
+        $target = ltrim($fqcn, '\\');
+
+        foreach ($namespace->stmts as $stmt) {
+            if (! $stmt instanceof Use_) {
+                continue;
+            }
+
+            foreach ($stmt->uses as $useItem) {
+                if ($useItem->name->toString() !== $target) {
+                    continue;
+                }
+
+                return $useItem->alias instanceof Identifier
+                    ? $useItem->alias->toString()
+                    : $useItem->name->getLast();
+            }
+        }
+
+        return null;
     }
 
     /**

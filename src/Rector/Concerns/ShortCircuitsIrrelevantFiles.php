@@ -68,6 +68,7 @@ trait ShortCircuitsIrrelevantFiles
         'RuleSet::',
         'FluentRule',
         'FluentRules',
+        'FluentSchema',
         'HasFluentRules',
         'HasFluentValidation',
     ];

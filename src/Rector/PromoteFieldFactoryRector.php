@@ -7,10 +7,8 @@ use PhpParser\Node\Arg;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Identifier;
-use PhpParser\Node\Name;
 use Rector\Rector\AbstractRector;
 use ReflectionClass;
-use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidation\Rules\AcceptedRule;
 use SanderMuller\FluentValidation\Rules\ArrayRule;
 use SanderMuller\FluentValidation\Rules\BooleanRule;
@@ -25,6 +23,7 @@ use SanderMuller\FluentValidation\Rules\StringRule;
 use SanderMuller\FluentValidationRector\Internal\RunSummary;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ParsesRulePayloads;
 use SanderMuller\FluentValidationRector\Rector\Concerns\PromotesPasswordEmailFactory;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ResolvesFluentFactoryRoot;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ShortCircuitsIrrelevantFiles;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
 use Symplify\RuleDocGenerator\ValueObject\CodeSample\CodeSample;
@@ -78,6 +77,7 @@ final class PromoteFieldFactoryRector extends AbstractRector implements Document
 {
     use ParsesRulePayloads;
     use PromotesPasswordEmailFactory;
+    use ResolvesFluentFactoryRoot;
     use ShortCircuitsIrrelevantFiles;
 
     /**
@@ -209,7 +209,7 @@ final class PromoteFieldFactoryRector extends AbstractRector implements Document
      * `->rule('accepted')` would not see a later `->rule('max:5')` hop and
      * would unsafely promote.
      *
-     * @var WeakMap<StaticCall, true>
+     * @var WeakMap<StaticCall|MethodCall, true>
      */
     private WeakMap $dedicatedRuleTriggerVisited;
 
@@ -266,25 +266,22 @@ CODE_SAMPLE
         // traversal ordering is what makes the splice+rename safe: outer
         // MethodCall fires first, mutates the chain, subsequent inner hops
         // see the promoted state and bail.
-        $root = $this->walkToStaticCallRoot($node);
+        //
+        // The root is a `StaticCall` for the `FluentRule::field()` spelling or
+        // a `MethodCall` seed for the FluentSchema `$rules->field()` spelling.
+        $root = $this->walkToChainRoot($node);
 
-        if (! $root instanceof StaticCall) {
+        if ($root === null) {
             return null;
         }
 
-        if (! $root->class instanceof Name) {
-            return null;
-        }
-
-        if ($this->getName($root->class) !== FluentRule::class) {
-            return null;
-        }
-
-        if (! $root->name instanceof Identifier) {
-            return null;
-        }
-
-        $rootFactoryName = $root->name->toString();
+        // walkToChainRoot already type-resolved a MethodCall seed, so read its
+        // name directly (guaranteed an Identifier there) rather than paying a
+        // second isObjectType via fluentFactoryName(). A StaticCall root needs
+        // no type resolution at all.
+        $rootFactoryName = $root instanceof MethodCall && $root->name instanceof Identifier
+            ? $root->name->toString()
+            : $this->fluentRuleStaticFactoryName($root);
 
         if ($rootFactoryName === 'field') {
             return $this->applyFieldTrigger($root, $node);
@@ -302,7 +299,7 @@ CODE_SAMPLE
      * → `FluentRule::string()` / `::numeric()` / etc. when all `->rule(...)`
      * payloads resolve to methods on exactly one typed builder.
      */
-    private function applyFieldTrigger(StaticCall $root, MethodCall $node): ?Node
+    private function applyFieldTrigger(StaticCall|MethodCall $root, MethodCall $node): ?Node
     {
         $ruleCalls = $this->collectRuleCallsFromRoot($root, $node);
 
@@ -375,14 +372,17 @@ CODE_SAMPLE
      *   guaranteed across the proxy.
      * - Any non-rule hop names a method not declared on the dedicated
      *   target class.
-     * - The label-arg on a `FluentRule::field('Label')` source rebinds
-     *   incompatibly — both AcceptedRule and DeclinedRule are in
-     *   `LABEL_FIRST_TARGETS`, so this gate is currently a no-op for these
-     *   targets, but the check stays in place for symmetry with Trigger A.
+     *
+     * Unlike Trigger A, no `LABEL_FIRST_TARGETS` arg-binding gate is applied
+     * here: every `DEDICATED_RULE_FACTORIES` target (`AcceptedRule`,
+     * `DeclinedRule`) is label-first, so the guard would be provably dead
+     * (PHPStan flags it as `alreadyNarrowedType`). Reinstate the Trigger A
+     * `LABEL_FIRST_TARGETS` check if a non-label-first dedicated factory is
+     * ever added, so a `field('Label')` label-arg can't rebind incompatibly.
      *
      * @param  list<MethodCall>  $ruleCalls
      */
-    private function applyDedicatedRulePromotion(StaticCall $root, MethodCall $node, array $ruleCalls): ?Node
+    private function applyDedicatedRulePromotion(StaticCall|MethodCall $root, MethodCall $node, array $ruleCalls): ?Node
     {
         if (isset($this->dedicatedRuleTriggerVisited[$root])) {
             return null;
@@ -424,10 +424,6 @@ CODE_SAMPLE
 
         $factoryName = self::TYPED_BUILDER_TO_FACTORY[$targetClass];
 
-        if ($root->args !== [] && ! in_array($targetClass, self::LABEL_FIRST_TARGETS, true)) {
-            return null;
-        }
-
         if (! $this->dedicatedNonRuleHopsAvailable($root, $node, $ruleCall, $targetClass)) {
             return null;
         }
@@ -455,12 +451,18 @@ CODE_SAMPLE
      *
      * @param  class-string  $targetClass
      */
-    private function dedicatedNonRuleHopsAvailable(StaticCall $root, MethodCall $node, MethodCall $ruleHop, string $targetClass): bool
+    private function dedicatedNonRuleHopsAvailable(StaticCall|MethodCall $root, MethodCall $node, MethodCall $ruleHop, string $targetClass): bool
     {
         $hops = [];
         $current = $node;
 
         while ($current instanceof MethodCall) {
+            // Stop at a FluentSchema seed root — it is a `MethodCall`, not a
+            // chain hop, so it must not be validated as a modifier method.
+            if ($current === $root) {
+                break;
+            }
+
             $hops[] = $current;
             $current = $current->var;
         }
@@ -515,7 +517,7 @@ CODE_SAMPLE
         return true;
     }
 
-    private function spliceRuleHopAndPromote(StaticCall $root, MethodCall $node, MethodCall $ruleHop, string $factoryName): Node
+    private function spliceRuleHopAndPromote(StaticCall|MethodCall $root, MethodCall $node, MethodCall $ruleHop, string $factoryName): Node
     {
         if ($ruleHop === $node) {
             $replacement = $ruleHop->var;
@@ -586,14 +588,24 @@ CODE_SAMPLE
 
     /**
      * Walk `$methodCall->var` down until hitting the root of the chain.
-     * Returns the root if it's a `StaticCall`; otherwise null. Handles
-     * arbitrarily deep chains (FluentRule::field()->a()->b()->c()…).
+     * Returns the root as a `StaticCall` (the `FluentRule::field()` spelling)
+     * or a `MethodCall` (the FluentSchema `$rules->field()` seed); otherwise
+     * null. Handles arbitrarily deep chains (`FluentRule::field()->a()->b()…`).
+     *
+     * A FluentSchema seed is itself a `MethodCall`, so the naive
+     * `while ($current instanceof MethodCall)` walk would consume it as a hop
+     * and land on the `$rules` variable. Stop at the seed instead — it is the
+     * root.
      */
-    private function walkToStaticCallRoot(MethodCall $methodCall): ?StaticCall
+    private function walkToChainRoot(MethodCall $methodCall): StaticCall|MethodCall|null
     {
         $current = $methodCall->var;
 
         while ($current instanceof MethodCall) {
+            if ($this->isFluentSchemaFactoryCall($current)) {
+                return $current;
+            }
+
             $current = $current->var;
         }
 
@@ -608,7 +620,7 @@ CODE_SAMPLE
      *
      * @return list<MethodCall>
      */
-    private function collectRuleCallsFromRoot(StaticCall $root, MethodCall $currentCall): array
+    private function collectRuleCallsFromRoot(StaticCall|MethodCall $root, MethodCall $currentCall): array
     {
         $ruleCalls = [];
         $hops = [];
@@ -616,6 +628,12 @@ CODE_SAMPLE
         $current = $currentCall;
 
         while ($current instanceof MethodCall) {
+            // Stop at a FluentSchema seed root — it is a `MethodCall`, not a
+            // `->rule(...)` hop, so it must not be collected as one.
+            if ($current === $root) {
+                break;
+            }
+
             $hops[] = $current;
             $current = $current->var;
         }

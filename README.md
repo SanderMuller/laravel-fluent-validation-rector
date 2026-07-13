@@ -62,7 +62,7 @@ public function rules(): array
 composer require --dev sandermuller/laravel-fluent-validation-rector
 ```
 
-**Requirements**: PHP 8.3+, Rector 2.4+, [`sandermuller/laravel-fluent-validation`](https://github.com/sandermuller/laravel-fluent-validation) ^1.27.2.
+**Requirements**: PHP 8.3+, Rector 2.5+, [`sandermuller/laravel-fluent-validation`](https://github.com/sandermuller/laravel-fluent-validation) ^1.32.0.
 
 If you're on an older fluent-validation:
 
@@ -157,7 +157,7 @@ Strips Livewire `#[Rule('...')]` / `#[Validate('...')]` property attributes and 
 
 #### `GroupWildcardRulesToEachRector`
 
-Folds flat wildcard and dotted keys into nested `each()` / `children()` calls. Applies to FormRequests and Livewire components alike.
+Folds flat wildcard and dotted keys into nested `each()` / `children()` calls. Applies to FormRequests and Livewire components alike. When the folded children are `FluentSchema` chains (`$rules->…`), the synthesized parent is emitted in instance form (`$rules->array()->children([...])`) to match the receiver.
 
 <details>
 <summary>Bail conditions and edge-case handling</summary>
@@ -181,7 +181,9 @@ Folds flat wildcard and dotted keys into nested `each()` / `children()` calls. A
 
 #### `AddHasFluentRulesTraitRector`
 
-Adds `use HasFluentRules;` to FormRequests that use FluentRule.
+Adds `use HasFluentRules;` to FormRequests that use FluentRule — or that declare a `schema(FluentSchema $rules)` builder method (which needs the trait to dispatch).
+
+Abstract FormRequest bases are skipped by default — a subclass may array-manipulate `parent::rules()`, so a base-level trait can be wrong. Marking the base's `rules()` method with `#[FluentRules]` asserts subclass-safety and adds the trait anyway (the same per-method opt-in the converter rectors honor), so a `#[FluentRules]`-marked abstract base flows through the full `ALL + SCHEMA` pipeline: trait added, then `rules()` → `schema()`. Alternatively, list the base in `base_classes` config.
 
 #### `AddHasFluentValidationTraitRector`
 
@@ -309,6 +311,63 @@ Narrows the `@return` PHPDoc annotation on `rules()` methods from the wide `arra
 
 </details>
 
+### Adopt FluentSchema (set `SCHEMA`)
+
+`SCHEMA` is **opt-in**, not bundled into `ALL`. Adopting the instance-based builder is a stylistic choice; run it as a separate pass after `CONVERT` + `TRAITS` have produced FluentRule chains on a `HasFluentRules` class. Requires `sandermuller/laravel-fluent-validation` ^1.32 — the `schema()`/`rules()` merge shipped there is what lets `#[FluentRules]`-marked abstract bases convert safely.
+
+#### `ConvertToFluentSchemaRector`
+
+Rewrites a `rules()` method built from `FluentRule::` static chains into the [`schema(FluentSchema $rules)` builder](https://github.com/SanderMuller/laravel-fluent-validation/releases/tag/1.31.0) — the injected `$rules` receiver drops the repeated `FluentRule::` prefix from every line.
+
+```php
+// Before
+public function rules(): array
+{
+    return [
+        'name' => FluentRule::string()->required()->max(255),
+        'email' => FluentRule::email()->required(),
+    ];
+}
+
+// After
+public function schema(FluentSchema $rules): array
+{
+    return [
+        'name' => $rules->string()->required()->max(255),
+        'email' => $rules->email()->required(),
+    ];
+}
+```
+
+<details>
+<summary>Qualifying classes, bail conditions, import handling</summary>
+
+- **Only fires on `HasFluentRules` users.** The trait's `createDefaultValidator()` is the sole runtime that dispatches a `schema(FluentSchema)` method (detected via the `FluentSchema`-typed first parameter, which the container resolves). A plain `FormRequest` without the trait, a Livewire component (`HasFluentValidation` has no `schema()` hook), or a Filament page would silently lose validation if `rules()` were renamed — so they are left alone. The gate resolves the trait directly, via `FluentFormRequest`, or via any ancestor.
+- **Rewrites every `FluentRule::x()` to `$rules->x()`.** `FluentSchema` mirrors every `FluentRule` factory 1:1 and forwards macros through `__call`, so the receiver swap preserves the produced rule. Nested chains inside `each([...])` / `children([...])` convert too.
+- **Import handling.** Adds `use SanderMuller\FluentValidation\FluentSchema;` and drops the now-orphaned `use ...FluentRule;` when no class in the file still references the static factory (type hints, `FluentRule::class`, or an un-converted chain keep it).
+- **Parameter naming.** The injected builder is `$rules` by convention; when the body already uses that local (the `$rules = […]; … return $rules;` conditional-assembly pattern), a free fallback name (`$schema`, …) is chosen so the method still converts rather than skipping.
+- **Bails on**:
+  - Abstract classes **without** `#[FluentRules]` — the rename could break a subclass that calls `parent::rules()` or drops a base key; emits an actionable skip-log. Add `#[FluentRules]` to the `rules()` method to assert subclass-safety and opt in — the ^1.32 `schema()`/`rules()` merge then makes a subclass's `rules()` override merge with (not shadow) the renamed base `schema()`.
+  - A class that already declares a `schema()` method (renaming would fatal on a duplicate) — emits a skip-log entry.
+  - A `rules()` method with a non-standard signature (parameters, non-public, static).
+  - A FluentRule chain built inside a scope the injected builder can't reach — a plain `function () { … }` closure, an anonymous class, or a nested named function (arrow functions auto-capture, so they stay convertible).
+
+</details>
+
+> [!NOTE]
+> **The whole pipeline understands the FluentSchema spelling.**
+> `PromoteFieldFactoryRector`, `SimplifyFluentRuleRector`, `SimplifyRuleWrappersRector`,
+> `InlineMessageParamRector`, `UpdateRulesReturnTypeDocblockRector`, and
+> `GroupWildcardRulesToEachRector` resolve a chain's factory from **either**
+> `FluentRule::string()` (static) **or** `$rules->string()` (a `FluentSchema`-typed receiver
+> — the `schema(FluentSchema $rules)` parameter or a `RuleSet::define(fn (FluentSchema $rules)
+> => …)` closure). `AddHasFluentRulesTraitRector` likewise adds the trait to a hand-written
+> `schema()` FormRequest. So the ordering of `SCHEMA` versus `SIMPLIFY`/`POLISH`/`GROUP`
+> doesn't matter, and hand-written `schema()` code gets the same treatment as `FluentRule::`
+> code. Rewrites preserve the receiver: a `$rules->field()` promotion stays `$rules->string()`
+> and a wildcard fold synthesizes `$rules->array()->children([...])`, never reverting to the
+> static form.
+
 ### Opting in: `#[FluentRules]` attribute
 
 `#[FluentRules]` is a per-method opt-in attribute (defined in [`sandermuller/laravel-fluent-validation`](https://github.com/sandermuller/laravel-fluent-validation)) that signals "convert this method's rule array, even though my class doesn't fall under one of the auto-qualifying shapes (FormRequest / fluent-validation trait / Livewire)." It also lifts the abstract-class safety guard when applied to `rules()` itself, treating the attribute as the user's audit assertion that subclasses don't manipulate `parent::rules()` as a plain array.
@@ -346,6 +405,7 @@ Narrows the `@return` PHPDoc annotation on `rules()` methods from the wide `arra
 | `TRAITS`   | [`AddHasFluentRulesTraitRector`](#addhasfluentrulestraitrector), [`AddHasFluentValidationTraitRector`](#addhasfluentvalidationtraitrector)                                                                                                                                                                                       |
 | `SIMPLIFY` | [`PromoteFieldFactoryRector`](#promotefieldfactoryrector), [`SimplifyFluentRuleRector`](#simplifyfluentrulerector), [`SimplifyRuleWrappersRector`](#simplifyrulewrappersrector), [`InlineMessageParamRector`](#inlinemessageparamrector) — post-migration cleanup, run as a separate pass after verifying the initial conversion |
 | `POLISH`   | [`UpdateRulesReturnTypeDocblockRector`](#updaterulesreturntypedocblockrector) — narrow `@return` docblocks to `FluentRuleContract`                                                                                                                                                                                               |
+| `SCHEMA`   | [`ConvertToFluentSchemaRector`](#converttofluentschemarector) — adopt the `schema(FluentSchema $rules)` builder on `HasFluentRules` classes                                                                                                                                                                                       |
 
 ```php
 // Just conversion, no grouping or traits
@@ -362,6 +422,9 @@ Narrows the `@return` PHPDoc annotation on `rules()` methods from the wide `arra
 
 // Docblock polish (run separately after CONVERT stabilizes)
 ->withSets([FluentValidationSetList::POLISH])
+
+// Adopt the FluentSchema builder (run separately after CONVERT + TRAITS)
+->withSets([FluentValidationSetList::SCHEMA])
 ```
 
 > [!NOTE]
@@ -391,13 +454,14 @@ The full rule list (any of these can be registered individually without pulling 
 | [`ValidationArrayToFluentRuleRector`](#validationarraytofluentrulerector)             | `CONVERT` (included in `ALL`) | array-based rules + `Rule::`/`Password::` objects → FluentRule chains                                                                        |
 | [`ConvertLivewireRuleAttributeRector`](#convertlivewireruleattributerector)           | `CONVERT` (included in `ALL`) | Livewire `#[Rule]` / `#[Validate]` → generated `rules()` method                                                                              |
 | [`GroupWildcardRulesToEachRector`](#groupwildcardrulestoeachrector)                   | `GROUP` (included in `ALL`)   | flat wildcard/dotted keys → nested `each()` / `children()`                                                                                   |
-| [`AddHasFluentRulesTraitRector`](#addhasfluentrulestraitrector)                       | `TRAITS` (included in `ALL`)  | adds `use HasFluentRules;` to FormRequests that use FluentRule                                                                               |
+| [`AddHasFluentRulesTraitRector`](#addhasfluentrulestraitrector)                       | `TRAITS` (included in `ALL`)  | adds `use HasFluentRules;` to FormRequests that use FluentRule or declare a `schema(FluentSchema)` method                                     |
 | [`AddHasFluentValidationTraitRector`](#addhasfluentvalidationtraitrector)             | `TRAITS` (included in `ALL`)  | adds Livewire trait (plain or Filament variant) to Livewire components                                                                       |
 | [`PromoteFieldFactoryRector`](#promotefieldfactoryrector)                             | `SIMPLIFY` (**not** in `ALL`) | `FluentRule::field()->rule('max:61')` → `FluentRule::string()` when wrappers narrow to one typed subclass                                    |
 | [`SimplifyFluentRuleRector`](#simplifyfluentrulerector)                               | `SIMPLIFY` (**not** in `ALL`) | factory shortcuts, `->between()`, redundant-type cleanup                                                                                     |
 | [`SimplifyRuleWrappersRector`](#simplifyrulewrappersrector)                           | `SIMPLIFY` (**not** in `ALL`) | `->rule('in:a,b')` / `->rule(Rule::in([...]))` / `->rule('size:N')` → native typed-rule methods (`->in([...])`, `->exactly(N)`, etc.)        |
 | [`InlineMessageParamRector`](#inlinemessageparamrector)                               | `SIMPLIFY` (**not** in `ALL`) | `->message('x')` / `->messageFor('key', 'x')` on factories + rule methods → inline `message:` named param (requires fluent-validation ^1.20) |
 | [`UpdateRulesReturnTypeDocblockRector`](#updaterulesreturntypedocblockrector)         | `POLISH` (**not** in `ALL`)   | narrow `@return` on pure-fluent `rules()` to `FluentRuleContract`                                                                            |
+| [`ConvertToFluentSchemaRector`](#converttofluentschemarector)                         | `SCHEMA` (**not** in `ALL`)   | `rules()` of `FluentRule::` chains → `schema(FluentSchema $rules)` builder (requires fluent-validation ^1.32)                                |
 
 ### Configurable rules
 

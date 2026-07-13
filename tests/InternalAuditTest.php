@@ -18,6 +18,7 @@ use SanderMuller\FluentValidationRector\Config\Shared\OverlapBehavior;
 use SanderMuller\FluentValidationRector\Rector\AddHasFluentRulesTraitRector;
 use SanderMuller\FluentValidationRector\Rector\AddHasFluentValidationTraitRector;
 use SanderMuller\FluentValidationRector\Rector\ConvertLivewireRuleAttributeRector;
+use SanderMuller\FluentValidationRector\Rector\ConvertToFluentSchemaRector;
 use SanderMuller\FluentValidationRector\Rector\GroupWildcardRulesToEachRector;
 use SanderMuller\FluentValidationRector\Rector\InlineMessageParamRector;
 use SanderMuller\FluentValidationRector\Rector\InlineResolvableParentRulesRector;
@@ -48,6 +49,7 @@ final class InternalAuditTest extends TestCase
         AddHasFluentRulesTraitRector::class,
         AddHasFluentValidationTraitRector::class,
         ConvertLivewireRuleAttributeRector::class,
+        ConvertToFluentSchemaRector::class,
         GroupWildcardRulesToEachRector::class,
         InlineMessageParamRector::class,
         InlineResolvableParentRulesRector::class,

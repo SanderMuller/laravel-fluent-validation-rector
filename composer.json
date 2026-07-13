@@ -15,7 +15,7 @@
     "require": {
         "php": "^8.3",
         "rector/rector": "^2.5.2",
-        "sandermuller/laravel-fluent-validation": "^1.27.2",
+        "sandermuller/laravel-fluent-validation": "^1.32.0",
         "symplify/rule-doc-generator-contracts": "^11.2"
     },
     "require-dev": {
@@ -33,7 +33,7 @@
         "phpstan/phpstan-phpunit": "^2.0",
         "phpstan/phpstan-strict-rules": "^2.0",
         "rector/type-perfect": "^2.0",
-        "sandermuller/boost-skills": "^2.0",
+        "sandermuller/boost-skills": "^2.19",
         "sandermuller/package-boost-php": "^1.0",
         "spaze/phpstan-disallowed-calls": "^4.10",
         "symplify/phpstan-extensions": "^12.0",

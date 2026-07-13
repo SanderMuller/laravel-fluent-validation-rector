@@ -48,6 +48,7 @@ implementation detail.
 - `FluentValidationSetList::TRAITS`
 - `FluentValidationSetList::POLISH`
 - `FluentValidationSetList::SIMPLIFY`
+- `FluentValidationSetList::SCHEMA`
 
 ## Rector class FQNs
 
@@ -57,6 +58,7 @@ All rector class names are committed. Renames break consumer
 - `SanderMuller\FluentValidationRector\Rector\AddHasFluentRulesTraitRector`
 - `SanderMuller\FluentValidationRector\Rector\AddHasFluentValidationTraitRector`
 - `SanderMuller\FluentValidationRector\Rector\ConvertLivewireRuleAttributeRector`
+- `SanderMuller\FluentValidationRector\Rector\ConvertToFluentSchemaRector`
 - `SanderMuller\FluentValidationRector\Rector\GroupWildcardRulesToEachRector`
 - `SanderMuller\FluentValidationRector\Rector\InlineMessageParamRector`
 - `SanderMuller\FluentValidationRector\Rector\InlineResolvableParentRulesRector`

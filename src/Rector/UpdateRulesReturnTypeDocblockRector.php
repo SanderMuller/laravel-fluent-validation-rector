@@ -33,6 +33,7 @@ use SanderMuller\FluentValidationRector\Rector\Concerns\IdentifiesLivewireClasse
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\NormalizesRulesDocblock;
 use SanderMuller\FluentValidationRector\Rector\Concerns\QualifiesForRulesProcessing;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ResolvesFluentFactoryRoot;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ShortCircuitsIrrelevantFiles;
 use SanderMuller\FluentValidationRector\Tests\UpdateRulesReturnTypeDocblock\UpdateRulesReturnTypeDocblockRectorTest;
 use Symplify\RuleDocGenerator\Contract\DocumentedRuleInterface;
@@ -60,6 +61,7 @@ final class UpdateRulesReturnTypeDocblockRector extends AbstractRector implement
     use LogsSkipReasons;
     use NormalizesRulesDocblock;
     use QualifiesForRulesProcessing;
+    use ResolvesFluentFactoryRoot;
     use ShortCircuitsIrrelevantFiles;
 
     /**
@@ -206,8 +208,9 @@ CODE_SAMPLE
             }
 
             if (! $this->isName($method, 'rules')
+                && ! $this->isFluentSchemaMethod($method)
                 && ! $this->hasFluentRulesAttribute($method)
-                && ! ($allowsAutoDetect && $this->isRulesShapedMethod($method))) {
+                && (! $allowsAutoDetect || ! $this->isRulesShapedMethod($method))) {
                 continue;
             }
 
@@ -468,6 +471,14 @@ CODE_SAMPLE
         $current = $value;
 
         while ($current instanceof MethodCall) {
+            // A FluentSchema seed (`$rules->string()`) is itself a MethodCall,
+            // so stop before the loop consumes it as a hop. Both spellings
+            // narrow to the same FluentRuleContract, so a schema chain is as
+            // valid a value here as a FluentRule:: chain.
+            if ($this->isFluentSchemaFactoryCall($current)) {
+                return true;
+            }
+
             $current = $current->var;
         }
 
