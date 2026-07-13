@@ -2,6 +2,27 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 1.10.0 - 2026-07-13
+
+<!-- verified-sha: bbaa46759e0c2b40223c1dd0df9feac92c37f828 -->
+### Added
+
+- **`ConvertToFluentSchemaRector` now converts inheritance chains.** A child `rules()` that calls `parent::rules()` (or `self::`/`static::`/`$this->rules()`) is rewritten to the `schema($rules)` builder form — `parent::rules()` becomes `parent::schema($rules)` — when the parent provably converts. Provability is resolved by reflection, walking the full ancestor `rules()`-chain: a concrete (or `#[FluentRules]`-opted) `HasFluentRules` base with a public, parameterless `rules()` converts terminally; an unresolvable, vendor, or non-converting base fails closed so the call keeps resolving against the base's `rules()`. Chains that previously stranded on `parent::rules()` after the `rules()` → `schema()` rename now convert end-to-end. Multi-level chains, aliased `FluentRule` imports (`use FluentRule as Rule`), and bases that inherit `schema()` are all handled; `#[FluentRules]` on the child's `rules()` forces the rewrite once you have audited the chain.
+
+### Fixed
+
+- **The array-union operator `parent::rules() + [...]` is now recognized by the cross-class parent-safety guard.** A subclass that unions its parent's rules with `+` treats the parent's return as a plain array — the same "mixed `FluentRule`/array once the parent is fluentized" hazard as `array_merge` — but `+` was missing from the manipulation set. Such a base is now left unconverted (and skip-logged) instead of being fluentized into a shape the child would union incorrectly. Numeric addition is never affected: an operand must trace to a `parent::*()` call for the union to register.
+
+### Internal
+
+- Parent-`rules()` AST resolution was extracted into a shared `ParsesParentRulesMethod` concern (also adopted by `InlineResolvableParentRulesRector`), and `schema()` call rewriting into a `RewritesRuleMethodCalls` concern.
+
+### Known limitations
+
+- The `schema()` `parent::rules()` rewrite predicts the parent's conversion but cannot confirm the parent's file is part of the current Rector run. Running `SCHEMA` on a lone child while excluding its convertible, not-yet-`schema()` parent — e.g. `rector process app/Http/Requests/ChildRequest.php` — rewrites the child while leaving the parent on `rules()`, producing a loud `Call to undefined method parent::schema()` (surfaced immediately by PHPStan and on the first request, never silent). Process the inheritance chain together — the directory / whole-codebase run the separate-`SCHEMA`-pass workflow already prescribes.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/1.9.0...1.10.0
+
 ## 1.9.0 - 2026-07-13
 
 <!-- verified-sha: 74b6bb5d9b3fa1d2215ff55f76d17bc65520ff87 -->
@@ -66,6 +87,7 @@ shadows) the renamed base `schema()`.
       ->max(255),
   
   
+  
   ```
   The line breaks are stamped only on the calls a rule creates, so calls
   already present inline in your source stay inline. Consumers no longer need a
@@ -119,6 +141,7 @@ shadows) the renamed base `schema()`.
   'items' => FluentRule::array()->nullable()->each(
       FluentRule::string()->nullable()->max(255)
   ),
+  
   
   
   
@@ -204,6 +227,7 @@ Performance release. The rule pipeline does substantially less work per file, an
   
   
   
+  
   ```
 - A literal-`null` condition is left untouched. `Rule::requiredIf(null)` is valid Laravel (the condition normalizes to `false`), but the native fluent method is typed `Closure|bool|string`, so rewriting to `->requiredIf(null)` would `TypeError` at runtime. The wrapper is preserved instead.
   
@@ -229,6 +253,7 @@ A multi-argument facade conditional (not valid Laravel usage) is also left as-is
   
   // after
   'role' => FluentRule::field()->nullable()->requiredIf(fn () => $this->isAdmin()),
+  
   
   
   
@@ -298,6 +323,7 @@ FluentRule::field('Agree to TOS')->required()->rule('accepted')
 // After
 FluentRule::accepted()->required()
 FluentRule::accepted('Agree to TOS')->required()
+
 
 
 
