@@ -69,7 +69,9 @@ If you're on an older fluent-validation:
 | fluent-validation | Pin rector to   |
 |-------------------|-----------------|
 | 1.17 – 1.19       | `^0.8`          |
-| 1.20+             | `^1.0` (latest) |
+| 1.20 – 1.26       | `>=1.0 <1.4`    |
+| 1.27 – 1.31       | `>=1.4 <1.9`    |
+| 1.32+             | `^1.9` (latest) |
 
 ## Quick start
 
@@ -668,7 +670,7 @@ At the legacy `=1` / `=all` tier, the same line appends a tip pointing at the ac
 The `.cache/` subdir matches Rector's own cache directory convention — most projects already gitignore it. The first line of the log is a per-run header recording the package version, ISO-8601 UTC timestamp, and verbose tier, useful for cross-release diff stability in CI:
 
 ```
-# laravel-fluent-validation-rector 1.2.1 — generated 2026-05-06T11:47:12Z
+# laravel-fluent-validation-rector 1.9.0 — generated 2026-05-06T11:47:12Z
 # verbose tier: actionable
 
 [fluent-validation:skip] ...
