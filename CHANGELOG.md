@@ -2,6 +2,55 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 1.9.0 - 2026-07-13
+
+<!-- verified-sha: 74b6bb5d9b3fa1d2215ff55f76d17bc65520ff87 -->
+Adds Rector support for the instance-based `schema(FluentSchema $rules)` builder
+that `sandermuller/laravel-fluent-validation` shipped in 1.31, and makes the
+existing SIMPLIFY/POLISH rules work on the resulting `$rules->…` chains.
+
+**Requires `sandermuller/laravel-fluent-validation` ^1.32.0.** The
+`schema()`/`rules()` merge that shipped there is what lets `#[FluentRules]`-marked
+abstract bases convert safely — a subclass's `rules()` override merges with (not
+shadows) the renamed base `schema()`.
+
+### Added
+
+- **`ConvertToFluentSchemaRector` and the opt-in `SCHEMA` set.** Rewrites a
+  `FluentRule::`-based `rules()` method into a `schema(FluentSchema $rules)`
+  builder, swapping every `FluentRule::` static call for a `$rules->` receiver
+  and dropping the repeated prefix. Adopting the builder is stylistic, so
+  `SCHEMA` ships on its own and is never bundled into `ALL` — run it as a pass
+  after `CONVERT` + `TRAITS` have produced FluentRule chains on a
+  `HasFluentRules` class.
+- **FluentSchema-aware SIMPLIFY/POLISH rules.** `SimplifyRuleWrappersRector`,
+  `SimplifyFluentRuleRector`, `InlineMessageParamRector`,
+  `PromoteFieldFactoryRector`, `GroupWildcardRulesToEachRector`, and
+  `UpdateRulesReturnTypeDocblockRector` now detect and optimize instance-based
+  `$rules->…` chains, not only `FluentRule::…` static ones — so a `schema()`
+  builder receives the same rewrites a static FluentRule chain does.
+- **Abstract-class conversion via `#[FluentRules]`.** Marking an abstract base's
+  `rules()` method with `#[FluentRules]` asserts subclass-safety (no
+  `parent::rules()` manipulation, no dropped base key) and opts the base into
+  both the `rules()` → `schema()` rename and the trait-add. The full
+  `ALL + SCHEMA` pipeline then converts such a base end-to-end in a single run:
+  string rules → FluentRule chains → `HasFluentRules` trait → `schema()`.
+- **`AddHasFluentRulesTraitRector` schema coverage.** Adds `HasFluentRules` to
+  FormRequests that declare a hand-written `schema(FluentSchema $rules)` builder
+  (the trait is the only runtime that dispatches it). A schema()-only abstract
+  base receives the trait too — it has no `rules()` for a subclass to
+  manipulate, but without the trait its builder would never dispatch.
+
+### Internal
+
+- New `ResolvesFluentFactoryRoot` concern centralizes FluentRule / FluentSchema
+  chain-root detection shared across the schema-aware rules.
+- Composer floor for `sandermuller/laravel-fluent-validation` raised to
+  `^1.32.0`; installation docs updated to reflect the `^1.32.0` and Rector
+  `^2.5` requirements.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/1.8.0...1.9.0
+
 ## 1.8.0 - 2026-06-29
 
 <!-- verified-sha: c0e00120fffe1ae5ae2e832e56372b98b74db9f6 -->
@@ -15,6 +64,7 @@ All notable changes to `sandermuller/laravel-fluent-validation-rector` will be d
   'email' => FluentRule::email()
       ->required()
       ->max(255),
+  
   
   ```
   The line breaks are stamped only on the calls a rule creates, so calls
@@ -69,6 +119,7 @@ All notable changes to `sandermuller/laravel-fluent-validation-rector` will be d
   'items' => FluentRule::array()->nullable()->each(
       FluentRule::string()->nullable()->max(255)
   ),
+  
   
   
   
@@ -152,6 +203,7 @@ Performance release. The rule pipeline does substantially less work per file, an
   
   
   
+  
   ```
 - A literal-`null` condition is left untouched. `Rule::requiredIf(null)` is valid Laravel (the condition normalizes to `false`), but the native fluent method is typed `Closure|bool|string`, so rewriting to `->requiredIf(null)` would `TypeError` at runtime. The wrapper is preserved instead.
   
@@ -177,6 +229,7 @@ A multi-argument facade conditional (not valid Laravel usage) is also left as-is
   
   // after
   'role' => FluentRule::field()->nullable()->requiredIf(fn () => $this->isAdmin()),
+  
   
   
   
@@ -245,6 +298,7 @@ FluentRule::field('Agree to TOS')->required()->rule('accepted')
 // After
 FluentRule::accepted()->required()
 FluentRule::accepted('Agree to TOS')->required()
+
 
 
 
