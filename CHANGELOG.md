@@ -2,6 +2,24 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 1.11.0 - 2026-07-14
+
+<!-- verified-sha: 3106dd6f5692eefdca1b27496637199ae018ea01 -->
+### Added
+
+- **`ConvertToFluentSchemaRector` converts children of an already-`schema()` base.** When a base was converted to a `schema(FluentSchema)` builder in an earlier pass — its `rules()` renamed away — a child that calls `parent::rules()` is now rewritten to `parent::schema($rules)` instead of being left stranded. The base is recognized by reflection as a `schema()`-only ancestor (no `rules()` resolvable anywhere on it) — a concrete on-disk fact, independent of the run's file set — so re-running `SCHEMA` over a partly-converted inheritance chain finishes a previously-stranded child rather than dangling on a `parent::rules()` the base no longer has.
+- **`FluentRule::` chains inside closures now convert.** A rule built inside a plain `function () { … }` closure — e.g. a `->when(…, function (RuleSet $rules) { return $rules->put('x', FluentRule::integer()…); })` callback — is rewritten onto the injected builder, and the closure gains a `use ($builder)` capture so the builder is in scope there. The builder name is chosen to avoid clashing with the closure's own parameters (falling back from `$rules` to `$schema`, …). Arrow functions auto-capture and need no `use`. Previously such a body was refused.
+
+### Fixed
+
+- **A rule call the builder can't reach is now skip-logged instead of silently dropped.** When a `rules()` builds a `FluentRule::` chain inside an anonymous class or a nested named function (which the injected builder cannot be threaded into) *and* also calls `parent::rules()`, the converter now emits an actionable skip-log — leaving it as `rules()` would strand `parent::rules()` once the base converts. It was previously a silent no-op.
+
+### Internal
+
+- Extracted the reflection-based `rules()`/`schema()`-surface inspection into an `InspectsReflectedRuleSurface` concern, keeping the rector's class cognitive-complexity in range.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/1.10.0...1.11.0
+
 ## 1.10.0 - 2026-07-13
 
 <!-- verified-sha: bbaa46759e0c2b40223c1dd0df9feac92c37f828 -->
@@ -88,6 +106,7 @@ shadows) the renamed base `schema()`.
   
   
   
+  
   ```
   The line breaks are stamped only on the calls a rule creates, so calls
   already present inline in your source stay inline. Consumers no longer need a
@@ -141,6 +160,7 @@ shadows) the renamed base `schema()`.
   'items' => FluentRule::array()->nullable()->each(
       FluentRule::string()->nullable()->max(255)
   ),
+  
   
   
   
@@ -228,6 +248,7 @@ Performance release. The rule pipeline does substantially less work per file, an
   
   
   
+  
   ```
 - A literal-`null` condition is left untouched. `Rule::requiredIf(null)` is valid Laravel (the condition normalizes to `false`), but the native fluent method is typed `Closure|bool|string`, so rewriting to `->requiredIf(null)` would `TypeError` at runtime. The wrapper is preserved instead.
   
@@ -253,6 +274,7 @@ A multi-argument facade conditional (not valid Laravel usage) is also left as-is
   
   // after
   'role' => FluentRule::field()->nullable()->requiredIf(fn () => $this->isAdmin()),
+  
   
   
   
@@ -323,6 +345,7 @@ FluentRule::field('Agree to TOS')->required()->rule('accepted')
 // After
 FluentRule::accepted()->required()
 FluentRule::accepted('Agree to TOS')->required()
+
 
 
 
