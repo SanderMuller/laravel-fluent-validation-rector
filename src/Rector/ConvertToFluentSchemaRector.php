@@ -4,7 +4,6 @@ namespace SanderMuller\FluentValidationRector\Rector;
 
 use PhpParser\Node;
 use PhpParser\Node\Attribute;
-use PhpParser\Node\Expr\Closure;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
@@ -17,13 +16,13 @@ use PhpParser\Node\Stmt\Namespace_;
 use PhpParser\NodeVisitor;
 use Rector\Rector\AbstractRector;
 use ReflectionClass;
-use ReflectionMethod;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidation\FluentRules;
 use SanderMuller\FluentValidation\FluentSchema;
 use SanderMuller\FluentValidation\HasFluentRules;
 use SanderMuller\FluentValidationRector\Internal\RunSummary;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
+use SanderMuller\FluentValidationRector\Rector\Concerns\InspectsReflectedRuleSurface;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesNamespaceImports;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ParsesParentRulesMethod;
@@ -71,6 +70,7 @@ use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
 final class ConvertToFluentSchemaRector extends AbstractRector implements DocumentedRuleInterface
 {
     use DetectsInheritedTraits;
+    use InspectsReflectedRuleSurface;
     use LogsSkipReasons;
     use ManagesNamespaceImports;
     use ParsesParentRulesMethod;
@@ -288,6 +288,20 @@ CODE_SAMPLE
         }
 
         if (! $this->methodBodyIsSafeToInjectBuilder($method)) {
+            // A rule call the builder can't be threaded into (anonymous class,
+            // nested named function, or a dynamic `FluentRule::$method()`) blocks
+            // the conversion. Silent is fine when the body is self-contained —
+            // nothing renamed its rules() away. But when it ALSO calls
+            // parent::rules(), leaving it as rules() strands that call the moment
+            // the base converts to schema(), so make THAT bail loud and actionable
+            // rather than a silent no-op (the failure mode this guard once hid).
+            if ($this->bodyCallsParentRules($method)) {
+                $this->logSkip(
+                    $class,
+                    "rules() calls parent::rules() but builds a FluentRule chain in a scope the schema() builder can't reach (an anonymous class, a nested named function, or a dynamic FluentRule::\$method() call) — it can't be converted, and leaving it as rules() strands parent::rules() once the base converts to schema(). Lift the rule out of that scope (an arrow function or a plain closure both work), or convert the base and this class by hand.",
+                );
+            }
+
             return false;
         }
 
@@ -462,14 +476,17 @@ CODE_SAMPLE
      * Confirm the injected builder would be in scope wherever a FluentRule call
      * is rewritten, and that at least one convertible call exists. Bails on:
      *
-     * - a FluentRule chain built inside a nested scope the injected builder
-     *   can't reach — a plain `function () { … }` closure (captures nothing
-     *   unless the author wrote `use (...)`), an anonymous class, or a nested
-     *   named function. Arrow functions auto-capture, so they stay safe;
+     * - a FluentRule chain built inside a scope the injected builder cannot be
+     *   threaded into — an anonymous class or a nested named function. A plain
+     *   `function () { … }` closure is NOT a bail: `rewriteRuleCallsForSchema()`
+     *   injects `use ($builder)` into any closure that ends up referencing the
+     *   builder, and arrow functions auto-capture the enclosing scope;
      * - a dynamic `FluentRule::$method()` call that can't be mapped statically.
      *
      * A local variable clashing with the default `$rules` param name is NOT a
-     * bail — `resolveBuilderParamName()` picks a free fallback name instead.
+     * bail — `resolveBuilderParamName()` picks a free fallback name instead
+     * (which also keeps the injected builder distinct from a closure's own
+     * `$rules` parameter, so the `use` capture never shadows it).
      */
     private function methodBodyIsSafeToInjectBuilder(ClassMethod $method): bool
     {
@@ -478,12 +495,12 @@ CODE_SAMPLE
 
         $this->traverseNodesWithCallable($method->stmts ?? [], function (Node $subNode) use (&$hasConvertibleCall, &$unsafe): ?int {
             // A rewritable rule call (a FluentRule factory, or a parent/self
-            // rules() call) inside a scope boundary that doesn't inherit the
-            // injected $rules parameter: a plain closure, an anonymous class, or
-            // a nested named function. Rewriting the receiver there would emit
-            // an undefined-variable reference. (Arrow functions capture the
-            // enclosing scope, so they are safe and deliberately not listed.)
-            if (($subNode instanceof Closure || $subNode instanceof Class_ || $subNode instanceof Function_)
+            // rules() call) inside a scope the injected builder can't be threaded
+            // into: an anonymous class, or a nested named function. Rewriting the
+            // receiver there would emit an undefined-variable reference. Plain
+            // closures are absent by design — rewriteRuleCallsForSchema() gives
+            // them a `use ($builder)` capture — and arrow functions auto-capture.
+            if (($subNode instanceof Class_ || $subNode instanceof Function_)
                 && $this->containsUncapturedRuleCall($subNode)) {
                 $unsafe = true;
 
@@ -535,6 +552,26 @@ CODE_SAMPLE
         }
 
         $parentName = $this->getName($class->extends);
+
+        if ($parentName === null) {
+            return false;
+        }
+
+        // A base already converted to a schema(FluentSchema)-ONLY builder (an
+        // earlier SCHEMA pass renamed its rules() away, with no rules() resolvable
+        // anywhere on it) makes parent::schema() resolve and parent::rules() NOT.
+        // The child MUST rewrite or it strands — and this is the case the
+        // rules()-declarer walk below can't see (it strides past a base declaring
+        // no rules()), so a re-run over a partly-converted chain never converged
+        // the stranded child before this check. It's a concrete on-disk fact,
+        // independent of this run's file set. Every other shape (including a
+        // schema() base that still inherits a rules()) falls through to the walk,
+        // which converts the child only when the resolvable rules() owner itself
+        // converts and otherwise leaves parent::rules() intact.
+        if ($this->parentIsSchemaOnlyBuilder($parentName)) {
+            return true;
+        }
+
         $seen = [];
 
         while ($parentName !== null && class_exists($parentName)) {
@@ -625,24 +662,6 @@ CODE_SAMPLE
         }
 
         return null;
-    }
-
-    /**
-     * Whether `$class` DECLARES `$method` in its own body (not merely inherits
-     * it), mirroring the converter's AST-level `Class_::getMethod()` guard —
-     * `ReflectionClass::hasMethod()` alone also reports inherited methods.
-     *
-     * @param  ReflectionClass<object>  $class
-     */
-    private function reflectionClassDeclaresMethod(ReflectionClass $class, string $method): bool
-    {
-        return $class->hasMethod($method)
-            && $class->getMethod($method)->getDeclaringClass()->getName() === $class->getName();
-    }
-
-    private function reflectionMethodHasFluentRulesAttribute(ReflectionMethod $method): bool
-    {
-        return $method->getAttributes(FluentRules::class) !== [];
     }
 
     /**

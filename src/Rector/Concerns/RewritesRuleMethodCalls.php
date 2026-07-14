@@ -4,6 +4,8 @@ namespace SanderMuller\FluentValidationRector\Rector\Concerns;
 
 use PhpParser\Node;
 use PhpParser\Node\Arg;
+use PhpParser\Node\ClosureUse;
+use PhpParser\Node\Expr\Closure;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Expr\Variable;
@@ -41,6 +43,25 @@ trait RewritesRuleMethodCalls
     private function rewriteRuleCallsForSchema(ClassMethod $method, string $builderName): void
     {
         $this->traverseNodesWithCallable($method->stmts ?? [], function (Node $subNode) use ($builderName): ?Node {
+            // Thread the injected builder into any explicit closure whose body —
+            // or a nested closure/arrow-fn within it — builds a rule with
+            // `FluentRule::` or a parent/self `rules()` call. Those receivers are
+            // rewritten to `$<builder>` below, so the closure has to capture it
+            // via `use`. Arrow functions auto-capture (no `use` needed); anonymous
+            // classes and nested named functions are rejected upstream by
+            // methodBodyIsSafeToInjectBuilder(). `resolveBuilderParamName()` has
+            // already picked a builder name distinct from any closure parameter,
+            // so this capture never shadows the closure's own arguments. Mutate in
+            // place and return null so traversal still descends to rewrite the
+            // calls (and to capture any nested closures on the way down).
+            if ($subNode instanceof Closure
+                && $this->containsUncapturedRuleCall($subNode)
+                && ! $this->closureCaptures($subNode, $builderName)) {
+                $subNode->uses[] = new ClosureUse(new Variable($builderName));
+
+                return null;
+            }
+
             // `FluentRule::string(...)` → `$<builder>->string(...)`. FluentSchema
             // mirrors every FluentRule factory 1:1 (and forwards macros via
             // __call), so the receiver swap preserves the produced rule.
@@ -100,6 +121,22 @@ trait RewritesRuleMethodCalls
         });
 
         return $found;
+    }
+
+    /**
+     * Whether `$closure` already lists `$name` in its `use (...)` capture — so
+     * the builder isn't added twice (idempotent, and respectful of a hand-written
+     * capture of the same name).
+     */
+    private function closureCaptures(Closure $closure, string $name): bool
+    {
+        foreach ($closure->uses as $use) {
+            if ($use->var instanceof Variable && $use->var->name === $name) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function isFluentRuleStaticCall(StaticCall $call): bool
