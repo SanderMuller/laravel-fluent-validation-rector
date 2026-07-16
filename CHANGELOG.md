@@ -2,6 +2,15 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 1.11.1 - 2026-07-16
+
+<!-- verified-sha: 818c9ab26235638afe8450cd7051997d7780e63b -->
+### Fixed
+
+- **`ConvertToFluentSchemaRector` stays compatible with laravel-fluent-validation 1.33's `rules()` fallback.** 1.33 added a fallback `rules()` on the `HasFluentRules` trait that re-exposes `schema()`, so `ReflectionClass::hasMethod('rules')` now reports `true` on every class using the trait. The rector's parent-conversion probe used that check to recognize a base already converted to a `schema(FluentSchema)`-only builder and rewrite a child's `parent::rules()` → `parent::schema($rules)`; the fallback made the probe stop recognizing such a base, so re-running `SCHEMA` over a partly-converted inheritance chain left the child unconverted. The probe now discounts the trait's fallback — identified by its declaring file, the same signal the runtime's own `rules()`-source detection uses — and counts only a genuinely declared or inherited `rules()`. Backward-compatible: on 1.32 (no fallback) a schema-only base has no `rules()` at all, so the check is correct on both versions. The composer floor stays `^1.32.0`; verified against the full `SCHEMA` suite on 1.32.0 and 1.33.0.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/1.11.0...1.11.1
+
 ## 1.11.0 - 2026-07-14
 
 <!-- verified-sha: 3106dd6f5692eefdca1b27496637199ae018ea01 -->
@@ -107,6 +116,7 @@ shadows) the renamed base `schema()`.
   
   
   
+  
   ```
   The line breaks are stamped only on the calls a rule creates, so calls
   already present inline in your source stay inline. Consumers no longer need a
@@ -160,6 +170,7 @@ shadows) the renamed base `schema()`.
   'items' => FluentRule::array()->nullable()->each(
       FluentRule::string()->nullable()->max(255)
   ),
+  
   
   
   
@@ -249,6 +260,7 @@ Performance release. The rule pipeline does substantially less work per file, an
   
   
   
+  
   ```
 - A literal-`null` condition is left untouched. `Rule::requiredIf(null)` is valid Laravel (the condition normalizes to `false`), but the native fluent method is typed `Closure|bool|string`, so rewriting to `->requiredIf(null)` would `TypeError` at runtime. The wrapper is preserved instead.
   
@@ -274,6 +286,7 @@ A multi-argument facade conditional (not valid Laravel usage) is also left as-is
   
   // after
   'role' => FluentRule::field()->nullable()->requiredIf(fn () => $this->isAdmin()),
+  
   
   
   
@@ -345,6 +358,7 @@ FluentRule::field('Agree to TOS')->required()->rule('accepted')
 // After
 FluentRule::accepted()->required()
 FluentRule::accepted('Agree to TOS')->required()
+
 
 
 
