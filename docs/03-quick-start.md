@@ -18,7 +18,7 @@ vendor/bin/pint                       # format
 
 `ALL` runs converters, grouping and trait insertion over everything under `app/`. For most codebases that is the whole migration, and the output is ready to commit once Pint has run, because the emit is [deliberately not formatter-clean](14-formatter.md).
 
-For finer control, pick [subsets](04-sets.md) or register [individual rules](17-rules-reference.md).
+For finer control, pick [subsets](04-sets.md) or register [individual rules](18-rules-reference.md).
 
 Two sets stay out of `ALL` on purpose. Run each as its own invocation, after the previous one has settled:
 

@@ -23,7 +23,7 @@ Tested on a production codebase: **448 files converted, 3,469 tests still passin
 
 ## What it will not do
 
-The rectors bail rather than guess. A shape they cannot prove equivalent is left exactly as it was and written to the [skip log](15-diagnostics.md), so a migration is never silently lossy. [Detection and limitations](18-limitations.md) lists what stays untouched and why.
+The rectors bail rather than guess. A shape they cannot prove equivalent is left exactly as it was and written to the [skip log](15-diagnostics.md), so a migration is never silently lossy. [Detection and limitations](19-limitations.md) lists what stays untouched and why.
 
 ## What it costs you
 

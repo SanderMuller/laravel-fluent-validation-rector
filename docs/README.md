@@ -10,6 +10,6 @@ Published at **https://sandermuller.github.io/laravel-fluent-validation-rector/*
 
 **Control:** [The `#[FluentRules]` attribute](12-fluent-rules-attribute.md) · [Configuration](13-configuration.md)
 
-**Operating it:** [Formatter integration](14-formatter.md) · [Diagnostics](15-diagnostics.md) · [Parity harness](16-parity.md)
+**Operating it:** [Formatter integration](14-formatter.md) · [Diagnostics](15-diagnostics.md) · [Parity harness](16-parity.md) · [AI assistant integration](17-ai-assistant.md)
 
-**Reference:** [Rule reference](17-rules-reference.md) · [Detection and limitations](18-limitations.md)
+**Reference:** [Rule reference](18-rules-reference.md) · [Detection and limitations](19-limitations.md)

@@ -58,13 +58,14 @@ export const sections: DocSection[] = [
             { file: '14-formatter', text: 'Formatter integration', blurb: 'Why the emit is not formatter-clean, and the three fixers that finish it.' },
             { file: '15-diagnostics', text: 'Diagnostics', blurb: 'The skip log, its verbosity tiers, and why the flag is env-only.' },
             { file: '16-parity', text: 'Parity harness', blurb: 'Proving the rewritten rules produce the same error bags at runtime.' },
+            { file: '17-ai-assistant', text: 'AI assistant integration', blurb: 'The agent skill the package ships, and the plain-text docs.', agent: 'The bundled Boost skill: set lists, rule architecture, and the shared-allowlist pattern an agent gets wrong without it.' },
         ],
     },
     {
         text: 'Reference',
         pages: [
-            { file: '17-rules-reference', text: 'Rule reference', blurb: 'Every rector, its set, and what it does — for registering one directly.' },
-            { file: '18-limitations', text: 'Detection and limitations', blurb: 'What is detected without config, and what stays untouched.' },
+            { file: '18-rules-reference', text: 'Rule reference', blurb: 'Every rector, its set, and what it does — for registering one directly.' },
+            { file: '19-limitations', text: 'Detection and limitations', blurb: 'What is detected without config, and what stays untouched.' },
         ],
     },
 ]
