@@ -51,3 +51,8 @@ PEER_FEEDBACK.md
 .config/boost/
 .github/prompts/
 # <<< boost (managed) <<<
+
+# Docs site (VitePress) — build output and deps, never the sources.
+docs/node_modules/
+docs/.vitepress/cache/
+docs/.vitepress/dist/

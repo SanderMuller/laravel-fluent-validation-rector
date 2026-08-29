@@ -38,3 +38,4 @@ tests/                  export-ignore
 
 # Project-specific dev paths (foreign lines — preserved across boost syncs).
 specs/                  export-ignore
+docs/                   export-ignore
