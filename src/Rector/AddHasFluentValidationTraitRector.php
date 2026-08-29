@@ -176,9 +176,9 @@ CODE_SAMPLE
                 $needsFilamentImport = true;
             }
 
-            if (($action['wrong_trait'] ?? null) === 'HasFluentValidation') {
+            if ($action['wrong_trait'] === 'HasFluentValidation') {
                 $droppedHasFluent = true;
-            } elseif (($action['wrong_trait'] ?? null) === 'HasFluentValidationForFilament') {
+            } elseif ($action['wrong_trait'] === 'HasFluentValidationForFilament') {
                 $droppedFilament = true;
             }
         }

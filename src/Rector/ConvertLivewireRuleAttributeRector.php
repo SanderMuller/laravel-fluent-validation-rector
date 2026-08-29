@@ -766,7 +766,7 @@ CODE_SAMPLE
             return null;
         }
 
-        $ruleArg = $attr->args[0] ?? null;
+        $ruleArg = $attr->args[0];
 
         if (! $ruleArg instanceof Arg) {
             return null;
