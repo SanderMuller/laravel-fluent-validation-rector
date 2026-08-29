@@ -737,9 +737,7 @@ CODE_SAMPLE
 
             $prefix = substr($key, 0, $dotPos);
 
-            if (! isset($prefixes[$prefix])) {
-                $prefixes[$prefix] = [];
-            }
+            $prefixes[$prefix] ??= [];
 
             $prefixes[$prefix][] = $key;
         }
@@ -856,15 +854,10 @@ CODE_SAMPLE
 
         $partitioned = $this->partitionSubChildren($keys, $directKey);
 
-        if ($childValue === null) {
-            // Synthesize the intermediate factory in the spelling of the
-            // sub-children it will carry: `$rules->field()` for a schema
-            // sub-tree, `FluentRule::field()` otherwise.
-            $childValue = $this->buildFluentRuleFactoryCall(
-                'field',
-                $this->schemaReceiverForKeys($this->partitionChildKeys($partitioned), $entries),
-            );
-        }
+        $childValue ??= $this->buildFluentRuleFactoryCall(
+            'field',
+            $this->schemaReceiverForKeys($this->partitionChildKeys($partitioned), $entries),
+        );
 
         if ($partitioned['subWildcardParent'] !== null && isset($entries[$partitioned['subWildcardParent']])) {
             $consumed[] = $entries[$partitioned['subWildcardParent']]['index'];
@@ -1284,20 +1277,7 @@ CODE_SAMPLE
             return null;
         }
 
-        if ($parentValue === null) {
-            // Synthesize a bare array() parent without a presence modifier.
-            // Adding ->nullable() here short-circuits Laravel's validation when
-            // the parent key is missing, so nested ->required() children would
-            // silently never fire. Leaving the synthesized parent bare preserves
-            // the original dot-notation semantics: nested `required` children
-            // still trigger when the parent is absent.
-            //
-            // Spell the parent to match its children: `$rules->array()` for an
-            // all-schema group, `FluentRule::array()` otherwise. A mismatched
-            // spelling (static parent over instance children) would be an
-            // incoherent chain.
-            $parentValue = $this->buildFluentRuleFactoryCall('array', $this->schemaReceiverForGroup($group, $entries));
-        }
+        $parentValue ??= $this->buildFluentRuleFactoryCall('array', $this->schemaReceiverForGroup($group, $entries));
 
         // Normalize a `field()->…->rule(Rule::array())` parent to `array()->…`
         // so the each()/children() hop appends onto an array-typed receiver.
