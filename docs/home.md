@@ -10,8 +10,8 @@ hero:
       text: Why this package?
       link: /why-this-package
     - theme: alt
-      text: Quick start
-      link: /quick-start
+      text: Getting started
+      link: /getting-started
     - theme: alt
       text: GitHub
       link: https://github.com/SanderMuller/laravel-fluent-validation-rector

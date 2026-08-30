@@ -1,4 +1,4 @@
-# Quick start
+# Getting started
 
 ```php
 // rector.php

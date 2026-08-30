@@ -35,7 +35,7 @@ composer require --dev sandermuller/laravel-fluent-validation-rector
 
 Requires PHP 8.3+, Rector 2.5+, and `sandermuller/laravel-fluent-validation` ^1.32.0. On an older fluent-validation, see the [pin table](https://sandermuller.github.io/laravel-fluent-validation-rector/installation).
 
-## Quick start
+## Getting started
 
 ```php
 // rector.php
@@ -59,7 +59,7 @@ vendor/bin/pint                       # format
 
 Full documentation lives at **https://sandermuller.github.io/laravel-fluent-validation-rector/**.
 
-- [Why this package?](https://sandermuller.github.io/laravel-fluent-validation-rector/why-this-package) · [Installation](https://sandermuller.github.io/laravel-fluent-validation-rector/installation) · [Quick start](https://sandermuller.github.io/laravel-fluent-validation-rector/quick-start) · [Sets](https://sandermuller.github.io/laravel-fluent-validation-rector/sets)
+- [Why this package?](https://sandermuller.github.io/laravel-fluent-validation-rector/why-this-package) · [Installation](https://sandermuller.github.io/laravel-fluent-validation-rector/installation) · [Getting started](https://sandermuller.github.io/laravel-fluent-validation-rector/getting-started) · [Sets](https://sandermuller.github.io/laravel-fluent-validation-rector/sets)
 - [String and array converters](https://sandermuller.github.io/laravel-fluent-validation-rector/converters) · [Livewire attributes](https://sandermuller.github.io/laravel-fluent-validation-rector/livewire) · [Wildcard grouping](https://sandermuller.github.io/laravel-fluent-validation-rector/grouping) · [Trait insertion](https://sandermuller.github.io/laravel-fluent-validation-rector/traits)
 - [Simplify](https://sandermuller.github.io/laravel-fluent-validation-rector/simplify) · [Docblock polish](https://sandermuller.github.io/laravel-fluent-validation-rector/polish) · [Adopting FluentSchema](https://sandermuller.github.io/laravel-fluent-validation-rector/schema)
 - [The `#[FluentRules]` attribute](https://sandermuller.github.io/laravel-fluent-validation-rector/fluent-rules-attribute) · [Configuration](https://sandermuller.github.io/laravel-fluent-validation-rector/configuration)

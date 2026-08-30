@@ -2,7 +2,7 @@
 
 Published at **https://sandermuller.github.io/laravel-fluent-validation-rector/**. These files are the source.
 
-**Getting started:** [Why this package?](01-why-this-package.md) · [Installation](02-installation.md) · [Quick start](03-quick-start.md) · [Sets](04-sets.md)
+**Getting started:** [Why this package?](01-why-this-package.md) · [Installation](02-installation.md) · [Getting started](03-getting-started.md) · [Sets](04-sets.md)
 
 **Conversion:** [String and array converters](05-converters.md) · [Livewire attributes](06-livewire.md) · [Wildcard grouping](07-grouping.md) · [Trait insertion](08-traits.md)
 

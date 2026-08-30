@@ -24,7 +24,7 @@ export const sections: DocSection[] = [
         pages: [
             { file: '01-why-this-package', text: 'Why this package?', blurb: 'What the migration converts, and what it deliberately leaves alone.' },
             { file: '02-installation', text: 'Installation', blurb: 'Requirements, and which version to pin against your fluent-validation.' },
-            { file: '03-quick-start', text: 'Quick start', blurb: 'One config, three commands, and a diff worth reading.' },
+            { file: '03-getting-started', text: 'Getting started', blurb: 'One config, three commands, and a diff worth reading.' },
             { file: '04-sets', text: 'Sets', blurb: 'The pipeline in pieces: CONVERT, GROUP, TRAITS, SIMPLIFY, POLISH.' },
         ],
     },
