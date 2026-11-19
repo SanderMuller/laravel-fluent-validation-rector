@@ -148,7 +148,7 @@ final class PublicConstAuditTest extends TestCase
             $offenders,
             'Every entry in DOCUMENTED_PUBLIC_CONSTS must resolve against the '
             . 'current `src/`. A drift here means PUBLIC_API.md claims a '
-            . 'symbol that doesn\'t exist — consumers pinned to the doc would '
+            . "symbol that doesn't exist — consumers pinned to the doc would "
             . "fatal on bump.\n\nOffenders:\n  - "
             . implode("\n  - ", $offenders),
         );
@@ -159,7 +159,7 @@ final class PublicConstAuditTest extends TestCase
      */
     private function discoverPublicRectorSymbols(): array
     {
-        $srcRoot = dirname(__DIR__) . '/src/Rector';
+        $srcRoot = __DIR__ . '/../src/Rector';
         $iterator = new RecursiveIteratorIterator(
             new RecursiveDirectoryIterator($srcRoot, FilesystemIterator::SKIP_DOTS),
         );

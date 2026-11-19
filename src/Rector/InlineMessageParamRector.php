@@ -80,7 +80,7 @@ final class InlineMessageParamRector extends AbstractRector implements Documente
      */
     public const string PASSWORD_L11_L12_SKIP_TEMPLATE =
         "Skipping messageFor('password', ...) on PasswordRule: key resolves via Laravel's "
-        . 'getFromLocalArray shortRule lookup (class-basename → \'password.password\'), which is L12+ only. '
+        . "getFromLocalArray shortRule lookup (class-basename → 'password.password'), which is L12+ only. "
         . "L11's 3-key lookup (attribute.rule, rule, attribute) does not match. "
         . 'Leaving the chain unchanged preserves the working-on-L12 / silently-broken-on-L11 state. '
         . "Consumers targeting L11 should use messageFor('password.letters', ...), 'password.mixed', etc. "

@@ -171,7 +171,7 @@ final class InternalAuditTest extends TestCase
      */
     private function discoverSrcSymbols(): array
     {
-        $srcRoot = dirname(__DIR__) . '/src';
+        $srcRoot = __DIR__ . '/../src';
         $iterator = new RecursiveIteratorIterator(
             new RecursiveDirectoryIterator($srcRoot, FilesystemIterator::SKIP_DOTS),
         );

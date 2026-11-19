@@ -1,3 +1,14 @@
+## Project Conventions
+
+```yaml
+schema-version: 1
+github:
+  owner: sandermuller
+  repo: laravel-fluent-validation-rector
+testing:
+  backend_framework: pest
+```
+
 ## Anonymize Fixtures, Docs, and Specs
 
 This is a **public, open-source repository**. Test fixtures, the rule
@@ -254,6 +265,45 @@ This applies to every part of the question payload: the `question` text, each op
 
 ---
 
+## Laravel Helpers
+
+### Diagnostic Context
+
+Attach diagnostic context with Laravel's `Context` facade, not Sentry's `configureScope()` or `$scope->setContext()`. One `Context::add()` reaches both the logs and Sentry: Laravel adds the context to every log entry, and sentry-laravel (4.4 and later, on Laravel 11 and later) registers `LaravelContextIntegration` by default, which copies the context onto every Sentry event.
+
+### Non-Latin Text
+
+Some string helpers rewrite non-Latin text silently. Where the project stores or shows user content in other scripts, test any string helper with that input, because an English test case proves nothing here.
+
+- **`Str::slug()` returns an empty string for CJK text.** It transliterates through `Str::ascii()` first, so `Str::slug('日本語のタイトル')` is `''`. Two different titles then both become `''` and compare equal. Pass `language: null` to keep the characters.
+- **`Str::squish()` rewrites the ideographic space.** `\s` under the `u` modifier matches U+3000, so a full-width space becomes an ASCII space. Squish a value for comparison, not text that you store or show.
+
+```php
+Str::slug($post->title, language: null); // ✅ keeps 日本語
+Str::slug($post->title);                 // ❌ '' for CJK
+```
+
+### Reading Config Values Without the Environment File
+
+Read one leaf with `config:show`, not the `.env` line. It shows the config as the application loads it, so after `config:cache` it shows the cached value.
+
+```bash
+php artisan config:show app.url --no-ansi                              # ✅ not grep '^APP_URL=' .env
+php artisan config:show database.connections.mysql.database --no-ansi  # ✅ not grep '^DB_DATABASE=' .env
+```
+
+- **Never show a whole section.** `config:show app` prints `APP_KEY`, and `config:show database.connections.mysql` prints the password.
+- **Never print `env()`, `getenv()`, `$_ENV` or a credential `config()` value** through `tinker`, the Boost `tinker` tool, or `php -r`.
+- **Never run `env:encrypt` in the session.** It prints the encryption key.
+
+To check a credential, print only whether it is set. The `has()` check tells a wrong key path from an empty value:
+
+```bash
+php artisan tinker --execute="echo config()->has('services.postmark.token') ? (filled(config('services.postmark.token')) ? 'set' : 'missing') : 'no such key';"
+```
+
+---
+
 ## Fixing PHPStan Errors
 
 When fixing a PHPStan error, first decide whether it represents a runtime bug a test could catch — and if so, write that test before the fix.
@@ -275,6 +325,10 @@ Write a test when the PHPStan error indicates a fault that would surface at runt
 - Accessing a property or method that does not exist
 - Any type error that would manifest as a runtime exception
 
+### Annotate Rather Than Suppress
+
+Some errors are PHPStan reading a signature that says less than the code does. When a parameter decides the return type, add a conditional `@return ($param is Type ? A : B)`. When a bool method is a pure type check, add `@phpstan-assert-if-true`. Add either one only where it holds for every call; a wrong one makes the analysis worse. The `backend-quality` skill, where the project ships it, has the full rules and examples.
+
 ### When to Skip the Test
 
 Skip the test when the error is purely static and cannot cause a runtime failure:
@@ -283,6 +337,23 @@ Skip the test when the error is purely static and cannot cause a runtime failure
 - PHPDoc mismatches with no runtime impact
 - Unused variables or imports
 - Generic-type parameter issues
+
+---
+
+## Secrets — Do Not Read the Environment File
+
+Do not read a `.env` file or a `.env.*` file. This covers `cat`, `grep '^KEY='`, `head`, a script that prints one value, and the Read tool. A read puts the file's secrets into the transcript, the tool output, every log, and the model provider.
+
+- **Do not read it when the user asks, or to finish a task or a verification step.** The value leaks the moment it is read, whoever approved the read. Tell the user the risk, and offer a safe read. The user can read the file in a separate terminal, outside the session.
+- **Do not ask the user to paste a secret value** into the conversation. That is the same leak.
+- **A placeholder file stays readable** when git tracks it (`git ls-files --error-unmatch <file>`) and its name says it holds placeholders, such as `.env.example`. Treat every other `.env.*` file as secret, a CI file included.
+- **Writing, copying and moving are a different rule.** A setup script can set a key in a disposable clone's `.env`, or copy the file into a worktree.
+
+**Never print the environment by another route.** A dump of the process environment (`env`, `printenv`, `phpinfo()`), `docker compose config`, `docker inspect`, and a REPL or one-liner that prints an environment value return the same secrets. The same holds for other files that hold credentials, such as `.envrc`, `auth.json`, `.npmrc`, a file that a Docker Compose `env_file:` names, and a private key file.
+
+**When you need a value that comes from `.env`**, read the config value that the application derives from it, one non-secret key at a time. Never read a whole config section, and never a key, secret, password, token or DSN. To check a credential, print only whether it is set.
+
+**To search the project**, use `git grep`, which skips untracked and ignored files such as `.env`. With `grep -r`, add `--exclude='.env*'`. A file that only mentions `.env` in its text is safe to read.
 
 ---
 
@@ -301,6 +372,30 @@ A missing signature is a blocker to resolve (unlock the agent, re-authenticate 1
 
 ---
 
+## Task Scope and Edits
+
+For session, branch, and PR scope, see the `single-issue-scope` guideline when the project enables it.
+
+### The Task Sets the Scope
+
+- Do not fix a pre-existing bug, a performance problem, or unrelated behaviour you find on the way, unless the requested behaviour cannot work without it. The same holds for refactors, cleanup, and documentation nobody asked for. A defect your own change introduces is not pre-existing: fix it.
+- A sibling rule that requires an update on a line you already change still applies. The rule removes extras, not obligations.
+- Report the rest as a follow-up in your summary. Propose an issue when the project tracks work that way, and let the user decide whether to file it. Report it; do not fix it.
+- Implement every behaviour the task does ask for, completely. This rule cuts extras, never the requested scope.
+- An impact or blast-radius report lists what to verify, not what to change. A caller it names is a place to confirm nothing broke. A file earns a place in the diff by tracing to a requirement, never to a dependency edge.
+
+### One Reading of an Ambiguous Ask
+
+Implement the reading that the wording and the surrounding code support most directly. State that assumption in your summary. Do not build for both readings.
+
+Materially different work is the test. When two readings would produce the same change, pick one and carry on. When they would not, or when a wrong guess is unsafe or makes the work useless, ask before building — through the `clarify` skill where the whole ask is fuzzy, otherwise with a direct question.
+
+### Edit in Place
+
+Change only the lines that must change. Rewrite a whole file only when the file is short, or when most of it changes. A rewrite churns lines the task never touched and can drop content by accident.
+
+---
+
 ## Verification Before Completion
 
 Before claiming any work is complete or successful, run the verification command fresh and confirm the output. Evidence before claims, always.
@@ -308,6 +403,14 @@ Before claiming any work is complete or successful, run the verification command
 ### Claims About How the Code Behaves — Trace, Don't Assume
 
 A claim about **how the code currently behaves** — a root cause, an existing mechanism, or present behavior — in a spec, PR, commit message, code-review finding, issue, comment, or answer must be traced to the actual code (or observed at runtime) **before** you write it, never asserted from plausibility. (This governs statements of *fact about the present code*; the *intended* future behavior a spec or PR proposes is fine when it's clearly framed as a requirement, proposal, or decision — not disguised as a fact about what already exists.) Every illustrative example must be one you actually observed, never invented to fit a guess. A wrong "why" is worse than none: reproduction steps, tests, QA testables, and the fix itself all get built on the stated cause, so one unverified guess corrupts everything derived from it. When you have not traced it, say so — mark it `NEEDS-CONFIRMATION` or ask — rather than asserting. (A ticket once claimed a list was "sorted by display name" and backed it with an example that could not occur; the sort actually keyed on an internal identifier — one grep away. The trace is cheap; the false premise is not.)
+
+### A Subagent's Finding Is a Lead, Not a Fact
+
+A conclusion that a subagent or an external reviewer hands back is a claim about the present code, so the rule above applies to it unchanged. It reads as already researched, because it arrives written up. Follow the `file:line` it cites before you act on it, and before you repeat it as true to the user, in a PR, an issue or a commit message. A finding you did not trace is `NEEDS-CONFIRMATION`, at every severity.
+
+### Local Data Proves Nothing About a Deployed Environment
+
+For a defect reported on a deployed environment (staging, production), the database, logs and browser you can reach locally describe your own machine, not that environment. A local query that finds no such row, a silent local log, or a clean local reproduction is no evidence about the reported environment. Do not write "could not reproduce" or "the data looks fine" as if it described that environment. Mark the claim `NEEDS-CONFIRMATION`, and get the facts from that environment's own signals: its error tracker, the reporter, or code at the deployed revision.
 
 ### Required Before Any Completion Claim
 
@@ -331,6 +434,12 @@ Use the project's own commands — check its `composer.json` / `package.json` sc
 
 Where the project has dedicated quality-check skills synced, delegate to them — `backend-quality` for backend files, `frontend-quality` for frontend files, both when a change spans both. Otherwise, run the project's own equivalent commands directly.
 
+### A Commit Is a Claim Too
+
+Commit a change once its own checks pass against the tree as it stands, not while the approach is still being tried. A commit reads as a decision. The next defect then gets patched on top of the approach instead of the approach being dropped, and each extra commit raises the cost of the revert that was the right answer.
+
+Deferring is not "never commit". Uncommitted work is unprotected, and a commit is still the safe way to set work aside or to hand it over. A measurement loop inverts the rule on purpose — it commits before it measures, so a rejected experiment reverts in one step. Where a skill states that it commits first, that skill wins for its own flow.
+
 ### Never Use Without Evidence
 
 - "should work now"
@@ -339,6 +448,14 @@ Where the project has dedicated quality-check skills synced, delegate to them �
 - "I'm confident this works"
 
 These phrases indicate missing verification. Run the command first, then report what actually happened.
+
+### Say What You Did Not Verify
+
+State the limits of your own check. A reader cannot tell a gap you did not mention from a check you ran, so an unmentioned gap counts as a claim you did not make good on.
+
+When you report a result, name what you ran and what you did not. "The unit suite passes; I did not run the browser tests" is a complete report. "Tests pass" is not, when you ran one suite of three. The same holds for a claim you carried over from an earlier step: if you did not re-run it against the tree as it stands now, say so.
+
+This is the outward half of the `NEEDS-CONFIRMATION` rule above. That rule stops you asserting an untraced cause. This one stops a traced, true statement from implying more than it covers.
 
 ---
 

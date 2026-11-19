@@ -255,7 +255,7 @@ CODE_SAMPLE
         if (! $this->qualifiesForShapeChange($class)) {
             $this->logSkip(
                 $class,
-                'shape-changing rector skipped on Validator subclass — parent class may postprocess rules() output and the each()/children() shape is incompatible. Wrap manually if you have audited the parent\'s behavior.',
+                "shape-changing rector skipped on Validator subclass — parent class may postprocess rules() output and the each()/children() shape is incompatible. Wrap manually if you have audited the parent's behavior.",
             );
 
             return false;
