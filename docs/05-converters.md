@@ -6,6 +6,10 @@ Three rectors in `CONVERT` rewrite rule arrays. All of them fire in FormRequest 
 
 Pipe-delimited strings (`'required|string|max:255'`) become fluent chains.
 
+A plain `email` rule converts to `FluentRule::email(defaults: false)`. `FluentRule::email()` applies the app's `Email::defaults()`, and the plain rule does not, so the argument keeps validation the same. The array converter does the same for `Rule::email()` and `new Email()`. `Email::default()` converts to `FluentRule::email()`. Drop the argument when the app defaults are what you want.
+
+Email modes map to methods: `email:rfc,dns` becomes `FluentRule::email()->rfcCompliant()->validateMxRecord()`, and `strict`, `spoof`, `filter` and `filter_unicode` map the same way. Explicit modes replace the app defaults, so these chains do not need `defaults: false`. A rule with an unknown email mode, or a different type rule with arguments (for example `array:name,email`), stays unconverted.
+
 ## `ValidationArrayToFluentRuleRector`
 
 Array-based rules (`['required', 'string', Rule::unique(...)]`), including `Rule::` objects, `Password::min()` chains, conditional tuples, closures and custom rule objects.

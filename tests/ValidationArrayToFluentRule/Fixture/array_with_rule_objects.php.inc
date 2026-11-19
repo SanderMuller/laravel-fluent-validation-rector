@@ -34,7 +34,7 @@ class RuleObjectFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email' => FluentRule::email()
+            'email' => FluentRule::email(defaults: false)
                 ->required()
                 ->unique('users', 'email'),
             'role' => FluentRule::field()

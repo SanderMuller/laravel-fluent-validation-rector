@@ -90,7 +90,7 @@ class StorePostRequest extends FormRequest
     {
         return [
             'name' => FluentRule::string()->required()->max(255),
-            'email' => FluentRule::email()->required()->unique('users', 'email'),
+            'email' => FluentRule::email(defaults: false)->required()->unique('users', 'email'),
             'role' => FluentRule::field()->required()->in(['admin', 'editor']),
         ];
     }

@@ -66,7 +66,7 @@ trait ParsesParentRulesMethod
 
         $fileName = $declaringClass->getFileName();
 
-        if ($fileName === false || $fileName === null) {
+        if ($fileName === false) {
             return null;
         }
 

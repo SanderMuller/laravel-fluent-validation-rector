@@ -48,7 +48,7 @@ class MultiAttributeFirstWinsForMessages extends Component
     protected function rules(): array
     {
         return [
-            'email' => FluentRule::email()
+            'email' => FluentRule::email(defaults: false)
                 ->required(),
         ];
     }

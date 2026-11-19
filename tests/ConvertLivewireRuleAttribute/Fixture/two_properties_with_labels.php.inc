@@ -36,10 +36,10 @@ final class Settings extends Component
     protected function rules(): array
     {
         return [
-            'notification_email' => FluentRule::email()
+            'notification_email' => FluentRule::email(defaults: false)
                 ->nullable()
                 ->label('notificatie e-mailadres'),
-            'notification_business_email' => FluentRule::email()
+            'notification_business_email' => FluentRule::email(defaults: false)
                 ->nullable()
                 ->label('zakelijke notificatie e-mailadres'),
         ];

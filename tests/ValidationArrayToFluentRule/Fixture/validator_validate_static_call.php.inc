@@ -35,7 +35,7 @@ class ValidatorValidateArrayStaticCall
         Validator::validate(
             $input,
             [
-                'email' => FluentRule::email()
+                'email' => FluentRule::email(defaults: false)
                     ->required()
                     ->unique('users', 'email'),
                 'role' => FluentRule::field()

@@ -33,7 +33,7 @@ $slug = $safe->nullableString('slug', 'untitled');
 
 **Known difference.** `filled()` accepts a bool, an array and an object, for example an uploaded file. For those, `string()->value()` gives `'1'` or `''` (bool), `'Array'` with an "Array to string conversion" warning (array), or the string form of the object (the path, for a file). `nullableString()` gives the fallback. A field validated as a string cannot hold these values, but the rule cannot see the validation rules, so review the diff for fields that are not validated as strings.
 
-**Type note.** `nullableString()` returns `?string`, also when the fallback is a string. Code that passes the result to a `string` parameter can get a new PHPStan error after the rewrite, although the runtime value is the same.
+**Type note.** Before laravel-fluent-validation 1.41.1, `nullableString()` is typed `?string`, also when the fallback is a string. On those versions, code that passes the result to a `string` parameter can get a new PHPStan error after the rewrite, although the runtime value is the same. From 1.41.1, the call is typed `string` when the fallback is a string.
 
 ## `UseValidatedInputFileRector`
 

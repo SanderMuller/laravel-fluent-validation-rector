@@ -41,7 +41,7 @@ class ConcatRuleStringFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email' => FluentRule::email()
+            'email' => FluentRule::email(defaults: false)
                 ->bail()
                 ->requiredIfAccepted(self::PREFIX . '.enabled')
                 ->nullable()

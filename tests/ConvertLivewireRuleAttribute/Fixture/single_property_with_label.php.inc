@@ -35,7 +35,7 @@ final class InventorizationAdminSettings extends Component
     protected function rules(): array
     {
         return [
-            'notification_email' => FluentRule::email()
+            'notification_email' => FluentRule::email(defaults: false)
                 ->nullable()
                 ->label('notificatie e-mailadres'),
         ];

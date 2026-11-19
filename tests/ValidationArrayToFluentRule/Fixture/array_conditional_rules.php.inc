@@ -34,7 +34,7 @@ class ConditionalArrayFormRequest extends FormRequest
             'name' => FluentRule::string()
                 ->requiredIf('role', 'admin')
                 ->max(255),
-            'backup_email' => FluentRule::email()
+            'backup_email' => FluentRule::email(defaults: false)
                 ->requiredWith('email'),
             'reason' => FluentRule::string()
                 ->requiredUnless('status', 'active'),

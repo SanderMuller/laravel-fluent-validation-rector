@@ -48,7 +48,7 @@ class AliasedRuleSetRequest extends FormRequest
             'name' => FluentRule::string()
                 ->required()
                 ->max(255),
-            'email' => FluentRule::email()
+            'email' => FluentRule::email(defaults: false)
                 ->required(),
         ]);
     }

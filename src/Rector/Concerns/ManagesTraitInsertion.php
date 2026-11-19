@@ -8,6 +8,7 @@ use PhpParser\Node\Stmt\Namespace_;
 use PhpParser\Node\Stmt\Nop;
 use PhpParser\Node\Stmt\TraitUse;
 use PhpParser\Node\Stmt\TraitUseAdaptation;
+use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\Rector\AbstractRector;
 
 /**
@@ -24,12 +25,19 @@ trait ManagesTraitInsertion
     use ManagesNamespaceImports;
 
     /**
+     * The trait prints by its short name, and the matching import is added
+     * separately. The name carries the FQN as its namespaced name, so a later
+     * pass over the same file (Rector 2.8+ re-runs the rules until nothing
+     * changes) recognizes the trait and does not insert it again.
+     *
+     * @param  class-string  $traitFqn
      * @param  list<TraitUseAdaptation>  $adaptations  optional `insteadof` / `as` adaptations
      *                                                 emitted inside the trait-use body
      */
-    private function insertTraitUseInClass(Class_ $class, string $shortName, array $adaptations = []): void
+    private function insertTraitUseInClass(Class_ $class, string $traitFqn, array $adaptations = []): void
     {
-        $traitUse = new TraitUse([new Name($shortName)], $adaptations);
+        $shortName = substr($traitFqn, (int) strrpos('\\' . $traitFqn, '\\'));
+        $traitUse = new TraitUse([new Name($shortName, [AttributeKey::NAMESPACED_NAME => $traitFqn])], $adaptations);
 
         $insertPosition = $this->resolveSortedTraitInsertPosition($class, $shortName);
 

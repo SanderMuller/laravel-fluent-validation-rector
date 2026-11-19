@@ -215,7 +215,7 @@ CODE_SAMPLE
      *    build the `insteadof` adaptation block. Null for plain-Livewire target.
      * - `wrong_trait`: short-name of the wrong variant to remove before insertion. Null on fresh inserts.
      *
-     * @return array{target: 'HasFluentValidation'|'HasFluentValidationForFilament', filament_trait: Name|null, wrong_trait: string|null}|null
+     * @return array{target: 'HasFluentValidation'|'HasFluentValidationForFilament', target_fqn: class-string, filament_trait: Name|null, wrong_trait: string|null}|null
      */
     private function resolveActionForClass(Class_ $class): ?array
     {
@@ -315,13 +315,14 @@ CODE_SAMPLE
 
         return [
             'target' => $target,
+            'target_fqn' => $targetFqn,
             'filament_trait' => $filamentTrait,
             'wrong_trait' => $wrongTrait,
         ];
     }
 
     /**
-     * @param  array{target: 'HasFluentValidation'|'HasFluentValidationForFilament', filament_trait: Name|null, wrong_trait: string|null}  $action
+     * @param  array{target: 'HasFluentValidation'|'HasFluentValidationForFilament', target_fqn: class-string, filament_trait: Name|null, wrong_trait: string|null}  $action
      */
     private function applyAction(Class_ $class, array $action): void
     {
@@ -333,7 +334,7 @@ CODE_SAMPLE
             ? $this->buildFilamentInsteadofAdaptations($action['filament_trait'])
             : [];
 
-        $this->insertTraitUseInClass($class, $action['target'], $adaptations);
+        $this->insertTraitUseInClass($class, $action['target_fqn'], $adaptations);
     }
 
     /**

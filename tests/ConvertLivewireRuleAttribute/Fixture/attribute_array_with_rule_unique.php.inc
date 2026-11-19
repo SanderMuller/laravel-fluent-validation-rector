@@ -35,7 +35,7 @@ final class ArrayRuleUniqueAttributeComponent extends Component
     protected function rules(): array
     {
         return [
-            'email' => FluentRule::email()
+            'email' => FluentRule::email(defaults: false)
                 ->required()
                 ->rule(new Unique('users', 'email')),
         ];

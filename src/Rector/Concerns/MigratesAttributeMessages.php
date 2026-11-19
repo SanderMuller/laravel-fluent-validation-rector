@@ -6,6 +6,7 @@ use PhpParser\Comment\Doc;
 use PhpParser\Node\Arg;
 use PhpParser\Node\ArrayItem;
 use PhpParser\Node\Attribute;
+use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Scalar\String_;
@@ -184,7 +185,45 @@ trait MigratesAttributeMessages
             return false;
         }
 
-        return $first->value instanceof String_ || $first->value instanceof Array_;
+        return $this->ruleValueTypeTokenIsConvertible($first->value);
+    }
+
+    /**
+     * Mirrors the converters' type-token check for a rule string, a list of
+     * rules, or a keyed set of those, so the message anchor skips an
+     * attribute whose rules stay unconverted.
+     */
+    private function ruleValueTypeTokenIsConvertible(Expr $value): bool
+    {
+        if ($value instanceof String_) {
+            return $this->typeTokenIsConvertible(explode('|', $value->value));
+        }
+
+        if (! $value instanceof Array_) {
+            return false;
+        }
+
+        $listParts = [];
+
+        foreach ($value->items as $item) {
+            if (! $item instanceof ArrayItem) {
+                continue;
+            }
+
+            if ($item->key instanceof Expr) {
+                if (($item->value instanceof String_ || $item->value instanceof Array_) && ! $this->ruleValueTypeTokenIsConvertible($item->value)) {
+                    return false;
+                }
+
+                continue;
+            }
+
+            if ($item->value instanceof String_) {
+                $listParts[] = $item->value->value;
+            }
+        }
+
+        return $this->typeTokenIsConvertible($listParts);
     }
 
     /**

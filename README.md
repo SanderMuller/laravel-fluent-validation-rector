@@ -18,7 +18,7 @@ return [
 
 // After
 return [
-    'email' => FluentRule::email()->required()->max(255),
+    'email' => FluentRule::email(defaults: false)->required()->max(255),
     'tags'  => FluentRule::array()->nullable()->each(
         FluentRule::string()->max(50),
     ),

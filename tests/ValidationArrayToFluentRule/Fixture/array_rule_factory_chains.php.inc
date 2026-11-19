@@ -46,7 +46,7 @@ class RuleFactoryFormRequest extends FormRequest
             'start' => FluentRule::date()
                 ->required()
                 ->afterToday(),
-            'contact' => FluentRule::email()
+            'contact' => FluentRule::email(defaults: false)
                 ->required()
                 ->rfcCompliant()
                 ->validateMxRecord(),

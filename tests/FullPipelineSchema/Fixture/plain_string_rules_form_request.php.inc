@@ -35,7 +35,7 @@ class StoreArticleRequest extends FormRequest
             'name' => $rules->string()
                 ->required()
                 ->max(255),
-            'email' => $rules->email()
+            'email' => $rules->email(defaults: false)
                 ->required(),
         ];
     }

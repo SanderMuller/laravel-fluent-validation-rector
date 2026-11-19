@@ -58,7 +58,7 @@ class ValidateInputService
             'name' => FluentRule::string()
                 ->required()
                 ->max(255),
-            'email' => FluentRule::email()
+            'email' => FluentRule::email(defaults: false)
                 ->required(),
         ])->check($data)->safe();
     }

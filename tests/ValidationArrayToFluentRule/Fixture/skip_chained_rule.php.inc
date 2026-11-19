@@ -29,7 +29,7 @@ class ChainedRuleFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email' => FluentRule::email()
+            'email' => FluentRule::email(defaults: false)
                 ->required()
                 ->unique('users', null, fn($rule) => $rule->ignore($this->user()->id)),
         ];

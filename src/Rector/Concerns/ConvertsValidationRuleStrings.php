@@ -16,6 +16,7 @@ use PhpParser\Node\Expr\ArrowFunction;
 use PhpParser\Node\Expr\Assign;
 use PhpParser\Node\Expr\BinaryOp\Plus;
 use PhpParser\Node\Expr\Closure;
+use PhpParser\Node\Expr\ConstFetch;
 use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\StaticCall;
@@ -1413,6 +1414,98 @@ trait ConvertsValidationRuleStrings
     }
 
     /**
+     * `FluentRule::email()` applies the app's `Email::defaults()`. The plain
+     * `email` rule, `Rule::email()` and `new Email()` do not, so their
+     * conversion passes `defaults: false` to keep the same validation.
+     *
+     * @return list<Arg>
+     */
+    private function withoutAppEmailDefaultsArgs(): array
+    {
+        return [new Arg(new ConstFetch(new Name('false')), name: new Identifier('defaults'))];
+    }
+
+    /**
+     * The factory arguments and chain calls for a type token, for example
+     * `email:rfc,dns`. Explicit email modes take precedence over the app
+     * defaults, so only a bare `email` needs `defaults: false`. Null when the
+     * token has arguments without a fluent equivalent (any type other than
+     * email, or an unknown email mode); the caller then keeps the rule as is.
+     *
+     * @return array{factoryArgs: list<Arg>, chainOps: list<array{name: string, args: list<Arg>}>}|null
+     */
+    private function typeTokenConversion(string $type, ?string $tokenArgs): ?array
+    {
+        if ($tokenArgs === null) {
+            return ['factoryArgs' => $type === 'email' ? $this->withoutAppEmailDefaultsArgs() : [], 'chainOps' => []];
+        }
+
+        if ($type !== 'email') {
+            return null;
+        }
+
+        $chainOps = [];
+
+        foreach (explode(',', $tokenArgs) as $mode) {
+            $op = match ($mode) {
+                'rfc' => ['name' => 'rfcCompliant', 'args' => []],
+                'strict' => ['name' => 'strict', 'args' => []],
+                'dns' => ['name' => 'validateMxRecord', 'args' => []],
+                'spoof' => ['name' => 'preventSpoofing', 'args' => []],
+                'filter' => ['name' => 'withNativeValidation', 'args' => []],
+                'filter_unicode' => ['name' => 'withNativeValidation', 'args' => [new Arg(new ConstFetch(new Name('true')), name: new Identifier('allowUnicode'))]],
+                default => null,
+            };
+
+            if ($op === null) {
+                return null;
+            }
+
+            $chainOps[] = $op;
+        }
+
+        return ['factoryArgs' => [], 'chainOps' => $chainOps];
+    }
+
+    /**
+     * False when the first type token among the rule parts has arguments
+     * that `typeTokenConversion()` cannot convert, so the converter keeps the
+     * rule as it is.
+     *
+     * @param  list<string>  $ruleParts
+     */
+    private function typeTokenIsConvertible(array $ruleParts): bool
+    {
+        foreach ($ruleParts as $rulePart) {
+            $parsed = $this->parseRulePart($rulePart);
+            $type = self::TYPE_MAP[$this->normalizeRuleName($parsed['name'])] ?? null;
+
+            if ($type !== null) {
+                return $this->typeTokenConversion($type, $parsed['args']) !== null;
+            }
+        }
+
+        return true;
+    }
+
+    private function buildTypeTokenRoot(string $type, ?string $tokenArgs): ?Expr
+    {
+        $conversion = $this->typeTokenConversion($type, $tokenArgs);
+
+        if ($conversion === null) {
+            return null;
+        }
+
+        $expr = $this->buildFluentRuleFactory($type, $conversion['factoryArgs']);
+
+        foreach ($conversion['chainOps'] as $op) {
+            $expr = $this->withFluentNewline(new MethodCall($expr, new Identifier($op['name']), $op['args']));
+        }
+
+        return $expr;
+    }
+
+    /**
      * Rule names that take a single verbatim string argument.
      *
      * @var list<string>
@@ -1558,6 +1651,7 @@ trait ConvertsValidationRuleStrings
         }
 
         $type = null;
+        $typeArgs = null;
         $modifiers = [];
 
         foreach ($parts as $part) {
@@ -1566,6 +1660,7 @@ trait ConvertsValidationRuleStrings
 
             if ($type === null && isset(self::TYPE_MAP[$normalized])) {
                 $type = self::TYPE_MAP[$normalized];
+                $typeArgs = $parsed['args'];
 
                 continue;
             }
@@ -1579,9 +1674,7 @@ trait ConvertsValidationRuleStrings
         // use the inferred type as the factory base. This lets `max:2000`
         // resolve to a real method call on StringRule rather than falling
         // through to the ->rule('max:2000') escape hatch.
-        if ($type === null && $propertyTypeHint !== null && isset(self::TYPE_MAP[$propertyTypeHint])) {
-            $type = self::TYPE_MAP[$propertyTypeHint];
-        }
+        $type ??= self::TYPE_MAP[$propertyTypeHint ?? ''] ?? null;
 
         // 1.19.0 sibling-token promotion: `'string|ipv4'` → `ipv4` factory
         // (not `string()->ipv4()`). Run before resolveType + buildFactory
@@ -1602,7 +1695,11 @@ trait ConvertsValidationRuleStrings
         }
 
         $resolvedType = $type ?? 'field';
-        $expr = $this->buildFluentRuleFactory($resolvedType);
+        $expr = $this->buildTypeTokenRoot($resolvedType, $typeArgs);
+
+        if (! $expr instanceof Expr) {
+            return null;
+        }
 
         foreach ($modifiers as $modifier) {
             if (! $this->isModifierValidForType($resolvedType, $modifier['name'])) {

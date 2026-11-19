@@ -333,6 +333,15 @@ trait ConvertsValidationRuleArrays
                     $type = self::TYPE_MAP[$normalized];
                     $typeIndex = $index;
                     $typeKind = 'string_token';
+                    $tokenConversion = $this->typeTokenConversion($type, $parsed['args']);
+
+                    if ($tokenConversion === null) {
+                        return null;
+                    }
+
+                    $typeFactoryArgs = $tokenConversion['factoryArgs'];
+                    $typeChainOps = $tokenConversion['chainOps'];
+
                     break;
                 }
 
@@ -357,6 +366,12 @@ trait ConvertsValidationRuleArrays
                 $typeIndex = $index;
                 $typeKind = 'chain';
                 $typeChainOps = $factoryResult['chainOps'];
+
+                // Rule::email() is `new Email`, without the app defaults.
+                if ($type === 'email') {
+                    $typeFactoryArgs = $this->withoutAppEmailDefaultsArgs();
+                }
+
                 break;
             }
 
@@ -367,6 +382,11 @@ trait ConvertsValidationRuleArrays
                 $typeIndex = $index;
                 $typeKind = 'chain';
                 $typeChainOps = $emailResult['chainOps'];
+
+                if (! $emailResult['appliesAppDefaults']) {
+                    $typeFactoryArgs = $this->withoutAppEmailDefaultsArgs();
+                }
+
                 break;
             }
         }
@@ -887,7 +907,10 @@ trait ConvertsValidationRuleArrays
      * Detect if an expression is an Email rule object and extract chain ops.
      * Matches: `Email::default()`, `new Email()`, `Email::default()->strict()`, `(new Email())->rfcCompliant()`
      *
-     * @return array{chainOps: list<array{name: string, args: list<Arg>}>}|null
+     * `appliesAppDefaults` is true only for `Email::default()` and its static
+     * shortcuts, which read `Email::defaults()`; `new Email()` does not.
+     *
+     * @return array{chainOps: list<array{name: string, args: list<Arg>}>, appliesAppDefaults: bool}|null
      */
     private function detectEmailType(Expr $expr): ?array
     {
@@ -927,7 +950,7 @@ trait ConvertsValidationRuleArrays
                 default => [],
             };
 
-            return ['chainOps' => [...$chainOps, ...$chainCalls]];
+            return ['chainOps' => [...$chainOps, ...$chainCalls], 'appliesAppDefaults' => true];
         }
 
         if ($root instanceof New_) {
@@ -939,7 +962,7 @@ trait ConvertsValidationRuleArrays
                 return null;
             }
 
-            return ['chainOps' => $chainCalls];
+            return ['chainOps' => $chainCalls, 'appliesAppDefaults' => false];
         }
 
         return null;

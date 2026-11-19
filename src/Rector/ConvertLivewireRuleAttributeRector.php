@@ -75,7 +75,7 @@ use Symplify\RuleDocGenerator\ValueObject\RuleDefinition;
  *         protected function rules(): array
  *         {
  *             return [
- *                 'email' => FluentRule::email()->nullable()->label('email address'),
+ *                 'email' => FluentRule::email(defaults: false)->nullable()->label('email address'),
  *             ];
  *         }
  *     }
@@ -218,7 +218,7 @@ class Settings extends Component
     protected function rules(): array
     {
         return [
-            'email' => FluentRule::email()->nullable()->label('email address'),
+            'email' => FluentRule::email(defaults: false)->nullable()->label('email address'),
         ];
     }
 }
@@ -1120,6 +1120,7 @@ CODE_SAMPLE
      * trait's shared convertStringToFluentRule() helper, called directly
      * from convertAttributeToFluentExpr().
      */
+    // @phpstan-ignore method.unusedParameter (the trait's abstract signature declares it)
     private function processValidationRules(Array_ $array): bool
     {
         return false;

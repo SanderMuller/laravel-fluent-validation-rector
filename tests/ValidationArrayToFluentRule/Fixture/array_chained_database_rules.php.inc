@@ -31,7 +31,7 @@ class ChainedDatabaseRuleFormRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email' => FluentRule::email()
+            'email' => FluentRule::email(defaults: false)
                 ->required()
                 ->unique('users', 'email', fn($rule) => $rule->ignore($this->user()->id)),
             'team_id' => FluentRule::integer()

@@ -29,7 +29,7 @@ class ArraySortedImportInsertionRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'email' => FluentRule::email()
+            'email' => FluentRule::email(defaults: false)
                 ->required(),
         ];
     }

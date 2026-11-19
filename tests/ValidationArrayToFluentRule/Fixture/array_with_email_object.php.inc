@@ -33,7 +33,7 @@ class EmailObjectFormRequest extends FormRequest
         return [
             'primary' => FluentRule::email()
                 ->required(),
-            'secondary' => FluentRule::email()
+            'secondary' => FluentRule::email(defaults: false)
                 ->nullable(),
             'strict' => FluentRule::email()
                 ->required()

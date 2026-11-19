@@ -366,6 +366,6 @@ CODE_SAMPLE
 
     private function addTraitToClass(Class_ $class): void
     {
-        $this->insertTraitUseInClass($class, 'HasFluentRules');
+        $this->insertTraitUseInClass($class, HasFluentRules::class);
     }
 }

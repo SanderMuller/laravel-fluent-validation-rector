@@ -88,7 +88,7 @@ class StorePostRequest extends FormRequest
     {
         return [
             'name' => FluentRule::string()->required()->max(255),
-            'email' => FluentRule::email()->required(),
+            'email' => FluentRule::email(defaults: false)->required(),
             'age' => FluentRule::numeric()->nullable()->min(0)->max(120),
         ];
     }
