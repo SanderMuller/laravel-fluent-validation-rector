@@ -2,6 +2,29 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 1.12.0 - 2026-11-19
+
+<!-- verified-sha: dcbfe4f72750f0df190428020a056dc5e8dce0f5 -->
+### Added
+
+- A new opt-in set, `FluentValidationSetList::VALIDATED_INPUT`, that is not part of `ALL`. Its rules rewrite reads of `SanderMuller\FluentValidation\ValidatedInput`:
+  - `UseValidatedInputNullableStringRector` turns `$safe->filled('k') ? $safe->string('k')->value() : $fallback` into `$safe->nullableString('k', $fallback)`. It also accepts `str()`, `->toString()`, a `(string)` cast, `strval()`, and the inverted `! filled()` / `isNotFilled()` forms. It needs laravel-fluent-validation 1.41.0 or later.
+  - `UseValidatedInputFileRector` turns `$safe->input('k') instanceof UploadedFile ? $safe->input('k') : null` into `$safe->file('k')`. It needs laravel-fluent-validation 1.40.0 or later.
+  
+
+### Changed
+
+- A plain `email` rule, `Rule::email()` and `new Email()` now convert to `FluentRule::email(defaults: false)`. These rules do not apply the app's `Email::defaults()`, and `FluentRule::email()` does, so the converted rule now validates the same as the original rule. `Email::default()` still converts to `FluentRule::email()`.
+
+### Fixed
+
+- Email modes are kept: `email:rfc,dns` converts to `FluentRule::email()->rfcCompliant()->validateMxRecord()`, and `strict`, `spoof`, `filter` and `filter_unicode` map the same way. Before, the converters dropped them.
+- A type rule with arguments that have no fluent equivalent, such as `array:name,email` or an unknown email mode, stays unconverted. Before, the converters dropped the arguments.
+- On Rector 2.8, `AddHasFluentRulesTraitRector` no longer inserts the trait on every pass and hangs, and the `FluentRule` import is no longer added twice. The import order is now the same on every supported Rector version.
+- Livewire message migration takes the message from the `#[Validate]` attribute that converts, also when an earlier attribute stays unconverted.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/1.11.1...1.12.0
+
 ## 1.11.1 - 2026-07-16
 
 <!-- verified-sha: 818c9ab26235638afe8450cd7051997d7780e63b -->
@@ -117,6 +140,7 @@ shadows) the renamed base `schema()`.
   
   
   
+  
   ```
   The line breaks are stamped only on the calls a rule creates, so calls
   already present inline in your source stay inline. Consumers no longer need a
@@ -170,6 +194,7 @@ shadows) the renamed base `schema()`.
   'items' => FluentRule::array()->nullable()->each(
       FluentRule::string()->nullable()->max(255)
   ),
+  
   
   
   
@@ -261,6 +286,7 @@ Performance release. The rule pipeline does substantially less work per file, an
   
   
   
+  
   ```
 - A literal-`null` condition is left untouched. `Rule::requiredIf(null)` is valid Laravel (the condition normalizes to `false`), but the native fluent method is typed `Closure|bool|string`, so rewriting to `->requiredIf(null)` would `TypeError` at runtime. The wrapper is preserved instead.
   
@@ -286,6 +312,7 @@ A multi-argument facade conditional (not valid Laravel usage) is also left as-is
   
   // after
   'role' => FluentRule::field()->nullable()->requiredIf(fn () => $this->isAdmin()),
+  
   
   
   
@@ -358,6 +385,7 @@ FluentRule::field('Agree to TOS')->required()->rule('accepted')
 // After
 FluentRule::accepted()->required()
 FluentRule::accepted('Agree to TOS')->required()
+
 
 
 
