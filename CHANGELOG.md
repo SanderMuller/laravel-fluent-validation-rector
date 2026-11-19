@@ -2,18 +2,34 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 1.14.0 - 2026-11-19
+
+<!-- verified-sha: d122f7bd6d46e684a496b99585962af011c9cbfa -->
+### Added
+
+- `PromoteFieldFactoryRector` turns `field()` with a type token into the typed factory: `FluentRule::field()->nullable()->rule('array')` becomes `FluentRule::array()->nullable()`. This works for `string`, `array`, `boolean` and `numeric`, and `->rule('numeric')->rule('integer')` becomes `integer()`. The compiled rules stay the same. The rule leaves a chain alone when the result could differ, for example when another constraint comes before the token.
+
+### Fixed
+
+- `ConvertToFluentSchemaRector` no longer renames `rules()` to `schema()` when an ancestor declares its own `rules()` that does not convert, for example an abstract base with `rules(): array { return []; }`. After such a rename, `$request->rules()` returned the ancestor's rules, so a test or static-analysis rule that calls `rules()` directly saw the wrong rules. Request validation itself was not affected. The class is now skipped, with an actionable skip-log entry.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/1.13.0...1.14.0
+
 ## 1.13.0 - 2026-11-19
 
 <!-- verified-sha: f7a076f6770883b5dac118a8fc1c28f02d3b3bef -->
 ### Added
 
 - Three new rules in the opt-in `VALIDATED_INPUT` set:
+  
   - `UseValidatedInputNullableIntegerRector` turns `$safe->filled('k') ? $safe->integer('k') : $fallback` into `$safe->nullableInteger('k', $fallback)`. It needs laravel-fluent-validation 1.43.0 or later.
   - `UseValidatedInputDateRector` turns `$safe->filled('k') ? $safe->date('k') : null` into `$safe->date('k')`, because `date()` already returns null for a blank field. It also accepts the inverted `isNotFilled()` form.
   - `UseValidatedInputEnumRector` turns `Status::tryFrom($safe->string('k')->value())` into `$safe->enum('k', Status::class)`, for a string-backed enum with no blank or numeric case value. For a float with a fraction, `enum()` also logs a deprecation, and for an array it throws a `TypeError` where the original returned null. Enum, `string` and `in` validation reject both values.
   
 - The date and enum rules work on Laravel's own `ValidatedInput` and on a `Request`, so they need no laravel-fluent-validation upgrade.
+  
 - On Laravel 12, `FormRequest::safe()` is typed `ValidatedInput|array`, so the `VALIDATED_INPUT` rules skip reads through `$request->safe()`. They fire on Laravel 13, or with `HasFluentRules` from laravel-fluent-validation 1.40.0. The docs now say so.
+  
 
 ### What's Changed
 
@@ -167,6 +183,7 @@ shadows) the renamed base `schema()`.
   
   
   
+  
   ```
   The line breaks are stamped only on the calls a rule creates, so calls
   already present inline in your source stay inline. Consumers no longer need a
@@ -220,6 +237,7 @@ shadows) the renamed base `schema()`.
   'items' => FluentRule::array()->nullable()->each(
       FluentRule::string()->nullable()->max(255)
   ),
+  
   
   
   
@@ -315,6 +333,7 @@ Performance release. The rule pipeline does substantially less work per file, an
   
   
   
+  
   ```
 - A literal-`null` condition is left untouched. `Rule::requiredIf(null)` is valid Laravel (the condition normalizes to `false`), but the native fluent method is typed `Closure|bool|string`, so rewriting to `->requiredIf(null)` would `TypeError` at runtime. The wrapper is preserved instead.
   
@@ -340,6 +359,7 @@ A multi-argument facade conditional (not valid Laravel usage) is also left as-is
   
   // after
   'role' => FluentRule::field()->nullable()->requiredIf(fn () => $this->isAdmin()),
+  
   
   
   
@@ -414,6 +434,7 @@ FluentRule::field('Agree to TOS')->required()->rule('accepted')
 // After
 FluentRule::accepted()->required()
 FluentRule::accepted('Agree to TOS')->required()
+
 
 
 
