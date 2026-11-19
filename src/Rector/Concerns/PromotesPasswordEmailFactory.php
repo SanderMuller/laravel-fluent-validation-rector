@@ -20,6 +20,7 @@ use ReflectionClass;
 use ReflectionMethod;
 use SanderMuller\FluentValidation\Rules\EmailRule;
 use SanderMuller\FluentValidation\Rules\PasswordRule;
+use SanderMuller\FluentValidationRector\Internal\PresenceConditionalOrder;
 use WeakMap;
 
 /**
@@ -67,11 +68,12 @@ trait PromotesPasswordEmailFactory
     /**
      * Conditionals that add a rule object (not a rule string) when the first
      * argument is a closure or a bool. `StringRule` compiles that object
-     * before the embedded Password / Email object, `PasswordRule` and
-     * `EmailRule` compile it after. For `excludeIf(fn () => true)` the
-     * Password or email check then runs before the exclude and fails a value
-     * that `string()` skipped. Promotion is only safe when the first argument
-     * is a string literal (a field name).
+     * before the embedded Password / Email object. Up to laravel-fluent-
+     * validation 1.45.0, `PasswordRule` and `EmailRule` compiled it after.
+     * For `excludeIf(fn () => true)` the Password or email check then ran
+     * before the exclude and failed a value that `string()` skipped. On such
+     * a version promotion is only safe when the first argument is a string
+     * literal (a field name); `PresenceConditionalOrder` detects the version.
      *
      * @var array<class-string, list<string>>
      */
@@ -263,6 +265,12 @@ trait PromotesPasswordEmailFactory
     private function addsConditionalRuleObject(MethodCall $hop, string $targetClass, string $methodName): bool
     {
         if (! in_array($methodName, self::OBJECT_CONDITIONAL_MODIFIERS[$targetClass] ?? [], true)) {
+            return false;
+        }
+
+        // laravel-fluent-validation 1.45.1+ compiles the conditional first in
+        // password() / email() too, so the order matches string() again.
+        if (PresenceConditionalOrder::runsFirst($targetClass === PasswordRule::class ? 'password' : 'email')) {
             return false;
         }
 

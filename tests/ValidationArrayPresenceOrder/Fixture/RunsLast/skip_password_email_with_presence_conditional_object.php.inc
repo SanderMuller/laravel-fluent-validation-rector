@@ -1,6 +1,6 @@
 <?php
 
-namespace SanderMuller\FluentValidationRector\Tests\ValidationArrayToFluentRule\Fixture;
+namespace SanderMuller\FluentValidationRector\Tests\ValidationArrayPresenceOrder\Fixture\RunsLast;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -8,9 +8,9 @@ use Illuminate\Validation\Rules\Email;
 use Illuminate\Validation\Rules\ExcludeIf;
 use Illuminate\Validation\Rules\Password;
 
-// password() and email() compile a closure or bool presence conditional
-// after the Password / Email rule, so an exclude would no longer stop that
-// check. These arrays stay as they are.
+// Up to laravel-fluent-validation 1.45.0, password() and email() compile a
+// closure or bool presence conditional after the Password / Email rule, so
+// an exclude would no longer stop that check. These arrays stay as they are.
 
 class PresenceConditionalPasswordEmailRequest extends FormRequest
 {

@@ -47,6 +47,7 @@ use PhpParser\Node\Scalar\Int_;
 use PhpParser\Node\Scalar\String_;
 use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\Rector\AbstractRector;
+use SanderMuller\FluentValidationRector\Internal\PresenceConditionalOrder;
 
 /**
  * Array-form validation rule conversion: turns `['required', 'string', 'max:255']`
@@ -434,11 +435,14 @@ trait ConvertsValidationRuleArrays
 
         $type = $detection['type'];
 
-        // password() and email() compile a presence conditional rule object
-        // after their Password / Email rule, while the array (and every other
-        // factory) runs it first. A closure `excludeIf` would then no longer
-        // stop the Password or email check. Leave such arrays unconverted.
-        if (($type === 'password' || $type === 'email') && $this->hasPresenceConditionalObject($rulesArray)) {
+        // Up to laravel-fluent-validation 1.45.0, password() and email()
+        // compiled a presence conditional rule object after their Password /
+        // Email rule, while the array (and every other factory) runs it first.
+        // A closure `excludeIf` then no longer stopped the Password or email
+        // check. On such a version, leave these arrays unconverted.
+        if (($type === 'password' || $type === 'email')
+            && ! PresenceConditionalOrder::runsFirst($type)
+            && $this->hasPresenceConditionalObject($rulesArray)) {
             return null;
         }
 
