@@ -13,6 +13,7 @@ Promotes `FluentRule::field()` to a typed factory when every `->rule(...)` wrapp
 
 - `string()->rule(Password::default())` / `->rule(Email::default())` → `FluentRule::password()` / `::email()`.
 - `field()->required()->rule('accepted')` → `FluentRule::accepted()->required()`, and the `declined` analog: those factories seed the constraint in their constructors, so the `->rule()` hop is spliced out. Promotion to `boolean()` stays blocked, because boolean's implicit constraint rejects `"yes"` / `"on"` / `"true"` and `"no"` / `"off"` / `"false"`.
+- A type token on `field()` → the typed factory: `field()->nullable()->rule('array')` becomes `FluentRule::array()->nullable()`. `string`, `array`, `boolean` and `numeric` map one to one, and `->rule('numeric')->rule('integer')` becomes `integer()`. The factory seeds the same constraint, so the hop is removed and the compiled rules stay the same. Only presence modifiers (`required`, `nullable`, `excludeIf()`, …), `label()` or `message()` may come before the token, because the typed factory puts its type first. `integer` alone stays, because `integer()` also adds `numeric`.
 - **Bails on** conditionable hops, chains whose compatible-class intersection is not a singleton, and `accepted` / `declined` chains carrying further `->rule(...)` payloads.
 
 </details>

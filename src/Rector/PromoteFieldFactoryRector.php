@@ -22,6 +22,7 @@ use SanderMuller\FluentValidation\Rules\PasswordRule;
 use SanderMuller\FluentValidation\Rules\StringRule;
 use SanderMuller\FluentValidationRector\Internal\RunSummary;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ParsesRulePayloads;
+use SanderMuller\FluentValidationRector\Rector\Concerns\PromotesFieldTypeToken;
 use SanderMuller\FluentValidationRector\Rector\Concerns\PromotesPasswordEmailFactory;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ResolvesFluentFactoryRoot;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ShortCircuitsIrrelevantFiles;
@@ -76,6 +77,7 @@ use WeakMap;
 final class PromoteFieldFactoryRector extends AbstractRector implements DocumentedRuleInterface
 {
     use ParsesRulePayloads;
+    use PromotesFieldTypeToken;
     use PromotesPasswordEmailFactory;
     use ResolvesFluentFactoryRoot;
     use ShortCircuitsIrrelevantFiles;
@@ -307,10 +309,15 @@ CODE_SAMPLE
             return null;
         }
 
-        $dedicated = $this->applyDedicatedRulePromotion($root, $node, $ruleCalls);
+        if (! isset($this->dedicatedRuleTriggerVisited[$root])) {
+            $this->dedicatedRuleTriggerVisited[$root] = true;
 
-        if ($dedicated instanceof Node) {
-            return $dedicated;
+            $dedicated = $this->applyDedicatedRulePromotion($root, $node, $ruleCalls)
+                ?? $this->applyTypeTokenPromotion($root, $node, self::LABEL_FIRST_TARGETS, self::CONDITIONABLE_HOPS);
+
+            if ($dedicated instanceof Node) {
+                return $dedicated;
+            }
         }
 
         $compatIntersection = $this->intersectCompatibleBuilders($ruleCalls);
@@ -384,12 +391,6 @@ CODE_SAMPLE
      */
     private function applyDedicatedRulePromotion(StaticCall|MethodCall $root, MethodCall $node, array $ruleCalls): ?Node
     {
-        if (isset($this->dedicatedRuleTriggerVisited[$root])) {
-            return null;
-        }
-
-        $this->dedicatedRuleTriggerVisited[$root] = true;
-
         if (count($ruleCalls) !== 1) {
             return null;
         }
