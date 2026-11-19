@@ -1,5 +1,6 @@
 <?php declare(strict_types=1);
 
+use Composer\InstalledVersions;
 use SanderMuller\FluentValidation\FluentRule;
 
 /**
@@ -48,8 +49,10 @@ return [
         'sort_order non-integer' => [['title' => 'X', 'sort_order' => 'not-a-number']],
         'sort_order negative' => [['title' => 'X', 'sort_order' => -1]],
     ],
-    // With a list payload, RuleSet::prepare() expands the top-level `*` key of
-    // rules_after to an integer key, and extractObjectMetadata() throws a
-    // TypeError. rules_before prepares without error.
-    'skip_compiled' => "RuleSet::prepare() throws a TypeError for rules_after's top-level `*` key on a list payload.",
+    // Before laravel-fluent-validation 1.45.2, RuleSet::prepare() expands the
+    // top-level `*` key of rules_after to an integer key on a list payload,
+    // and extractObjectMetadata() throws a TypeError.
+    ...(version_compare(InstalledVersions::getVersion('sandermuller/laravel-fluent-validation') ?? '0', '1.45.2', '<')
+        ? ['skip_compiled' => "RuleSet::prepare() before 1.45.2 throws a TypeError for rules_after's top-level `*` key on a list payload."]
+        : []),
 ];
