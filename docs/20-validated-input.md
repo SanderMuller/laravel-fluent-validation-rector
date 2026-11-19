@@ -61,6 +61,10 @@ $avatar = $safe->file('avatar');
 
 The result is the same for every value. The inverted `! ($safe->input('avatar') instanceof UploadedFile) ? null : $safe->input('avatar')` is accepted too. A non-null fallback becomes `$safe->file('avatar') ?? $fallback`. That form gives the same result for any fallback, reads the fallback only when there is no file, and keeps the static type. `file('avatar', $fallback)` would return null for a fallback that is not a file. The class must be `Illuminate\Http\UploadedFile`; Symfony's `UploadedFile` is left alone.
 
+## Receiver type on Laravel 12
+
+The rules read the receiver's type from PHPStan. Laravel 12 types `FormRequest::safe()` as `ValidatedInput|array`, so `$safe = $request->safe()` is not narrowed, and the rules leave its reads alone. Laravel 13 and `HasFluentRules` from laravel-fluent-validation 1.40.0 type `safe()` without arguments as `ValidatedInput`.
+
 ## `UseValidatedInputDateRector`
 
 ```php
