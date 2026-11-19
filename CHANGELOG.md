@@ -2,6 +2,16 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 1.15.1 - 2026-11-19
+
+<!-- verified-sha: 1c3e1f942176069a24c6ddddf71c5a11c286e9bb -->
+### Fixed
+
+- `PromoteFieldFactoryRector` no longer promotes an email chain that has `requiredIf()`, `requiredUnless()`, `excludeIf()`, `excludeUnless()`, `prohibitedIf()` or `prohibitedUnless()` with a closure or bool argument. `email()` runs those conditions after the email check, so `string()->excludeIf(fn () => true)->rule(Email::default())` became a chain that failed a value the original excluded. 1.15.0 fixed the same case for `password()`.
+- `ValidationArrayToFluentRuleRector` no longer converts a rules array to `password()` or `email()` when the array holds one of these conditionals, as `Rule::excludeIf(...)` or `new ExcludeIf(...)`. For example, `[Rule::excludeIf(fn () => true), 'required', Password::default()]` became a chain that failed values the array excluded. These arrays now stay as they are.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/1.15.0...1.15.1
+
 ## 1.15.0 - 2026-11-19
 
 <!-- verified-sha: 6fb4bd956dfc7b53a341f6f1b8f93a1335e0e926 -->
@@ -198,6 +208,7 @@ shadows) the renamed base `schema()`.
   
   
   
+  
   ```
   The line breaks are stamped only on the calls a rule creates, so calls
   already present inline in your source stay inline. Consumers no longer need a
@@ -251,6 +262,7 @@ shadows) the renamed base `schema()`.
   'items' => FluentRule::array()->nullable()->each(
       FluentRule::string()->nullable()->max(255)
   ),
+  
   
   
   
@@ -350,6 +362,7 @@ Performance release. The rule pipeline does substantially less work per file, an
   
   
   
+  
   ```
 - A literal-`null` condition is left untouched. `Rule::requiredIf(null)` is valid Laravel (the condition normalizes to `false`), but the native fluent method is typed `Closure|bool|string`, so rewriting to `->requiredIf(null)` would `TypeError` at runtime. The wrapper is preserved instead.
   
@@ -375,6 +388,7 @@ A multi-argument facade conditional (not valid Laravel usage) is also left as-is
   
   // after
   'role' => FluentRule::field()->nullable()->requiredIf(fn () => $this->isAdmin()),
+  
   
   
   
@@ -451,6 +465,7 @@ FluentRule::field('Agree to TOS')->required()->rule('accepted')
 // After
 FluentRule::accepted()->required()
 FluentRule::accepted('Agree to TOS')->required()
+
 
 
 
