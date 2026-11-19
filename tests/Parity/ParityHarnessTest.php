@@ -1,6 +1,7 @@
 <?php declare(strict_types=1);
 
 use Illuminate\Support\Facades\App;
+use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidationRector\Tests\Parity\ParityHarness;
 use SanderMuller\FluentValidationRector\Tests\Parity\ParityType;
 
@@ -111,4 +112,26 @@ test('locale is pinned to en regardless of pre-call setLocale', function (): voi
     );
 
     expect(App::getLocale())->toBe('en');
+});
+
+test('compiled mode applies the labels that RuleSet::prepare() extracts', function (): void {
+    // A label on `y` changes the :values text in the error on `x` only when
+    // the rules are prepared the way HasFluentRules prepares them. A
+    // self-validating object does not pass its label to other fields.
+    $labelled = [
+        'x' => FluentRule::string()->requiredWith('y'),
+        'y' => FluentRule::string()->label('Backup value'),
+    ];
+    $unlabelled = [
+        'x' => FluentRule::string()->requiredWith('y'),
+        'y' => FluentRule::string(),
+    ];
+    $payload = ['y' => 'a'];
+
+    $object = ParityHarness::compare($unlabelled, $labelled, $payload);
+    $compiled = ParityHarness::compare($unlabelled, $labelled, $payload, compiled: true);
+
+    expect($object->type)->toBe(ParityType::Match)
+        ->and($compiled->type)->toBe(ParityType::BothRejectDifferentMessages)
+        ->and($compiled->afterErrors)->toBe(['x' => ['The x field is required when Backup value is present.']]);
 });
