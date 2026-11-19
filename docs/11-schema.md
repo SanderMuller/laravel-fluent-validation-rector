@@ -48,6 +48,7 @@ public function schema(FluentSchema $rules): array
 - A class that already declares `schema()`, since renaming would fatal on the duplicate.
 - A `rules()` with a non-standard signature: parameters, non-public, or static.
 - A `rules()` calling `parent::rules()` whose parent will not provably convert: abstract without the attribute, no trait, or an unresolvable vendor base.
+- **An ancestor that declares its own `rules()` and does not convert**, for example a base with `rules(): array { return []; }`. After the rename, `$request->rules()` would return the ancestor's rules, so a test or static-analysis rule that calls `rules()` directly would see the wrong rules. Request validation itself still works. Skip-logged as actionable. Fix the ancestor first: remove an empty `rules()`, or add `#[FluentRules]` to the `rules()` of an abstract base that builds `FluentRule` chains.
 - A self-referential `rules()` call in a method other than `rules()`, which the rename would strand with no builder in scope.
 - A chain built in a scope the builder cannot be threaded into: an anonymous class or a nested named function. When such a chain sits beside a `parent::rules()` call the bail is skip-logged rather than silent, since leaving it would strand once the base converts.
 

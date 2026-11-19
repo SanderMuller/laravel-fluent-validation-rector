@@ -15,7 +15,6 @@ use PhpParser\Node\Stmt\Function_;
 use PhpParser\Node\Stmt\Namespace_;
 use PhpParser\NodeVisitor;
 use Rector\Rector\AbstractRector;
-use ReflectionClass;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidation\FluentRules;
 use SanderMuller\FluentValidation\FluentSchema;
@@ -26,6 +25,7 @@ use SanderMuller\FluentValidationRector\Rector\Concerns\InspectsReflectedRuleSur
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesNamespaceImports;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ParsesParentRulesMethod;
+use SanderMuller\FluentValidationRector\Rector\Concerns\ProvesAncestorSchemaConversion;
 use SanderMuller\FluentValidationRector\Rector\Concerns\RewritesRuleMethodCalls;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ShortCircuitsIrrelevantFiles;
 use SanderMuller\FluentValidationRector\Tests\ConvertToFluentSchema\ConvertToFluentSchemaRectorTest;
@@ -74,6 +74,7 @@ final class ConvertToFluentSchemaRector extends AbstractRector implements Docume
     use LogsSkipReasons;
     use ManagesNamespaceImports;
     use ParsesParentRulesMethod;
+    use ProvesAncestorSchemaConversion;
     use RewritesRuleMethodCalls;
     use ShortCircuitsIrrelevantFiles;
 
@@ -350,6 +351,23 @@ CODE_SAMPLE
             return false;
         }
 
+        // After the rename, `$request->rules()` no longer finds this class's
+        // method. It finds the nearest ancestor's rules(), and only the
+        // HasFluentRules fallback re-exposes schema(). An ancestor that declares
+        // its own rules() and keeps it (an empty base `return [];`, an abstract
+        // base without #[FluentRules], string rules) would answer instead, so a
+        // direct rules() caller — a test, a static-analysis rule — gets the
+        // wrong rules. HTTP validation still works, because the validator merges
+        // schema() with rules(). Convert only when that ancestor converts too.
+        if (! $this->rulesMethodHasFluentRulesAttribute($method) && $this->inheritedRulesWouldShadowSchema($class)) {
+            $this->logSkip(
+                $class,
+                'an ancestor declares its own rules() that does not convert to schema() — after the rename, $request->rules() would return the ancestor\'s rules instead of this class\'s. Fix the ancestor first (remove an empty rules(), or add #[FluentRules] to the rules() of an abstract base that builds FluentRule chains), or leave this class on rules().',
+            );
+
+            return false;
+        }
+
         // A `parent::rules()` call is rewritten to `parent::schema($builder)`
         // below, which is correct ONLY when the parent itself converts to
         // schema(). Rector processes one file at a time and can't see the
@@ -530,138 +548,6 @@ CODE_SAMPLE
         });
 
         return $hasConvertibleCall && ! $unsafe;
-    }
-
-    /**
-     * Whether the class `parent::rules()` resolves to will itself be renamed to
-     * schema(), so rewriting the child's call to `parent::schema()` lands on a
-     * real method. That holds only when the WHOLE ancestor rules()-chain
-     * converts, so this walks it: for each ancestor that declares rules() it
-     * re-applies every converter gate (see {@see reflectedRulesClassConverts()}).
-     * A level carrying #[FluentRules], or a chain root whose rules() doesn't call
-     * parent::rules(), terminates the walk as converting; a level that itself
-     * calls parent::rules() converts only if ITS parent does, so the walk
-     * continues upward. Fails closed on any unresolvable or non-converting link.
-     * Native reflection resolves each ancestor FQN (reliable, unlike a parsed
-     * node's un-resolved `extends` name); the rules() body is parsed per level.
-     */
-    private function parentSchemaConversionIsProvable(Class_ $class): bool
-    {
-        if (! $class->extends instanceof Name) {
-            return false;
-        }
-
-        $parentName = $this->getName($class->extends);
-
-        if ($parentName === null) {
-            return false;
-        }
-
-        // A base already converted to a schema(FluentSchema)-ONLY builder (an
-        // earlier SCHEMA pass renamed its rules() away, with no rules() resolvable
-        // anywhere on it) makes parent::schema() resolve and parent::rules() NOT.
-        // The child MUST rewrite or it strands — and this is the case the
-        // rules()-declarer walk below can't see (it strides past a base declaring
-        // no rules()), so a re-run over a partly-converted chain never converged
-        // the stranded child before this check. It's a concrete on-disk fact,
-        // independent of this run's file set. Every other shape (including a
-        // schema() base that still inherits a rules()) falls through to the walk,
-        // which converts the child only when the resolvable rules() owner itself
-        // converts and otherwise leaves parent::rules() intact.
-        if ($this->parentIsSchemaOnlyBuilder($parentName)) {
-            return true;
-        }
-
-        $seen = [];
-
-        while ($parentName !== null && class_exists($parentName)) {
-            $declaringClass = $this->findDeclaringClassForRules($parentName);
-
-            if (! $declaringClass instanceof ReflectionClass || isset($seen[$declaringClass->getName()])) {
-                return false;
-            }
-
-            $seen[$declaringClass->getName()] = true;
-
-            $verdict = $this->reflectedRulesClassConverts($declaringClass);
-
-            if ($verdict !== null) {
-                return $verdict;
-            }
-
-            // null: this level converts iff its own parent does — walk up.
-            $parent = $declaringClass->getParentClass();
-            $parentName = $parent === false ? null : $parent->getName();
-        }
-
-        return false;
-    }
-
-    /**
-     * Per-level verdict for a class that DECLARES rules(): true = converts
-     * (terminal), false = won't convert (terminal), null = converts iff its own
-     * parent does (the caller keeps walking upward).
-     *
-     * Applies the converter's gates — reflection for what reflection sees (uses
-     * HasFluentRules, no DECLARED schema() duplicate, public non-static
-     * parameterless rules(), abstract → #[FluentRules]) and a parse of the
-     * actual rules() body for `methodBodyIsSafeToInjectBuilder()`, which catches
-     * the string-only / dynamic / unsafe-closure bodies reflection can't.
-     *
-     * @param  ReflectionClass<object>  $declaringClass
-     */
-    private function reflectedRulesClassConverts(ReflectionClass $declaringClass): ?bool
-    {
-        $rulesMethod = $declaringClass->getMethod('rules');
-
-        if (! $this->reflectionUsesTrait($declaringClass, HasFluentRules::class)
-            || $this->reflectionClassDeclaresMethod($declaringClass, 'schema')
-            || ! $rulesMethod->isPublic()
-            || $rulesMethod->isStatic()
-            || $rulesMethod->getNumberOfParameters() !== 0) {
-            return false;
-        }
-
-        $optedIn = $this->reflectionMethodHasFluentRulesAttribute($rulesMethod);
-
-        if ($declaringClass->isAbstract() && ! $optedIn) {
-            return false;
-        }
-
-        $fileName = $declaringClass->getFileName();
-
-        if ($fileName === false) {
-            return false;
-        }
-
-        // Parse the whole class (name-resolved, so an aliased/FQN FluentRule
-        // import — `use ...FluentRule as R; R::string()` — still matches by FQN).
-        $parsedClass = $this->loadParentRulesClass($fileName, $declaringClass->getName(), resolveNames: true);
-
-        if (! $parsedClass instanceof Class_) {
-            return false;
-        }
-
-        $parsedMethod = $parsedClass->getMethod('rules');
-
-        // Body-level gates reflection can't see: the rules() body must be safe to
-        // inject a builder into, AND no OTHER method may call the class's own
-        // rules() — the converter bails such a class via
-        // hasSelfRulesCallOutsideMethod(), leaving it as rules().
-        if (! $parsedMethod instanceof ClassMethod
-            || ! $this->methodBodyIsSafeToInjectBuilder($parsedMethod)
-            || $this->hasSelfRulesCallOutsideMethod($parsedClass, $parsedMethod)) {
-            return false;
-        }
-
-        // #[FluentRules] asserts convertibility; a root that doesn't call
-        // parent::rules() converts on its own body. Otherwise defer to the
-        // parent (null → keep walking).
-        if ($optedIn || ! $this->bodyCallsParentRules($parsedMethod)) {
-            return true;
-        }
-
-        return null;
     }
 
     /**
