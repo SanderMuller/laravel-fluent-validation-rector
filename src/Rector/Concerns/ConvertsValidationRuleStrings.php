@@ -40,6 +40,7 @@ use Rector\PhpParser\Node\FileNode;
 use RecursiveCallbackFilterIterator;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
+use SanderMuller\FluentValidationRector\Internal\UnsafeParentsCache;
 use SplFileInfo;
 use UnexpectedValueException;
 
@@ -1221,11 +1222,12 @@ trait ConvertsValidationRuleStrings
 
     /**
      * Path to the shared temp file for cross-process unsafe parent tracking.
-     * Scoped to the current working directory to avoid collisions.
+     * Scoped to the current working directory to avoid collisions, and
+     * cleared per run by `RunSummary` (see `UnsafeParentsCache`).
      */
     private static function unsafeParentsCachePath(): string
     {
-        return sys_get_temp_dir() . '/rector-fluent-unsafe-parents-' . hash('xxh128', (string) getcwd()) . '.txt';
+        return UnsafeParentsCache::path();
     }
 
     /**

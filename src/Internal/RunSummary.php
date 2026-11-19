@@ -67,7 +67,15 @@ final class RunSummary
         // both files via the normal sentinel path.
         self::unlinkLogArtifacts();
 
+        // The unsafe-parents file is per-run state, shared by this run's
+        // workers. Entries left by an earlier run would keep a parent skipped
+        // after its child changed, so start clean (same before-spawn timing
+        // as the log cleanup above) and remove it again at shutdown.
+        UnsafeParentsCache::clear();
+
         register_shutdown_function(static function (): void {
+            UnsafeParentsCache::clear();
+
             // Always-emit on zero-entry runs (P2 #9 / GH #4 follow-up):
             // when verbose tier is on AND no worker wrote to the log,
             // create the file with the header so CI can diff it across
