@@ -57,10 +57,7 @@ jobs:
         run: vendor/bin/rector process --no-diffs
 
       - name: Run Pint
-        uses: aglipanci/laravel-pint-action@2.6
-        with:
-          configPath: pint.json
-          verboseMode: true
+        run: vendor/bin/pint -v --config pint.json
 
       - name: Commit changes
         uses: stefanzweifel/git-auto-commit-action@v7
