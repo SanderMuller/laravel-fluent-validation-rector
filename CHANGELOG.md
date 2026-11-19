@@ -2,6 +2,19 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 1.15.0 - 2026-11-19
+
+<!-- verified-sha: 6fb4bd956dfc7b53a341f6f1b8f93a1335e0e926 -->
+### Added
+
+- `PromoteFieldFactoryRector` now promotes `string()->...->rule(Password::default())` chains that use `different()` or `notIn()` to `FluentRule::password()`. This needs laravel-fluent-validation 1.45 or later, which adds both methods to `PasswordRule`. On older versions these chains stay on `string()`. A `->notIn()` after the `->rule(Password::...)` call also stays on `string()`, because `password()` checks `notIn` before the password rules.
+
+### Fixed
+
+- `PromoteFieldFactoryRector` no longer promotes a password chain that has `requiredIf()`, `requiredUnless()`, `excludeIf()`, `excludeUnless()`, `prohibitedIf()` or `prohibitedUnless()` with a closure or bool argument. `password()` runs those conditions after the password rules, so `string()->excludeIf(fn () => true)->rule(Password::default())` became a chain that failed a value the original excluded. With a field name as the first argument, the chain is still promoted.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/1.14.0...1.15.0
+
 ## 1.14.0 - 2026-11-19
 
 <!-- verified-sha: d122f7bd6d46e684a496b99585962af011c9cbfa -->
@@ -184,6 +197,7 @@ shadows) the renamed base `schema()`.
   
   
   
+  
   ```
   The line breaks are stamped only on the calls a rule creates, so calls
   already present inline in your source stay inline. Consumers no longer need a
@@ -237,6 +251,7 @@ shadows) the renamed base `schema()`.
   'items' => FluentRule::array()->nullable()->each(
       FluentRule::string()->nullable()->max(255)
   ),
+  
   
   
   
@@ -334,6 +349,7 @@ Performance release. The rule pipeline does substantially less work per file, an
   
   
   
+  
   ```
 - A literal-`null` condition is left untouched. `Rule::requiredIf(null)` is valid Laravel (the condition normalizes to `false`), but the native fluent method is typed `Closure|bool|string`, so rewriting to `->requiredIf(null)` would `TypeError` at runtime. The wrapper is preserved instead.
   
@@ -359,6 +375,7 @@ A multi-argument facade conditional (not valid Laravel usage) is also left as-is
   
   // after
   'role' => FluentRule::field()->nullable()->requiredIf(fn () => $this->isAdmin()),
+  
   
   
   
@@ -434,6 +451,7 @@ FluentRule::field('Agree to TOS')->required()->rule('accepted')
 // After
 FluentRule::accepted()->required()
 FluentRule::accepted('Agree to TOS')->required()
+
 
 
 
