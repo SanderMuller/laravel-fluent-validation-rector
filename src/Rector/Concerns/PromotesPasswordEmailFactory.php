@@ -67,16 +67,23 @@ trait PromotesPasswordEmailFactory
     /**
      * Conditionals that add a rule object (not a rule string) when the first
      * argument is a closure or a bool. `StringRule` compiles that object
-     * before the embedded Password object, `PasswordRule` compiles it after.
-     * For `excludeIf(fn () => true)` the Password check then runs before the
-     * exclude and fails a value that `string()` skipped. Promotion is only
-     * safe when the first argument is a string literal (a field name).
+     * before the embedded Password / Email object, `PasswordRule` and
+     * `EmailRule` compile it after. For `excludeIf(fn () => true)` the
+     * Password or email check then runs before the exclude and fails a value
+     * that `string()` skipped. Promotion is only safe when the first argument
+     * is a string literal (a field name).
      *
      * @var array<class-string, list<string>>
      */
     private const array OBJECT_CONDITIONAL_MODIFIERS = [
-        PasswordRule::class => ['requiredIf', 'requiredUnless', 'excludeIf', 'excludeUnless', 'prohibitedIf', 'prohibitedUnless'],
+        PasswordRule::class => self::OBJECT_CONDITIONALS,
+        EmailRule::class => self::OBJECT_CONDITIONALS,
     ];
+
+    /**
+     * @var list<string>
+     */
+    private const array OBJECT_CONDITIONALS = ['requiredIf', 'requiredUnless', 'excludeIf', 'excludeUnless', 'prohibitedIf', 'prohibitedUnless'];
 
     /**
      * Modifiers the target always compiles before its embedded rule object.
