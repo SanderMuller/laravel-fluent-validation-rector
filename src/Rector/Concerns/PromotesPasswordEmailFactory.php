@@ -13,6 +13,7 @@ use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Scalar\Int_;
+use PhpParser\Node\Scalar\String_;
 use Rector\NodeTypeResolver\Node\AttributeKey;
 use Rector\Rector\AbstractRector;
 use ReflectionClass;
@@ -61,6 +62,20 @@ trait PromotesPasswordEmailFactory
      */
     private const array DIVERGENT_MODIFIER_BLOCKLIST = [
         PasswordRule::class => ['min', 'max'],
+    ];
+
+    /**
+     * Conditionals that add a rule object (not a rule string) when the first
+     * argument is a closure or a bool. `StringRule` compiles that object
+     * before the embedded Password object, `PasswordRule` compiles it after.
+     * For `excludeIf(fn () => true)` the Password check then runs before the
+     * exclude and fails a value that `string()` skipped. Promotion is only
+     * safe when the first argument is a string literal (a field name).
+     *
+     * @var array<class-string, list<string>>
+     */
+    private const array OBJECT_CONDITIONAL_MODIFIERS = [
+        PasswordRule::class => ['requiredIf', 'requiredUnless', 'excludeIf', 'excludeUnless', 'prohibitedIf', 'prohibitedUnless'],
     ];
 
     /**
@@ -205,12 +220,29 @@ trait PromotesPasswordEmailFactory
                 return false;
             }
 
+            if ($this->addsConditionalRuleObject($hop, $targetClass, $methodName)) {
+                return false;
+            }
             if (! $this->methodExistsOnPasswordEmailTarget($targetClass, $methodName)) {
                 return false;
             }
         }
 
         return true;
+    }
+
+    /**
+     * @param  class-string  $targetClass
+     */
+    private function addsConditionalRuleObject(MethodCall $hop, string $targetClass, string $methodName): bool
+    {
+        if (! in_array($methodName, self::OBJECT_CONDITIONAL_MODIFIERS[$targetClass] ?? [], true)) {
+            return false;
+        }
+
+        $first = $hop->args[0] ?? null;
+
+        return ! $first instanceof Arg || ! $first->value instanceof String_;
     }
 
     /**
