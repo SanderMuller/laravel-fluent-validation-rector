@@ -26,7 +26,10 @@ use SanderMuller\FluentValidationRector\Rector\PromoteFieldFactoryRector;
 use SanderMuller\FluentValidationRector\Rector\SimplifyFluentRuleRector;
 use SanderMuller\FluentValidationRector\Rector\SimplifyRuleWrappersRector;
 use SanderMuller\FluentValidationRector\Rector\UpdateRulesReturnTypeDocblockRector;
+use SanderMuller\FluentValidationRector\Rector\UseValidatedInputDateRector;
+use SanderMuller\FluentValidationRector\Rector\UseValidatedInputEnumRector;
 use SanderMuller\FluentValidationRector\Rector\UseValidatedInputFileRector;
+use SanderMuller\FluentValidationRector\Rector\UseValidatedInputNullableIntegerRector;
 use SanderMuller\FluentValidationRector\Rector\UseValidatedInputNullableStringRector;
 use SanderMuller\FluentValidationRector\Rector\ValidationArrayToFluentRuleRector;
 use SanderMuller\FluentValidationRector\Rector\ValidationStringToFluentRuleRector;
@@ -59,7 +62,10 @@ final class InternalAuditTest extends TestCase
         SimplifyFluentRuleRector::class,
         SimplifyRuleWrappersRector::class,
         UpdateRulesReturnTypeDocblockRector::class,
+        UseValidatedInputDateRector::class,
+        UseValidatedInputEnumRector::class,
         UseValidatedInputFileRector::class,
+        UseValidatedInputNullableIntegerRector::class,
         UseValidatedInputNullableStringRector::class,
         ValidationArrayToFluentRuleRector::class,
         ValidationStringToFluentRuleRector::class,

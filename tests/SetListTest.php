@@ -60,10 +60,13 @@ it('ALL set does not include VALIDATED_INPUT', function (): void {
     expect($allContent)->not->toContain('validated-input.php');
 });
 
-it('VALIDATED_INPUT set registers both accessor rules', function (): void {
+it('VALIDATED_INPUT set registers the accessor rules', function (): void {
     $content = file_get_contents(FluentValidationSetList::VALIDATED_INPUT);
 
     expect($content)
+        ->toContain('UseValidatedInputDateRector::class')
+        ->toContain('UseValidatedInputEnumRector::class')
         ->toContain('UseValidatedInputFileRector::class')
+        ->toContain('UseValidatedInputNullableIntegerRector::class')
         ->toContain('UseValidatedInputNullableStringRector::class');
 });

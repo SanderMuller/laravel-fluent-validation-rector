@@ -67,7 +67,10 @@ All rector class names are committed. Renames break consumer
 - `SanderMuller\FluentValidationRector\Rector\SimplifyFluentRuleRector`
 - `SanderMuller\FluentValidationRector\Rector\SimplifyRuleWrappersRector`
 - `SanderMuller\FluentValidationRector\Rector\UpdateRulesReturnTypeDocblockRector`
+- `SanderMuller\FluentValidationRector\Rector\UseValidatedInputDateRector`
+- `SanderMuller\FluentValidationRector\Rector\UseValidatedInputEnumRector`
 - `SanderMuller\FluentValidationRector\Rector\UseValidatedInputFileRector`
+- `SanderMuller\FluentValidationRector\Rector\UseValidatedInputNullableIntegerRector`
 - `SanderMuller\FluentValidationRector\Rector\UseValidatedInputNullableStringRector`
 - `SanderMuller\FluentValidationRector\Rector\ValidationArrayToFluentRuleRector`
 - `SanderMuller\FluentValidationRector\Rector\ValidationStringToFluentRuleRector`

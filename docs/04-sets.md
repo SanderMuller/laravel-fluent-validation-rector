@@ -9,7 +9,7 @@
 | `SIMPLIFY` | [Four post-migration cleanups](09-simplify.md), **not** in `ALL` |
 | `POLISH` | [`UpdateRulesReturnTypeDocblockRector`](10-polish.md), **not** in `ALL` |
 | `SCHEMA` | [`ConvertToFluentSchemaRector`](11-schema.md), **not** in `ALL` |
-| `VALIDATED_INPUT` | [`UseValidatedInputNullableStringRector`, `UseValidatedInputFileRector`](20-validated-input.md), **not** in `ALL` |
+| `VALIDATED_INPUT` | [`UseValidatedInputNullableStringRector`, `UseValidatedInputFileRector`, `UseValidatedInputNullableIntegerRector`, `UseValidatedInputDateRector`, `UseValidatedInputEnumRector`](20-validated-input.md), **not** in `ALL` |
 
 ```php
 // Just conversion

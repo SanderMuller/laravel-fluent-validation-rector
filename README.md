@@ -53,7 +53,7 @@ vendor/bin/rector process             # apply
 vendor/bin/pint                       # format
 ```
 
-`ALL` runs converters, grouping and trait insertion. Three sets stay out of it on purpose and run as later passes: `SIMPLIFY`, `POLISH`, and `SCHEMA`. A fourth, `VALIDATED_INPUT`, is not a migration step: it rewrites reads of validated input to the `nullableString()` and `file()` accessors.
+`ALL` runs converters, grouping and trait insertion. Three sets stay out of it on purpose and run as later passes: `SIMPLIFY`, `POLISH`, and `SCHEMA`. A fourth, `VALIDATED_INPUT`, is not a migration step: it rewrites reads of validated input to the `nullableString()`, `nullableInteger()`, `file()`, `date()` and `enum()` accessors.
 
 ## Documentation
 

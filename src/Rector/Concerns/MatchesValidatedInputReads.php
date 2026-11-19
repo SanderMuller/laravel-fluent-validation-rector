@@ -2,11 +2,15 @@
 
 namespace SanderMuller\FluentValidationRector\Rector\Concerns;
 
+use Illuminate\Http\Request;
+use Illuminate\Support\ValidatedInput as BaseValidatedInput;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\BooleanNot;
+use PhpParser\Node\Expr\Cast\String_ as StringCast;
 use PhpParser\Node\Expr\ClassConstFetch;
 use PhpParser\Node\Expr\ConstFetch;
+use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\PropertyFetch;
 use PhpParser\Node\Expr\StaticPropertyFetch;
@@ -14,6 +18,7 @@ use PhpParser\Node\Expr\Ternary;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
+use PhpParser\Node\Scalar\Int_;
 use PhpParser\Node\Scalar\String_;
 use PhpParser\Node\VariadicPlaceholder;
 use PHPStan\Analyser\Scope;
@@ -33,6 +38,8 @@ use SanderMuller\FluentValidation\ValidatedInput;
 trait MatchesValidatedInputReads
 {
     private const string VALIDATED_INPUT_CLASS = ValidatedInput::class;
+
+    private const array STRINGABLE_TERMINALS = ['value', 'tostring', '__tostring'];
 
     /** @var array<string, bool> */
     private static array $validatedInputMethodAvailable = [];
@@ -54,6 +61,82 @@ trait MatchesValidatedInputReads
     private function isPackageValidatedInput(Expr $expr): bool
     {
         return (new ObjectType(ValidatedInput::class))->isSuperTypeOf($this->getType($expr))->yes();
+    }
+
+    /**
+     * True when PHPStan types the expression as Laravel's `ValidatedInput`
+     * (the package's one included) or a `Request`, and none of the given
+     * methods is overridden below those classes. Both read input through
+     * `InteractsWithData`, so `filled()`, `str()`, `date()` and `enum()`
+     * agree on what a blank field is.
+     *
+     * @param  list<string>  $methods
+     */
+    private function isInputDataReceiver(Expr $expr, array $methods): bool
+    {
+        $type = $this->getType($expr);
+
+        if (! (new ObjectType(BaseValidatedInput::class))->isSuperTypeOf($type)->yes()
+            && ! (new ObjectType(Request::class))->isSuperTypeOf($type)->yes()) {
+            return false;
+        }
+
+        $classReflections = $type->getObjectClassReflections();
+
+        if ($classReflections === []) {
+            return false;
+        }
+
+        foreach ($classReflections as $classReflection) {
+            foreach ($methods as $method) {
+                if (! $classReflection->hasNativeMethod($method)) {
+                    return false;
+                }
+
+                $declaringClass = $classReflection->getNativeMethod($method)->getDeclaringClass()->getName();
+
+                if ($declaringClass !== BaseValidatedInput::class && $declaringClass !== Request::class) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * The `string('k')` / `str('k')` call inside a read that converts the
+     * Stringable to a plain string, with no other Stringable call between.
+     */
+    private function matchStringRead(Expr $read): ?MethodCall
+    {
+        $stringable = null;
+
+        if ($read instanceof StringCast) {
+            $stringable = $read->expr;
+        } elseif ($read instanceof FuncCall) {
+            if ($read->name instanceof Name && strtolower((string) $this->getName($read)) === 'strval' && count($read->args) === 1 && $read->args[0] instanceof Arg && ! $read->args[0]->unpack && ! $read->args[0]->name instanceof Identifier) {
+                $stringable = $read->args[0]->value;
+            }
+        } elseif ($read instanceof MethodCall && $read->args === []) {
+            foreach (self::STRINGABLE_TERMINALS as $terminal) {
+                if ($this->methodNameIs($read, $terminal)) {
+                    $stringable = $read->var;
+
+                    break;
+                }
+            }
+        }
+
+        if (! $stringable instanceof MethodCall) {
+            return null;
+        }
+
+        if (! $this->methodNameIs($stringable, 'string') && ! $this->methodNameIs($stringable, 'str')) {
+            return null;
+        }
+
+        return $stringable;
     }
 
     /**
@@ -169,7 +252,7 @@ trait MatchesValidatedInputReads
      */
     private function isSafeEagerFallback(Expr $fallback): bool
     {
-        if ($fallback instanceof String_ || $fallback instanceof ConstFetch) {
+        if ($fallback instanceof String_ || $fallback instanceof Int_ || $fallback instanceof ConstFetch) {
             return true;
         }
 

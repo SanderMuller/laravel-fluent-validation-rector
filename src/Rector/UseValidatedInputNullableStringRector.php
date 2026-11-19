@@ -5,12 +5,8 @@ namespace SanderMuller\FluentValidationRector\Rector;
 use PhpParser\Node;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
-use PhpParser\Node\Expr\Cast\String_ as StringCast;
-use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\MethodCall;
 use PhpParser\Node\Expr\Ternary;
-use PhpParser\Node\Identifier;
-use PhpParser\Node\Name;
 use PHPStan\Type\NullType;
 use PHPStan\Type\StringType;
 use PHPStan\Type\UnionType;
@@ -50,8 +46,6 @@ final class UseValidatedInputNullableStringRector extends AbstractRector impleme
 {
     use MatchesValidatedInputReads;
     use ShortCircuitsIrrelevantFiles;
-
-    private const array STRINGABLE_TERMINALS = ['value', 'tostring', '__tostring'];
 
     public function getRuleDefinition(): RuleDefinition
     {
@@ -147,41 +141,6 @@ CODE_SAMPLE,
         }
 
         return new MethodCall($condition->var, 'nullableString', $args);
-    }
-
-    /**
-     * The `string('k')` / `str('k')` call inside a read that converts the
-     * Stringable to a plain string, with no other Stringable call between.
-     */
-    private function matchStringRead(Expr $read): ?MethodCall
-    {
-        $stringable = null;
-
-        if ($read instanceof StringCast) {
-            $stringable = $read->expr;
-        } elseif ($read instanceof FuncCall) {
-            if ($read->name instanceof Name && strtolower((string) $this->getName($read)) === 'strval' && count($read->args) === 1 && $read->args[0] instanceof Arg && ! $read->args[0]->unpack && ! $read->args[0]->name instanceof Identifier) {
-                $stringable = $read->args[0]->value;
-            }
-        } elseif ($read instanceof MethodCall && $read->args === []) {
-            foreach (self::STRINGABLE_TERMINALS as $terminal) {
-                if ($this->methodNameIs($read, $terminal)) {
-                    $stringable = $read->var;
-
-                    break;
-                }
-            }
-        }
-
-        if (! $stringable instanceof MethodCall) {
-            return null;
-        }
-
-        if (! $this->methodNameIs($stringable, 'string') && ! $this->methodNameIs($stringable, 'str')) {
-            return null;
-        }
-
-        return $stringable;
     }
 
     private function isNullableString(Expr $fallback): bool

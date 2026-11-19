@@ -30,5 +30,8 @@ return RectorConfig::configure()
 | [`ConvertToFluentSchemaRector`](11-schema.md) | `SCHEMA`, **not** in `ALL` | `rules()` of `FluentRule::` chains → a `schema(FluentSchema $rules)` builder |
 | [`UseValidatedInputNullableStringRector`](20-validated-input.md) | `VALIDATED_INPUT`, **not** in `ALL` | `filled() ? string()->value() : $fallback` → `nullableString()` |
 | [`UseValidatedInputFileRector`](20-validated-input.md) | `VALIDATED_INPUT`, **not** in `ALL` | `input() instanceof UploadedFile ? input() : null` → `file()` |
+| [`UseValidatedInputNullableIntegerRector`](20-validated-input.md) | `VALIDATED_INPUT`, **not** in `ALL` | `filled() ? integer() : $fallback` → `nullableInteger()` |
+| [`UseValidatedInputDateRector`](20-validated-input.md) | `VALIDATED_INPUT`, **not** in `ALL` | `filled() ? date() : null` → `date()` |
+| [`UseValidatedInputEnumRector`](20-validated-input.md) | `VALIDATED_INPUT`, **not** in `ALL` | `Enum::tryFrom(string()->value())` → `enum()` |
 
 The frozen public surface (symbols, wire keys, behaviour) is in [`PUBLIC_API.md`](https://github.com/SanderMuller/laravel-fluent-validation-rector/blob/main/PUBLIC_API.md).

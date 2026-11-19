@@ -39,11 +39,11 @@ FluentValidationSetList::VALIDATED_INPUT  // opt-in, not a migration step
 | `SIMPLIFY` | `PromoteFieldFactoryRector`, `SimplifyFluentRuleRector`, `SimplifyRuleWrappersRector`, `InlineMessageParamRector` |
 | `POLISH` | `UpdateRulesReturnTypeDocblockRector` |
 | `SCHEMA` | `ConvertToFluentSchemaRector` |
-| `VALIDATED_INPUT` | `UseValidatedInputNullableStringRector`, `UseValidatedInputFileRector` |
+| `VALIDATED_INPUT` | `UseValidatedInputNullableStringRector`, `UseValidatedInputFileRector`, `UseValidatedInputNullableIntegerRector`, `UseValidatedInputDateRector`, `UseValidatedInputEnumRector` |
 
 `SCHEMA` rewrites `rules()` into a `schema(FluentSchema $rules)` builder on `HasFluentRules` classes. It needs fluent-validation ^1.32, and the whole inheritance chain must be in one run: converting a child while its parent stays on `rules()` produces `Call to undefined method parent::schema()`.
 
-`VALIDATED_INPUT` does not touch validation rules. It rewrites `filled() ? string()->value() : $fallback` to `nullableString()` and `input() instanceof UploadedFile ? input() : null` to `file()`, only on a receiver typed as the package `ValidatedInput`. It needs fluent-validation 1.40 (`file()`) or 1.41 (`nullableString()`); on an older version the rules do nothing. For a bool, an array or an object (for example a file), `nullableString()` gives the fallback where `string()` did not, so review the diff for fields not validated as strings.
+`VALIDATED_INPUT` does not touch validation rules. It rewrites `filled() ? string()->value() : $fallback` to `nullableString()`, `filled() ? integer() : $fallback` to `nullableInteger()`, and `input() instanceof UploadedFile ? input() : null` to `file()`, only on a receiver typed as the package `ValidatedInput`. It needs fluent-validation 1.40 (`file()`), 1.41 (`nullableString()`) or 1.43 (`nullableInteger()`); on an older version the rules do nothing. It also removes a `filled()` check around `date()`, and rewrites `Enum::tryFrom($safe->string('k')->value())` to `$safe->enum('k', Enum::class)` for a string-backed enum without a blank or numeric case value. Those two work on Laravel's `ValidatedInput` and on a `Request`. For a bool, an array or an object (for example a file), `nullableString()` gives the fallback where `string()` did not, so review the diff for fields not validated as strings.
 
 `PromoteFieldFactoryRector` changes runtime behaviour — `StringRule` adds Laravel's implicit `string` rule where `FieldRule` adds none — so its diff needs reading rather than accepting.
 
