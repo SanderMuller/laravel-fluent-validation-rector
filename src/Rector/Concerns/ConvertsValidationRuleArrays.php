@@ -5,8 +5,14 @@ namespace SanderMuller\FluentValidationRector\Rector\Concerns;
 use BackedEnum;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Email;
+use Illuminate\Validation\Rules\ExcludeIf;
+use Illuminate\Validation\Rules\ExcludeUnless;
 use Illuminate\Validation\Rules\Exists;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\Rules\ProhibitedIf;
+use Illuminate\Validation\Rules\ProhibitedUnless;
+use Illuminate\Validation\Rules\RequiredIf;
+use Illuminate\Validation\Rules\RequiredUnless;
 use Illuminate\Validation\Rules\Unique;
 use PhpParser\Node\Arg;
 use PhpParser\Node\ArrayItem;
@@ -104,6 +110,22 @@ trait ConvertsValidationRuleArrays
         'excludeunless' => 'excludeUnless',
         'prohibitedif' => 'prohibitedIf',
         'prohibitedunless' => 'prohibitedUnless',
+    ];
+
+    /**
+     * Rule classes the presence conditionals build. `::class` does not load
+     * the class, so `RequiredUnless` / `ProhibitedUnless` are safe to list on
+     * Laravel versions that lack them.
+     *
+     * @var list<string>
+     */
+    private const array PRESENCE_CONDITIONAL_RULE_CLASSES = [
+        RequiredIf::class,
+        RequiredUnless::class,
+        ExcludeIf::class,
+        ExcludeUnless::class,
+        ProhibitedIf::class,
+        ProhibitedUnless::class,
     ];
 
     /**
@@ -411,6 +433,15 @@ trait ConvertsValidationRuleArrays
         }
 
         $type = $detection['type'];
+
+        // password() and email() compile a presence conditional rule object
+        // after their Password / Email rule, while the array (and every other
+        // factory) runs it first. A closure `excludeIf` would then no longer
+        // stop the Password or email check. Leave such arrays unconverted.
+        if (($type === 'password' || $type === 'email') && $this->hasPresenceConditionalObject($rulesArray)) {
+            return null;
+        }
+
         $typeIndex = $detection['typeIndex'];
         $typeKind = $detection['typeKind'];
         $typeChainOps = $detection['typeChainOps'];
@@ -478,6 +509,34 @@ trait ConvertsValidationRuleArrays
         }
 
         return $expr;
+    }
+
+    /**
+     * Whether the array holds a `Rule::requiredIf()` / `excludeIf()` /
+     * `prohibitedIf()` (or `*Unless`) call, or a `new` of one of their rule
+     * classes. Each of these builds a rule object.
+     */
+    private function hasPresenceConditionalObject(Array_ $rulesArray): bool
+    {
+        foreach ($rulesArray->items as $item) {
+            $value = $item?->value;
+
+            if ($value instanceof StaticCall
+                && $value->class instanceof Name
+                && $this->getName($value->class) === Rule::class
+                && $value->name instanceof Identifier
+                && isset(self::RULE_FACADE_PRESENCE_CONDITIONALS[$value->name->toLowerString()])) {
+                return true;
+            }
+
+            if ($value instanceof New_
+                && $value->class instanceof Name
+                && in_array($this->getName($value->class), self::PRESENCE_CONDITIONAL_RULE_CLASSES, true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // ─── Element classification ──────────────────────────────────────────

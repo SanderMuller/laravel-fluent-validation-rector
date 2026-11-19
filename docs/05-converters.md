@@ -23,7 +23,7 @@ Array-based rules (`['required', 'string', Rule::unique(...)]`), including `Rule
 - **Non-conditional tuples bail** on object/callable/array producers (`new Obj()`, `fn() => 5`, `[1, 2]`) and side-effectful mutators (`$x = 5`, `$i++`).
 - **COMMA_SEPARATED conditional rules** keep strict string-like args, to avoid `Closure|bool|string $field` overload ambiguity.
 - **Dynamic concat rule strings** (`'required_if_accepted:' . $field`) lower to the native method when the rule name is a static leading literal and the rule takes the tail as one string. Otherwise they stay on a string-coercion-safe `->rule(<concat>)`.
-- **`Rule::` presence conditionals** (`requiredIf`, `requiredUnless`, `excludeIf`, `excludeUnless`, `prohibitedIf`, `prohibitedUnless`) convert when the argument is a closure or bool literal; matching is case-insensitive. Any other shape could be read as a *field name*, so the native array stays.
+- **`Rule::` presence conditionals** (`requiredIf`, `requiredUnless`, `excludeIf`, `excludeUnless`, `prohibitedIf`, `prohibitedUnless`) convert when the argument is a closure or bool literal; matching is case-insensitive. Any other shape could be read as a *field name*, so the native array stays. An array that would become `password()` or `email()` stays as it is when it holds one of these conditionals, or a `new` of its rule class, because those factories run the conditional after the password or email check.
 - **Composite `Rule::` builders bail**: `Rule::when()` / `Rule::unless()` (`ConditionalRules`) and `Rule::forEach()` (`NestedRules`) have no faithful fluent equivalent.
 
 </details>
