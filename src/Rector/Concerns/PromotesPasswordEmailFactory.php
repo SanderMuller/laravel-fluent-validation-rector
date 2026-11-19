@@ -79,6 +79,19 @@ trait PromotesPasswordEmailFactory
     ];
 
     /**
+     * Modifiers the target always compiles before its embedded rule object.
+     * `PasswordRule::notIn()` (laravel-fluent-validation 1.45+) places its
+     * rule before the Password object, while `StringRule::notIn()` keeps
+     * source order. A `->notIn()` after the matched `->rule(Password::…)`
+     * hop would move ahead of the Password check, so it forces a bail.
+     *
+     * @var array<class-string, list<string>>
+     */
+    private const array COMPILED_BEFORE_EMBEDDED_RULE = [
+        PasswordRule::class => ['notIn'],
+    ];
+
+    /**
      * Tracks chain roots whose Trigger B analysis has already been decided.
      * Rector's pre-order traversal fires the outermost `MethodCall` first,
      * which is the only position that can see the full chain; inner fires
@@ -139,8 +152,9 @@ trait PromotesPasswordEmailFactory
 
         // Safety Gate #2: every non-rule modifier must exist on the target
         // rule class. PasswordRule does NOT extend FieldRule; `same()` /
-        // `different()` / `in()` / `regex()` etc. are declared per-rule and
-        // absent from PasswordRule. Without this gate, promoting
+        // `in()` / `regex()` etc. are declared per-rule and absent from
+        // PasswordRule (`different()` / `notIn()` exist from 1.45, so the
+        // reflection probe admits them there). Without this gate, promoting
         // `string()->same(...)` to `password()->same(...)` BadMethodCalls at
         // runtime (consumer peer review, 2026-04-24).
         if (! $this->allModifiersAvailableOnTarget($hops, $match['index'], $match['promotion']['target_class'])) {
@@ -223,6 +237,11 @@ trait PromotesPasswordEmailFactory
             if ($this->addsConditionalRuleObject($hop, $targetClass, $methodName)) {
                 return false;
             }
+
+            if ($index > $matchedIndex && in_array($methodName, self::COMPILED_BEFORE_EMBEDDED_RULE[$targetClass] ?? [], true)) {
+                return false;
+            }
+
             if (! $this->methodExistsOnPasswordEmailTarget($targetClass, $methodName)) {
                 return false;
             }
