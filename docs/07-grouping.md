@@ -28,6 +28,7 @@ Each emits its own [skip-log](15-diagnostics.md) entry under `=actionable`:
 - A double wildcard (`**`), or a non-first `*` in a key suffix.
 - A concat-keyed wildcard (`$prefix . '.*.foo'`) whose prefix is not a static class constant.
 - Branched-return bodies (several top-level returns) bail uniformly, rather than rewrite across branches.
+- A rules array with a spread item (`...$this->sharedRules()`), and a method whose result another method of the same class uses (through a spread, `array_merge()` or `+`). A folded parent key could replace a rule of the same key when the arrays combine.
 
 </details>
 

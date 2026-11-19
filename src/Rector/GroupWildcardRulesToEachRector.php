@@ -30,6 +30,7 @@ use SanderMuller\FluentValidationRector\Internal\RunSummary;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DescendsIntoRuleSetFromWrapper;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsInheritedTraits;
 use SanderMuller\FluentValidationRector\Rector\Concerns\DetectsRulesShapedMethods;
+use SanderMuller\FluentValidationRector\Rector\Concerns\GuardsFoldKeyCollisions;
 use SanderMuller\FluentValidationRector\Rector\Concerns\IdentifiesLivewireClasses;
 use SanderMuller\FluentValidationRector\Rector\Concerns\LogsSkipReasons;
 use SanderMuller\FluentValidationRector\Rector\Concerns\ManagesNamespaceImports;
@@ -62,6 +63,7 @@ final class GroupWildcardRulesToEachRector extends AbstractRector implements Doc
     use DescendsIntoRuleSetFromWrapper;
     use DetectsInheritedTraits;
     use DetectsRulesShapedMethods;
+    use GuardsFoldKeyCollisions;
     use IdentifiesLivewireClasses;
     use LogsSkipReasons;
     use ManagesNamespaceImports;
@@ -273,6 +275,7 @@ CODE_SAMPLE
             // classes don't expand a single `#[FluentRules]` opt-in
             // into class-wide auto-detection (Codex 2026-04-26 catch).
             $allowsAutoDetect = $this->qualifiesForRulesProcessingClassWide($class);
+            $calledMethodNames = $this->collectCalledOwnMethodNames($class);
 
             foreach ($class->getMethods() as $method) {
                 // Denylist always wins. A `#[FluentRules]` attribute on
@@ -289,6 +292,19 @@ CODE_SAMPLE
                     && ! $this->isFluentSchemaMethod($method)
                     && ! $this->hasFluentRulesAttribute($method)
                     && (! $allowsAutoDetect || ! $this->isRulesShapedMethod($method))) {
+                    continue;
+                }
+
+                // Another method of the class uses this method's result, for
+                // example through a spread, array_merge() or `+`. A fold here
+                // adds a parent key such as 'items', and that key can replace
+                // the caller's own 'items' rule when the arrays combine.
+                if (isset($calledMethodNames[strtolower($this->getName($method) ?? '')])) {
+                    $this->logSkip(
+                        $class,
+                        sprintf('%s() result is used by another method of the class — a folded parent key could replace a rule of the same key there', $this->getName($method)),
+                    );
+
                     continue;
                 }
 
@@ -342,6 +358,14 @@ CODE_SAMPLE
      */
     private function groupRulesArray(Array_ $array): bool
     {
+        // A spread item can add any key at runtime, including the parent key
+        // a fold would create, so one of the two rules would replace the other.
+        if ($this->hasSpreadItem($array)) {
+            $this->logGroupSkip('rules array has a spread item — a folded parent key could collide with a key from the spread');
+
+            return false;
+        }
+
         /** @var array<string, array{index: int, value: Expr}> */
         $entries = [];
 
