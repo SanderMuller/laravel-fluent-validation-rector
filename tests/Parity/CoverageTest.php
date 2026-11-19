@@ -12,7 +12,9 @@
  * stay excluded from the always-run gate per the 0.16 spec scoping
  * rationale, but the newly-unlocked attributed-method paths stress
  * parent/child merge boundaries that warrant behavioral coverage. The
- * Attributed dir is the documented home for those fixtures.
+ * Attributed dir is the documented home for those fixtures. The exception
+ * is `ValidationArrayToFluentRuleRector/`, for array conversions whose
+ * result depends on the installed laravel-fluent-validation version.
  */
 test('every semantics-changing rector has parity coverage', function (string $rectorName): void {
     $fixtures = glob(__DIR__ . '/Fixture/' . $rectorName . '/*.php');
@@ -43,11 +45,29 @@ test('Attributed-path parity coverage exists', function (): void {
         );
 });
 
+/*
+ * `ValidationArrayToFluentRuleRector/` holds the array conversions whose
+ * compiled order depends on the installed laravel-fluent-validation
+ * version: password and email arrays that carry a presence conditional.
+ * The other converter paths stay under `Attributed/`.
+ */
+test('version-dependent array conversion parity coverage exists', function (): void {
+    $fixtures = glob(__DIR__ . '/Fixture/ValidationArrayToFluentRuleRector/*.php');
+
+    expect($fixtures)
+        ->not->toBeFalse()
+        ->and($fixtures)->not->toBeEmpty(
+            'tests/Parity/Fixture/ValidationArrayToFluentRuleRector/ must ship at least one '
+            . 'fixture for the version-dependent password and email array conversions.',
+        );
+});
+
 test('parity Fixture/ has only documented subdirectories', function (): void {
     $allowed = [
         'SimplifyRuleWrappersRector',
         'GroupWildcardRulesToEachRector',
         'PromoteFieldFactoryRector',
+        'ValidationArrayToFluentRuleRector',
         'Attributed',
     ];
 
@@ -65,6 +85,7 @@ test('parity Fixture/ has only documented subdirectories', function (): void {
         . 'corresponding coverage assertion) or remove it. Excluded rectors '
         . '(string/array converters, trait-add, Livewire-attribute, inline-*, '
         . 'docblock, simplify-fluent) MUST NOT have a Fixture/ subdir of their '
-        . 'own — their parity coverage lives under Attributed/.',
+        . 'own — their parity coverage lives under Attributed/. The one exception '
+        . 'is ValidationArrayToFluentRuleRector/, for version-dependent conversions.',
     );
 });

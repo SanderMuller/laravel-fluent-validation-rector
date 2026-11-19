@@ -48,4 +48,8 @@ return [
         'sort_order non-integer' => [['title' => 'X', 'sort_order' => 'not-a-number']],
         'sort_order negative' => [['title' => 'X', 'sort_order' => -1]],
     ],
+    // With a list payload, RuleSet::prepare() expands the top-level `*` key of
+    // rules_after to an integer key, and extractObjectMetadata() throws a
+    // TypeError. rules_before prepares without error.
+    'skip_compiled' => "RuleSet::prepare() throws a TypeError for rules_after's top-level `*` key on a list payload.",
 ];

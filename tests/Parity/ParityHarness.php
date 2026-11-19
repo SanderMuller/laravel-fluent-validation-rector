@@ -5,6 +5,9 @@ namespace SanderMuller\FluentValidationRector\Tests\Parity;
 use Closure;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Validator as LaravelValidator;
+use ReflectionProperty;
+use SanderMuller\FluentValidation\RuleSet;
 use Stringable;
 
 /**
@@ -26,8 +29,12 @@ final class ParityHarness
      * @param  array<string, mixed>  $rulesBefore
      * @param  array<string, mixed>  $rulesAfter
      * @param  array<string, mixed>  $payload
+     * @param  bool  $compiled  Prepare the rules with `RuleSet::prepare()` first, the way
+     *                          `HasFluentRules` does: wildcards expand and each fluent rule
+     *                          compiles to a flat rule list. Otherwise each fluent rule goes
+     *                          to the validator as an object and validates itself.
      */
-    public static function compare(array $rulesBefore, array $rulesAfter, array $payload): ParityOutcome
+    public static function compare(array $rulesBefore, array $rulesAfter, array $payload, bool $compiled = false): ParityOutcome
     {
         $skipReason = self::detectSkipReason($rulesBefore) ?? self::detectSkipReason($rulesAfter);
 
@@ -37,8 +44,8 @@ final class ParityHarness
 
         App::setLocale('en');
 
-        $beforeErrors = self::runValidator($rulesBefore, $payload);
-        $afterErrors = self::runValidator($rulesAfter, $payload);
+        $beforeErrors = self::runValidator($rulesBefore, $payload, $compiled);
+        $afterErrors = self::runValidator($rulesAfter, $payload, $compiled);
 
         return new ParityOutcome(
             self::classify($beforeErrors, $afterErrors),
@@ -52,9 +59,20 @@ final class ParityHarness
      * @param  array<string, mixed>  $payload
      * @return array<string, list<string>>
      */
-    private static function runValidator(array $rules, array $payload): array
+    private static function runValidator(array $rules, array $payload, bool $compiled): array
     {
-        $validator = Validator::make($payload, $rules);
+        if ($compiled) {
+            $prepared = RuleSet::from($rules)->prepare($payload);
+            $validator = Validator::make($payload, $prepared->rules, $prepared->messages, $prepared->attributes);
+
+            if ($prepared->implicitAttributes !== []) {
+                (new ReflectionProperty(LaravelValidator::class, 'implicitAttributes'))
+                    ->setValue($validator, $prepared->implicitAttributes);
+            }
+        } else {
+            $validator = Validator::make($payload, $rules);
+        }
+
         /** @var array<string, list<string>> $errors */
         $errors = $validator->errors()->toArray();
         ksort($errors);
