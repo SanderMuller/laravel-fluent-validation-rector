@@ -21,6 +21,7 @@ return BoostConfig::configure()
         Tag::Php,
         Tag::Pest,
         'release-automation',
+        'voice',
     ])
     ->withAgents([
         Agent::CLAUDE_CODE,
