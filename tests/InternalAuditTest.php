@@ -26,6 +26,8 @@ use SanderMuller\FluentValidationRector\Rector\PromoteFieldFactoryRector;
 use SanderMuller\FluentValidationRector\Rector\SimplifyFluentRuleRector;
 use SanderMuller\FluentValidationRector\Rector\SimplifyRuleWrappersRector;
 use SanderMuller\FluentValidationRector\Rector\UpdateRulesReturnTypeDocblockRector;
+use SanderMuller\FluentValidationRector\Rector\UseValidatedInputFileRector;
+use SanderMuller\FluentValidationRector\Rector\UseValidatedInputNullableStringRector;
 use SanderMuller\FluentValidationRector\Rector\ValidationArrayToFluentRuleRector;
 use SanderMuller\FluentValidationRector\Rector\ValidationStringToFluentRuleRector;
 use SanderMuller\FluentValidationRector\Set\FluentValidationSetList;
@@ -57,6 +59,8 @@ final class InternalAuditTest extends TestCase
         SimplifyFluentRuleRector::class,
         SimplifyRuleWrappersRector::class,
         UpdateRulesReturnTypeDocblockRector::class,
+        UseValidatedInputFileRector::class,
+        UseValidatedInputNullableStringRector::class,
         ValidationArrayToFluentRuleRector::class,
         ValidationStringToFluentRuleRector::class,
         // Typed config DTO builders — opt-in alternative to the constant-array

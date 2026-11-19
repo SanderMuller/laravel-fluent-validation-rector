@@ -49,6 +49,7 @@ implementation detail.
 - `FluentValidationSetList::POLISH`
 - `FluentValidationSetList::SIMPLIFY`
 - `FluentValidationSetList::SCHEMA`
+- `FluentValidationSetList::VALIDATED_INPUT`
 
 ## Rector class FQNs
 
@@ -66,6 +67,8 @@ All rector class names are committed. Renames break consumer
 - `SanderMuller\FluentValidationRector\Rector\SimplifyFluentRuleRector`
 - `SanderMuller\FluentValidationRector\Rector\SimplifyRuleWrappersRector`
 - `SanderMuller\FluentValidationRector\Rector\UpdateRulesReturnTypeDocblockRector`
+- `SanderMuller\FluentValidationRector\Rector\UseValidatedInputFileRector`
+- `SanderMuller\FluentValidationRector\Rector\UseValidatedInputNullableStringRector`
 - `SanderMuller\FluentValidationRector\Rector\ValidationArrayToFluentRuleRector`
 - `SanderMuller\FluentValidationRector\Rector\ValidationStringToFluentRuleRector`
 

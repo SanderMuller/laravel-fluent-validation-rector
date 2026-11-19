@@ -28,5 +28,7 @@ return RectorConfig::configure()
 | [`InlineMessageParamRector`](09-simplify.md) | `SIMPLIFY`, **not** in `ALL` | `->message()` / `->messageFor()` → inline `message:` param |
 | [`UpdateRulesReturnTypeDocblockRector`](10-polish.md) | `POLISH`, **not** in `ALL` | narrows `@return` on pure-fluent `rules()` |
 | [`ConvertToFluentSchemaRector`](11-schema.md) | `SCHEMA`, **not** in `ALL` | `rules()` of `FluentRule::` chains → a `schema(FluentSchema $rules)` builder |
+| [`UseValidatedInputNullableStringRector`](20-validated-input.md) | `VALIDATED_INPUT`, **not** in `ALL` | `filled() ? string()->value() : $fallback` → `nullableString()` |
+| [`UseValidatedInputFileRector`](20-validated-input.md) | `VALIDATED_INPUT`, **not** in `ALL` | `input() instanceof UploadedFile ? input() : null` → `file()` |
 
 The frozen public surface (symbols, wire keys, behaviour) is in [`PUBLIC_API.md`](https://github.com/SanderMuller/laravel-fluent-validation-rector/blob/main/PUBLIC_API.md).

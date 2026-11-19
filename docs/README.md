@@ -6,7 +6,7 @@ Published at **https://sandermuller.github.io/laravel-fluent-validation-rector/*
 
 **Conversion:** [String and array converters](05-converters.md) · [Livewire attributes](06-livewire.md) · [Wildcard grouping](07-grouping.md) · [Trait insertion](08-traits.md)
 
-**After the migration:** [Simplify](09-simplify.md) · [Docblock polish](10-polish.md) · [Adopting FluentSchema](11-schema.md)
+**After the migration:** [Simplify](09-simplify.md) · [Docblock polish](10-polish.md) · [Adopting FluentSchema](11-schema.md) · [Validated input accessors](20-validated-input.md)
 
 **Control:** [The `#[FluentRules]` attribute](12-fluent-rules-attribute.md) · [Configuration](13-configuration.md)
 

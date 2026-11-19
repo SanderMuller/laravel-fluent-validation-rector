@@ -53,7 +53,7 @@ vendor/bin/rector process             # apply
 vendor/bin/pint                       # format
 ```
 
-`ALL` runs converters, grouping and trait insertion. Three sets stay out of it on purpose and run as later passes: `SIMPLIFY`, `POLISH`, and `SCHEMA`.
+`ALL` runs converters, grouping and trait insertion. Three sets stay out of it on purpose and run as later passes: `SIMPLIFY`, `POLISH`, and `SCHEMA`. A fourth, `VALIDATED_INPUT`, is not a migration step: it rewrites reads of validated input to the `nullableString()` and `file()` accessors.
 
 ## Documentation
 
@@ -61,7 +61,7 @@ Full documentation lives at **https://sandermuller.github.io/laravel-fluent-vali
 
 - [Why this package?](https://sandermuller.github.io/laravel-fluent-validation-rector/why-this-package) · [Installation](https://sandermuller.github.io/laravel-fluent-validation-rector/installation) · [Getting started](https://sandermuller.github.io/laravel-fluent-validation-rector/getting-started) · [Sets](https://sandermuller.github.io/laravel-fluent-validation-rector/sets)
 - [String and array converters](https://sandermuller.github.io/laravel-fluent-validation-rector/converters) · [Livewire attributes](https://sandermuller.github.io/laravel-fluent-validation-rector/livewire) · [Wildcard grouping](https://sandermuller.github.io/laravel-fluent-validation-rector/grouping) · [Trait insertion](https://sandermuller.github.io/laravel-fluent-validation-rector/traits)
-- [Simplify](https://sandermuller.github.io/laravel-fluent-validation-rector/simplify) · [Docblock polish](https://sandermuller.github.io/laravel-fluent-validation-rector/polish) · [Adopting FluentSchema](https://sandermuller.github.io/laravel-fluent-validation-rector/schema)
+- [Simplify](https://sandermuller.github.io/laravel-fluent-validation-rector/simplify) · [Docblock polish](https://sandermuller.github.io/laravel-fluent-validation-rector/polish) · [Adopting FluentSchema](https://sandermuller.github.io/laravel-fluent-validation-rector/schema) · [Validated input accessors](https://sandermuller.github.io/laravel-fluent-validation-rector/validated-input)
 - [The `#[FluentRules]` attribute](https://sandermuller.github.io/laravel-fluent-validation-rector/fluent-rules-attribute) · [Configuration](https://sandermuller.github.io/laravel-fluent-validation-rector/configuration)
 - [Formatter integration](https://sandermuller.github.io/laravel-fluent-validation-rector/formatter) · [Diagnostics](https://sandermuller.github.io/laravel-fluent-validation-rector/diagnostics) · [Parity harness](https://sandermuller.github.io/laravel-fluent-validation-rector/parity) · [AI assistant integration](https://sandermuller.github.io/laravel-fluent-validation-rector/ai-assistant)
 - [Rule reference](https://sandermuller.github.io/laravel-fluent-validation-rector/rules-reference) · [Detection and limitations](https://sandermuller.github.io/laravel-fluent-validation-rector/limitations)

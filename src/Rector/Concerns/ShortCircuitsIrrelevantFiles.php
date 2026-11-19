@@ -120,6 +120,19 @@ trait ShortCircuitsIrrelevantFiles
         return self::$fileRelevanceCache[$path][$cacheKey] = false;
     }
 
+    /**
+     * Case-insensitive single-needle gate, for rules that match a method or
+     * class name: PHP treats those names case-insensitively, so `FILLED(`
+     * must pass a `filled` gate.
+     */
+    private function currentFileContainsIgnoringCase(string $needle): bool
+    {
+        $path = $this->getFile()->getFilePath();
+        $cacheKey = "\0i:" . $needle;
+
+        return self::$fileRelevanceCache[$path][$cacheKey] ??= stripos($this->getFile()->getFileContent(), $needle) !== false;
+    }
+
     /** Memoized concatenation of RULE_BEARING_NEEDLES; '' until first computed. */
     private static string $ruleBearingCacheKey = '';
 

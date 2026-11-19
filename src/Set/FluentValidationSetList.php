@@ -19,4 +19,6 @@ final class FluentValidationSetList
     public const string POLISH = self::SETS_DIR . 'polish.php';
 
     public const string SCHEMA = self::SETS_DIR . 'schema.php';
+
+    public const string VALIDATED_INPUT = self::SETS_DIR . 'validated-input.php';
 }

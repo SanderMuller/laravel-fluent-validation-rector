@@ -53,3 +53,17 @@ it('SIMPLIFY set registers SimplifyRuleWrappers after SimplifyFluentRule', funct
         ->and($wrappersPos)->toBeInt()
         ->and($wrappersPos)->toBeGreaterThan($simplifyPos);
 });
+
+it('ALL set does not include VALIDATED_INPUT', function (): void {
+    $allContent = file_get_contents(FluentValidationSetList::ALL);
+
+    expect($allContent)->not->toContain('validated-input.php');
+});
+
+it('VALIDATED_INPUT set registers both accessor rules', function (): void {
+    $content = file_get_contents(FluentValidationSetList::VALIDATED_INPUT);
+
+    expect($content)
+        ->toContain('UseValidatedInputFileRector::class')
+        ->toContain('UseValidatedInputNullableStringRector::class');
+});

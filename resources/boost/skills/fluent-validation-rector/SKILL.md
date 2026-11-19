@@ -28,6 +28,7 @@ FluentValidationSetList::TRAITS
 FluentValidationSetList::SIMPLIFY  // opt-in, separate pass
 FluentValidationSetList::POLISH    // opt-in, separate pass
 FluentValidationSetList::SCHEMA    // opt-in, separate pass
+FluentValidationSetList::VALIDATED_INPUT  // opt-in, not a migration step
 ```
 
 | Set | Rules |
@@ -38,8 +39,11 @@ FluentValidationSetList::SCHEMA    // opt-in, separate pass
 | `SIMPLIFY` | `PromoteFieldFactoryRector`, `SimplifyFluentRuleRector`, `SimplifyRuleWrappersRector`, `InlineMessageParamRector` |
 | `POLISH` | `UpdateRulesReturnTypeDocblockRector` |
 | `SCHEMA` | `ConvertToFluentSchemaRector` |
+| `VALIDATED_INPUT` | `UseValidatedInputNullableStringRector`, `UseValidatedInputFileRector` |
 
 `SCHEMA` rewrites `rules()` into a `schema(FluentSchema $rules)` builder on `HasFluentRules` classes. It needs fluent-validation ^1.32, and the whole inheritance chain must be in one run: converting a child while its parent stays on `rules()` produces `Call to undefined method parent::schema()`.
+
+`VALIDATED_INPUT` does not touch validation rules. It rewrites `filled() ? string()->value() : $fallback` to `nullableString()` and `input() instanceof UploadedFile ? input() : null` to `file()`, only on a receiver typed as the package `ValidatedInput`. It needs fluent-validation 1.40 (`file()`) or 1.41 (`nullableString()`); on an older version the rules do nothing. For a bool, an array or an object (for example a file), `nullableString()` gives the fallback where `string()` did not, so review the diff for fields not validated as strings.
 
 `PromoteFieldFactoryRector` changes runtime behaviour — `StringRule` adds Laravel's implicit `string` rule where `FieldRule` adds none — so its diff needs reading rather than accepting.
 

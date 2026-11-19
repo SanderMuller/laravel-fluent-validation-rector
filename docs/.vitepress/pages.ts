@@ -43,6 +43,7 @@ export const sections: DocSection[] = [
             { file: '09-simplify', text: 'Simplify', blurb: 'Promote factories, fold chains, and retire the ->rule() escape hatch.' },
             { file: '10-polish', text: 'Docblock polish', blurb: 'Narrow the @return on rules() once the conversion has stabilized.' },
             { file: '11-schema', text: 'Adopting FluentSchema', blurb: 'Trade the repeated FluentRule:: prefix for an injected builder.' },
+            { file: '20-validated-input', text: 'Validated input accessors', blurb: 'Replace filled() and instanceof checks with nullableString() and file().' },
         ],
     },
     {
