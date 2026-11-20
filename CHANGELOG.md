@@ -2,6 +2,20 @@
 
 All notable changes to `sandermuller/laravel-fluent-validation-rector` will be documented in this file.
 
+## 1.16.1 - 2026-11-20
+
+<!-- verified-sha: a350e8179e2f8b5ee67fbcb1f30126665bf703d0 -->
+### Fixed
+
+- `GroupWildcardRulesToEachRector` no longer folds wildcard keys in a rules array that holds a spread item (`...$this->sharedRules()`), or in a method whose result another method of the same class combines through a spread, `array_merge()` or `+`. Before, the fold could create a parent key, for example `'summary' => FluentRule::array()->children([...])`, that replaced a rule with the same key when the arrays were combined. So `required` on the parent could be lost.
+- `GroupWildcardRulesToEachRector` no longer folds wildcard keys in a non-private method of a non-final class when a subclass in the project calls that method, for example `parent::rules()` or `$this->sharedRules()`. A subclass that adds or `put()`s its own key could replace a folded parent key. The rector scans the project once per run and skips `vendor/`. The check is conservative: it also skips the fold when no key collides. Each skip writes a skip-log entry.
+
+### Documentation
+
+- The converter docs now describe two changes to error messages when a rule converts to `email()`, `url()`, `uuid()` or `ip()`. Whether a value passes does not change. A non-string value gets an extra "must be a string" message. On laravel-fluent-validation 1.42.0 and later, `email()` also reports the format error before the `max` error. New parity tests cover both.
+
+**Full Changelog**: https://github.com/SanderMuller/laravel-fluent-validation-rector/compare/1.16.0...1.16.1
+
 ## 1.16.0 - 2026-11-19
 
 <!-- verified-sha: 2ee7826947def61bc6b35506eb220714ee7545ff -->
@@ -223,6 +237,7 @@ shadows) the renamed base `schema()`.
   
   
   
+  
   ```
   The line breaks are stamped only on the calls a rule creates, so calls
   already present inline in your source stay inline. Consumers no longer need a
@@ -276,6 +291,7 @@ shadows) the renamed base `schema()`.
   'items' => FluentRule::array()->nullable()->each(
       FluentRule::string()->nullable()->max(255)
   ),
+  
   
   
   
@@ -379,6 +395,7 @@ Performance release. The rule pipeline does substantially less work per file, an
   
   
   
+  
   ```
 - A literal-`null` condition is left untouched. `Rule::requiredIf(null)` is valid Laravel (the condition normalizes to `false`), but the native fluent method is typed `Closure|bool|string`, so rewriting to `->requiredIf(null)` would `TypeError` at runtime. The wrapper is preserved instead.
   
@@ -404,6 +421,7 @@ A multi-argument facade conditional (not valid Laravel usage) is also left as-is
   
   // after
   'role' => FluentRule::field()->nullable()->requiredIf(fn () => $this->isAdmin()),
+  
   
   
   
@@ -482,6 +500,7 @@ FluentRule::field('Agree to TOS')->required()->rule('accepted')
 // After
 FluentRule::accepted()->required()
 FluentRule::accepted('Agree to TOS')->required()
+
 
 
 
