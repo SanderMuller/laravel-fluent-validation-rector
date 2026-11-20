@@ -1,5 +1,6 @@
 <?php declare(strict_types=1);
 
+use Composer\InstalledVersions;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidationRector\Tests\Parity\DivergenceCategory;
 
@@ -7,8 +8,9 @@ use SanderMuller\FluentValidationRector\Tests\Parity\DivergenceCategory;
  * String conversion to the typed `email()`, `url()` and `uuid()` factories.
  * Both accepted differences show here:
  *
- * - `email()` runs its format check right after `string`, so a value that
- *   fails both `max` and `email` reports `email` first.
+ * - On laravel-fluent-validation 1.42.0+, `email()` runs its format check
+ *   right after `string`, so a value that fails both `max` and `email`
+ *   reports `email` first.
  * - The typed factories add an implicit `string` rule. Laravel's `email`,
  *   `url` and `uuid` rules already reject a non-string, so pass or fail
  *   does not change, but a non-string gets one more message.
@@ -32,10 +34,13 @@ return [
         'integers' => ['address' => 42, 'website' => 42, 'token' => 42],
     ],
     'allowed_divergences' => [
-        'too long and not an email' => [
-            'category' => DivergenceCategory::OrderDependentPipeline,
-            'rationale' => 'email() reports the format check before max, the order of required|string|email|max:255',
-        ],
+        // laravel-fluent-validation 1.42.0 moved the format check before max.
+        ...(version_compare(InstalledVersions::getVersion('sandermuller/laravel-fluent-validation') ?? '0', '1.42.0', '>=')
+            ? ['too long and not an email' => [
+                'category' => DivergenceCategory::OrderDependentPipeline,
+                'rationale' => 'email() reports the format check before max, the order of required|string|email|max:255',
+            ]]
+            : []),
         'integers' => [
             'category' => DivergenceCategory::AddedTypeMessage,
             'rationale' => 'the typed factories add string; email, url and uuid already reject an integer',

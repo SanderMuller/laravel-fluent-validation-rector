@@ -1,12 +1,13 @@
 <?php declare(strict_types=1);
 
+use Composer\InstalledVersions;
 use SanderMuller\FluentValidation\FluentRule;
 use SanderMuller\FluentValidationRector\Tests\Parity\DivergenceCategory;
 
 /**
  * Array conversion to the typed `email()` and `ip()` factories. Same two
  * accepted differences as the string conversion: `email()` reports the
- * format check before `max`, and the implicit `string` rule adds a message
+ * format check before `max` (1.42.0+), and the implicit `string` rule adds a message
  * for a non-string value.
  */
 return [
@@ -26,10 +27,13 @@ return [
         'arrays' => ['address' => ['user@example.test'], 'host' => ['192.0.2.1']],
     ],
     'allowed_divergences' => [
-        'too long and not an email' => [
-            'category' => DivergenceCategory::OrderDependentPipeline,
-            'rationale' => 'email() reports the format check before max, the order of required|string|email|max:255',
-        ],
+        // laravel-fluent-validation 1.42.0 moved the format check before max.
+        ...(version_compare(InstalledVersions::getVersion('sandermuller/laravel-fluent-validation') ?? '0', '1.42.0', '>=')
+            ? ['too long and not an email' => [
+                'category' => DivergenceCategory::OrderDependentPipeline,
+                'rationale' => 'email() reports the format check before max, the order of required|string|email|max:255',
+            ]]
+            : []),
         'arrays' => [
             'category' => DivergenceCategory::AddedTypeMessage,
             'rationale' => 'the typed factories add string; email and ip already reject an array',

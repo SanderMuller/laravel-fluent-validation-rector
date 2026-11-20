@@ -11,7 +11,7 @@ A plain `email` rule converts to `FluentRule::email(defaults: false)`. `FluentRu
 Both converters can change the error messages of a field that fails, but not whether it fails:
 
 - `email()`, `url()`, `uuid()` and `ip()` add Laravel's implicit `string` rule. A non-string value then gets a "must be a string" message before the format message. Laravel's own format rules already reject a non-string.
-- `email()` runs its format check right after `string`. So `'required|max:255|email'` reports `email` before `max` when both fail, the order of `required|string|email|max:255`.
+- On laravel-fluent-validation 1.42.0 and later, `email()` runs its format check right after `string`. So `'required|max:255|email'` reports `email` before `max` when both fail, the order of `required|string|email|max:255`.
 
 Email modes map to methods: `email:rfc,dns` becomes `FluentRule::email()->rfcCompliant()->validateMxRecord()`, and `strict`, `spoof`, `filter` and `filter_unicode` map the same way. Explicit modes replace the app defaults, so these chains do not need `defaults: false`. A rule with an unknown email mode, or a different type rule with arguments (for example `array:name,email`), stays unconverted.
 
