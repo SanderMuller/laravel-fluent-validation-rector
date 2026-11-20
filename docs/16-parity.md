@@ -43,6 +43,7 @@ Some transformations legitimately change behaviour. `boolean()->accepted()` reje
 | `MessageKeyDrift` | same outcome, different message-key path |
 | `AttributeLabelDrift` | same outcome, `:attribute` renders differently |
 | `OrderDependentPipeline` | same messages, different per-field order |
+| `AddedTypeMessage` | both reject, the typed rule adds a message for its implicit type check |
 
 The category constrains the allowed runtime outcome, so a mismatched one fails the test, and the rationale lives beside the divergence.
 

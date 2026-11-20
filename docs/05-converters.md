@@ -8,6 +8,11 @@ Pipe-delimited strings (`'required|string|max:255'`) become fluent chains.
 
 A plain `email` rule converts to `FluentRule::email(defaults: false)`. `FluentRule::email()` applies the app's `Email::defaults()`, and the plain rule does not, so the argument keeps validation the same. The array converter does the same for `Rule::email()` and `new Email()`. `Email::default()` converts to `FluentRule::email()`. Drop the argument when the app defaults are what you want.
 
+Both converters can change the error messages of a field that fails, but not whether it fails:
+
+- `email()`, `url()`, `uuid()` and `ip()` add Laravel's implicit `string` rule. A non-string value then gets a "must be a string" message before the format message. Laravel's own format rules already reject a non-string.
+- `email()` runs its format check right after `string`. So `'required|max:255|email'` reports `email` before `max` when both fail, the order of `required|string|email|max:255`.
+
 Email modes map to methods: `email:rfc,dns` becomes `FluentRule::email()->rfcCompliant()->validateMxRecord()`, and `strict`, `spoof`, `filter` and `filter_unicode` map the same way. Explicit modes replace the app defaults, so these chains do not need `defaults: false`. A rule with an unknown email mode, or a different type rule with arguments (for example `array:name,email`), stays unconverted.
 
 ## `ValidationArrayToFluentRuleRector`

@@ -33,3 +33,11 @@ test('OrderDependentPipeline allows BothRejectDifferentOrder', function (): void
     expect(DivergenceCategory::OrderDependentPipeline->allowedOutcomes())
         ->toContain(ParityType::BothRejectDifferentOrder);
 });
+
+test('AddedTypeMessage allows BothRejectDifferentMessages only', function (): void {
+    // The added type check may only add a message when both sides already
+    // reject. A value that passes before and fails after is a narrowing,
+    // which belongs to ImplicitTypeConstraint.
+    expect(DivergenceCategory::AddedTypeMessage->allowedOutcomes())
+        ->toBe([ParityType::BothRejectDifferentMessages]);
+});

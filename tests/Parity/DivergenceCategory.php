@@ -23,6 +23,9 @@ enum DivergenceCategory: string
     /** Both sides fail with the same messages but the per-field message order differs (validator pipeline ordering). */
     case OrderDependentPipeline = 'order_dependent_pipeline';
 
+    /** Both sides fail, and the typed rule adds a message for its implicit type check (e.g. `email()` on an integer adds `validation.string`). */
+    case AddedTypeMessage = 'added_type_message';
+
     /**
      * Outcome shapes this category legitimately produces.
      *
@@ -43,6 +46,7 @@ enum DivergenceCategory: string
             self::MessageKeyDrift => [ParityType::BothRejectDifferentMessages],
             self::AttributeLabelDrift => [ParityType::BothRejectDifferentMessages],
             self::OrderDependentPipeline => [ParityType::BothRejectDifferentOrder],
+            self::AddedTypeMessage => [ParityType::BothRejectDifferentMessages],
         };
     }
 }
