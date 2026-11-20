@@ -2,12 +2,15 @@
 
 namespace SanderMuller\FluentValidationRector\Rector\Concerns;
 
+use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Name;
 use PhpParser\Node\Stmt\Class_;
 use PhpParser\Node\Stmt\ClassMethod;
+use PhpParser\Node\Stmt\Return_;
 use Rector\Rector\AbstractRector;
 use ReflectionClass;
 use SanderMuller\FluentValidation\HasFluentRules;
+use Throwable;
 
 /**
  * Ancestor walk of `ConvertToFluentSchemaRector`: proves whether the rules()
@@ -44,6 +47,55 @@ trait ProvesAncestorSchemaConversion
         }
 
         return ! $this->parentSchemaConversionIsProvable($class);
+    }
+
+    /**
+     * Skip reason for {@see inheritedRulesWouldShadowSchema()}. Names the nearest
+     * ancestor that declares rules(), because that one answers `$request->rules()`
+     * after the rename. When its body is exactly `return [];`, the fix is to
+     * delete it, so the reason says that.
+     */
+    private function inheritedRulesShadowSkipReason(Class_ $class): string
+    {
+        $parentName = $class->extends instanceof Name ? $this->getName($class->extends) : null;
+        $ancestor = null;
+
+        try {
+            $ancestor = $parentName === null ? null : $this->findDeclaringClassForRules($parentName);
+        } catch (Throwable) {
+        }
+
+        if (! $ancestor instanceof ReflectionClass) {
+            return 'an ancestor declares its own rules() that does not convert to schema() — after the rename, $request->rules() would return the ancestor\'s rules instead of this class\'s. Fix the ancestor first, or leave this class on rules().';
+        }
+
+        $ancestorName = $ancestor->getName();
+        $fileName = $ancestor->getFileName();
+        $method = $fileName === false ? null : $this->loadParentRulesMethod($fileName, $ancestorName);
+
+        if ($method instanceof ClassMethod && $this->isEmptyArrayReturnBody($method)) {
+            return sprintf(
+                '%s::rules() returns an empty array and does not convert to schema() — after the rename, $request->rules() would return that empty array instead of this class\'s rules. Remove the empty rules() from %s to unblock its subclasses, or leave this class on rules().',
+                $ancestorName,
+                $ancestorName,
+            );
+        }
+
+        return sprintf(
+            '%s declares its own rules() that does not convert to schema() — after the rename, $request->rules() would return its rules instead of this class\'s. Convert %s first (add #[FluentRules] to the rules() of an abstract base that builds FluentRule chains), or leave this class on rules().',
+            $ancestorName,
+            $ancestorName,
+        );
+    }
+
+    private function isEmptyArrayReturnBody(ClassMethod $method): bool
+    {
+        $stmts = $method->stmts ?? [];
+
+        return count($stmts) === 1
+            && $stmts[0] instanceof Return_
+            && $stmts[0]->expr instanceof Array_
+            && $stmts[0]->expr->items === [];
     }
 
     /**

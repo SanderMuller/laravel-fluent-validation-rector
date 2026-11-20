@@ -360,10 +360,7 @@ CODE_SAMPLE
         // wrong rules. HTTP validation still works, because the validator merges
         // schema() with rules(). Convert only when that ancestor converts too.
         if (! $this->rulesMethodHasFluentRulesAttribute($method) && $this->inheritedRulesWouldShadowSchema($class)) {
-            $this->logSkip(
-                $class,
-                'an ancestor declares its own rules() that does not convert to schema() — after the rename, $request->rules() would return the ancestor\'s rules instead of this class\'s. Fix the ancestor first (remove an empty rules(), or add #[FluentRules] to the rules() of an abstract base that builds FluentRule chains), or leave this class on rules().',
-            );
+            $this->logSkip($class, $this->inheritedRulesShadowSkipReason($class));
 
             return false;
         }
