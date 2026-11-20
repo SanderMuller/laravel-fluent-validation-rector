@@ -180,6 +180,7 @@ CODE_SAMPLE
         $this->needsFluentRuleImport = false;
         $this->needsValidationRuleImport = false;
         $hasChanged = false;
+        $this->recordDescendantCalls($node);
 
         foreach ($node->stmts as $stmt) {
             if (! $stmt instanceof Class_) {
@@ -295,15 +296,13 @@ CODE_SAMPLE
                     continue;
                 }
 
-                // Another method of the class uses this method's result, for
-                // example through a spread, array_merge() or `+`. A fold here
-                // adds a parent key such as 'items', and that key can replace
-                // the caller's own 'items' rule when the arrays combine.
-                if (isset($calledMethodNames[strtolower($this->getName($method) ?? '')])) {
-                    $this->logSkip(
-                        $class,
-                        sprintf('%s() result is used by another method of the class — a folded parent key could replace a rule of the same key there', $this->getName($method)),
-                    );
+                // A fold adds a parent key such as 'items'. When another method
+                // of the class or a subclass combines this method's result with
+                // its own keys, that key can replace a rule of the same key.
+                $collisionReason = $this->foldCollisionReason($class, $method, $calledMethodNames);
+
+                if ($collisionReason !== null) {
+                    $this->logSkip($class, $collisionReason);
 
                     continue;
                 }
